@@ -9,9 +9,9 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        popup: resolve(__dirname, "popup.html"),
-        research: resolve(__dirname, "research.html"),
-        sessions: resolve(__dirname, "sessions.html"),
+        popup: resolve(__dirname, "entries/popup.html"),
+        research: resolve(__dirname, "entries/research.html"),
+        sessions: resolve(__dirname, "entries/sessions.html"),
         background: resolve(__dirname, "src/background/index.ts")
       },
       output: {

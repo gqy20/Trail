@@ -81,7 +81,7 @@ function ResearchApp() {
               <BrandMark />
               <strong>研究文档</strong>
             </div>
-            <button className="button secondary" onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("sessions.html") })}>
+            <button className="button secondary" onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("entries/sessions.html") })}>
               全部
             </button>
           </div>

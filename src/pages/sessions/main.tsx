@@ -52,7 +52,7 @@ function SessionsApp() {
               <div className="session-actions">
                 <button
                   className="button primary"
-                  onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL(`research.html?sessionId=${session.id}`) })}
+                  onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL(`entries/research.html?sessionId=${session.id}`) })}
                 >
                   <ExternalLink size={16} /> 打开
                 </button>

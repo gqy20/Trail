@@ -40,7 +40,7 @@ Release 产物：
 - `trail_v0.1.0_chrome.zip`
 - `checksums.txt`
 
-zip 内部直接包含 `manifest.json`、HTML、JS、assets 和 icons，可用于 Chrome Web Store 上传或手动分发。
+zip 内部直接包含 `manifest.json`、`entries/`、JS、assets 和 icons，可用于 Chrome Web Store 上传或手动分发。
 
 ## 提交规范
 

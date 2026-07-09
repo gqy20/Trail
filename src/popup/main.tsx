@@ -38,7 +38,7 @@ function PopupApp() {
       const session = await action();
       await refresh();
       if (session?.status === "completed") {
-        await chrome.tabs.create({ url: chrome.runtime.getURL(`research.html?sessionId=${session.id}`) });
+        await chrome.tabs.create({ url: chrome.runtime.getURL(`entries/research.html?sessionId=${session.id}`) });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Trail 操作失败。");
@@ -67,7 +67,7 @@ function PopupApp() {
           className="icon-button"
           title="全部"
           aria-label="全部"
-          onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("sessions.html") })}
+          onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("entries/sessions.html") })}
         >
           <Clock size={17} />
         </button>
@@ -151,7 +151,7 @@ function PopupApp() {
       <section className="stack">
         <div className="header-row">
           <strong>最近记录</strong>
-          <button className="button secondary" onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("sessions.html") })}>
+          <button className="button secondary" onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("entries/sessions.html") })}>
             全部
           </button>
         </div>
@@ -159,7 +159,7 @@ function PopupApp() {
           <button
             className="card session-card"
             key={session.id}
-            onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL(`research.html?sessionId=${session.id}`) })}
+            onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL(`entries/research.html?sessionId=${session.id}`) })}
           >
             <strong>{session.name}</strong>
             <span className="muted">{session.tabs.length} 个来源</span>

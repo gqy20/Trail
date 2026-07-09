@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "action": {
     "default_title": "Trail",
-    "default_popup": "popup.html",
+    "default_popup": "entries/popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

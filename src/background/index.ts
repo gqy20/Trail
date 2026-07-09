@@ -40,7 +40,7 @@ async function handleMessage(message: RuntimeMessage) {
     case "GENERATE_FROM_CURRENT_WINDOW":
       return generateFromCurrentWindow(message.name);
     case "OPEN_SESSION":
-      await chrome.tabs.create({ url: chrome.runtime.getURL(`research.html?sessionId=${message.sessionId}`) });
+      await chrome.tabs.create({ url: chrome.runtime.getURL(`entries/research.html?sessionId=${message.sessionId}`) });
       return undefined;
     case "DELETE_SESSION":
       await deleteSession(message.sessionId);
