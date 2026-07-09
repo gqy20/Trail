@@ -128,7 +128,10 @@ export function installDevChromeMock() {
       getURL: (path: string) => `${extensionRoot}/${path}`,
       sendMessage: async (message: { type: string }) => {
         if (message.type === "GET_POPUP_STATE") {
+          const isActivePreview = new URLSearchParams(window.location.search).get("active") === "1";
+
           return {
+            activeSession: isActivePreview ? { ...sampleSession, status: "recording", endedAt: undefined } : undefined,
             currentGroup: {
               hasGroup: true,
               group: { id: 12, title: "Playwright 插件开发调研", color: "cyan", collapsed: false, windowId: 1 },

@@ -29,6 +29,7 @@ button:disabled {
   width: 380px;
   min-height: 500px;
   padding: 16px;
+  align-content: start;
 }
 
 .page-shell {
@@ -79,50 +80,77 @@ button:disabled {
   flex-basis: 28px;
 }
 
-.brand-track {
+.brand-route {
   position: absolute;
   display: block;
   border-radius: 999px;
   background: currentColor;
 }
 
-.brand-track-top {
-  top: 9px;
+.brand-route-a {
+  top: 10px;
   left: 9px;
-  width: 16px;
+  width: 15px;
   height: 3px;
+  transform: rotate(26deg);
+  transform-origin: left center;
 }
 
-.brand-track-mid {
-  top: 9px;
-  left: 14px;
-  width: 3px;
-  height: 15px;
+.brand-route-b {
+  top: 18px;
+  left: 15px;
+  width: 10px;
+  height: 3px;
+  transform: rotate(-28deg);
+  transform-origin: left center;
 }
 
-.brand-track-dot {
-  right: 8px;
-  bottom: 8px;
-  width: 5px;
-  height: 5px;
+.brand-node {
+  position: absolute;
+  display: block;
+  border-radius: 999px;
+}
+
+.brand-node-start {
+  top: 8px;
+  left: 7px;
+  width: 7px;
+  height: 7px;
+  background: #fff;
+}
+
+.brand-node-end {
+  right: 7px;
+  bottom: 7px;
+  width: 8px;
+  height: 8px;
   background: #99f6e4;
 }
 
-.brand-mark-sm .brand-track-top {
-  top: 8px;
+.brand-mark-sm .brand-route-a {
+  top: 9px;
   left: 8px;
-  width: 14px;
+  width: 13px;
 }
 
-.brand-mark-sm .brand-track-mid {
-  top: 8px;
-  left: 12px;
-  height: 13px;
+.brand-mark-sm .brand-route-b {
+  top: 16px;
+  left: 13px;
+  width: 9px;
 }
 
-.brand-mark-sm .brand-track-dot {
+.brand-mark-sm .brand-node-start {
+  top: 7px;
+  left: 6px;
+  width: 6px;
+  height: 6px;
+}
+
+.brand-mark-sm .brand-node-end {
   right: 7px;
   bottom: 7px;
+  width: 7px;
+  height: 7px;
 }
 
 .muted {
@@ -215,6 +243,39 @@ button:disabled {
   color: #0f766e;
   font-size: 12px;
   font-weight: 750;
+}
+
+.recording-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.recording-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+}
+
+.recording-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recording-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recording-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.recording-actions .button {
+  min-width: 148px;
 }
 
 .source-list {

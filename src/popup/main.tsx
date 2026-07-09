@@ -73,17 +73,21 @@ function PopupApp() {
       </header>
 
       {activeSession ? (
-        <section className="panel stack">
-          <span className="badge">记录中</span>
-          <div>
-            <strong>{activeSession.name}</strong>
-            <div className="muted">
-              {formatDuration(activeSession.startedAt)} · {activeSession.tabs.length} 个来源
+        <section className="panel recording-panel">
+          <div className="recording-top">
+            <div className="recording-title">
+              <strong>{activeSession.name}</strong>
+              <div className="muted">
+                {formatDuration(activeSession.startedAt)} · {activeSession.tabs.length} 个来源
+              </div>
             </div>
+            <span className="badge">记录中</span>
           </div>
-          <button className="button full" disabled={busy} onClick={() => run(() => sendMessage({ type: "STOP_RECORDING" }))}>
-            <Square size={16} /> 停止并生成
-          </button>
+          <div className="recording-actions">
+            <button className="button" disabled={busy} onClick={() => run(() => sendMessage({ type: "STOP_RECORDING" }))}>
+              <Square size={16} /> 停止并生成
+            </button>
+          </div>
         </section>
       ) : (
         <section className="panel stack">
