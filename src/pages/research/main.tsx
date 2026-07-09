@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import ReactMarkdown from "react-markdown";
 import { Copy, Download } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
@@ -84,7 +85,21 @@ function ResearchApp() {
               全部记录
             </button>
           </div>
-          <pre className="markdown-preview">{session.markdown}</pre>
+          <article className="markdown-preview">
+            <ReactMarkdown
+              components={{
+                a({ href, children }) {
+                  return (
+                    <a href={href} target="_blank" rel="noreferrer">
+                      {children}
+                    </a>
+                  );
+                }
+              }}
+            >
+              {session.markdown || ""}
+            </ReactMarkdown>
+          </article>
         </section>
       </div>
     </main>
