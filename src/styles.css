@@ -3,17 +3,19 @@
 }
 
 :root {
-  --trail-bg: #f3f1ec;
-  --trail-surface: #fffefa;
-  --trail-surface-muted: #f8f6f0;
-  --trail-text: #111820;
-  --trail-muted: #657184;
-  --trail-border: #d9d3c7;
-  --trail-border-soft: #ebe6dc;
-  --trail-accent: #008577;
-  --trail-accent-soft: #dff4ef;
-  --trail-accent-bright: #9cf3df;
-  --trail-ink: #141c27;
+  --trail-bg: #fbfaf6;
+  --trail-surface: #fffdf8;
+  --trail-surface-muted: #f7f4ed;
+  --trail-text: #18212c;
+  --trail-muted: #737d8d;
+  --trail-border: #e4ded2;
+  --trail-border-soft: #eee9df;
+  --trail-accent: #0b887c;
+  --trail-accent-soft: #e8f5f1;
+  --trail-accent-bright: #a4efe0;
+  --trail-ink: #202b36;
+  --trail-danger: #b9382f;
+  --trail-danger-soft: #fbefec;
 }
 
 body {
@@ -23,6 +25,7 @@ body {
   font-family:
     "Inter Tight", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -34,6 +37,7 @@ button {
   border: 0;
   cursor: pointer;
   transition:
+    color 160ms ease,
     transform 160ms ease,
     border-color 160ms ease,
     background-color 160ms ease,
@@ -41,7 +45,7 @@ button {
 }
 
 button:hover {
-  transform: translateY(-1px);
+  transform: translateY(-0.5px);
 }
 
 button:active {
@@ -116,9 +120,11 @@ input:focus-visible {
   flex: 0 0 32px;
   overflow: hidden;
   border-radius: 8px;
-  background: var(--trail-accent);
+  background: linear-gradient(135deg, #087f74, #0c9a8c);
   color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.26),
+    0 1px 2px rgba(24, 33, 44, 0.08);
 }
 
 .brand-mark-sm {
@@ -208,8 +214,8 @@ input:focus-visible {
 .card {
   border: 1px solid var(--trail-border);
   border-radius: 8px;
-  background: var(--trail-surface);
-  box-shadow: 0 1px 0 rgba(20, 28, 39, 0.03);
+  background: rgba(255, 253, 248, 0.78);
+  box-shadow: none;
   transition:
     border-color 180ms ease,
     background-color 180ms ease,
@@ -237,7 +243,7 @@ input:focus-visible {
 .label {
   display: grid;
   gap: 6px;
-  color: #465468;
+  color: #566273;
   font-size: 12px;
   font-weight: 750;
 }
@@ -247,14 +253,14 @@ input:focus-visible {
   border: 1px solid var(--trail-border);
   border-radius: 8px;
   padding: 10px 11px;
-  background: var(--trail-surface);
+  background: rgba(255, 255, 255, 0.68);
   color: var(--trail-text);
   outline: none;
 }
 
 .input:focus {
   border-color: var(--trail-accent);
-  box-shadow: 0 0 0 3px rgba(0, 133, 119, 0.14);
+  box-shadow: 0 0 0 3px rgba(11, 136, 124, 0.1);
 }
 
 .button {
@@ -265,14 +271,17 @@ input:focus-visible {
   gap: 8px;
   border-radius: 8px;
   padding: 8px 12px;
-  background: var(--trail-ink);
-  color: #fff;
+  border: 1px solid var(--trail-border);
+  background: rgba(255, 253, 248, 0.78);
+  color: var(--trail-text);
   font-weight: 800;
   white-space: nowrap;
 }
 
 .button:hover {
-  box-shadow: 0 8px 18px rgba(20, 28, 39, 0.12);
+  border-color: #cfc6b7;
+  background: #fffdfa;
+  box-shadow: 0 6px 14px rgba(24, 33, 44, 0.06);
 }
 
 .button svg,
@@ -287,17 +296,48 @@ input:focus-visible {
 
 .button.secondary {
   border: 1px solid var(--trail-border);
-  background: var(--trail-surface);
+  background: transparent;
   color: var(--trail-text);
 }
 
 .button.secondary:hover {
-  border-color: #bcb4a6;
-  background: #fffdf6;
+  border-color: #cfc6b7;
+  background: rgba(255, 253, 248, 0.62);
+}
+
+.button.primary {
+  border-color: var(--trail-ink);
+  background: var(--trail-ink);
+  color: #fff;
+  box-shadow: 0 1px 1px rgba(24, 33, 44, 0.08);
+}
+
+.button.primary:hover {
+  border-color: #111a24;
+  background: #111a24;
+  box-shadow: 0 8px 18px rgba(24, 33, 44, 0.12);
+}
+
+.button.subtle {
+  border-color: transparent;
+  background: transparent;
+}
+
+.button.subtle:hover {
+  border-color: var(--trail-border-soft);
+  background: rgba(255, 253, 248, 0.55);
 }
 
 .button.danger {
-  background: #b42318;
+  border-color: transparent;
+  background: var(--trail-danger-soft);
+  color: var(--trail-danger);
+}
+
+.button.danger:hover {
+  border-color: #f0d0ca;
+  background: #fff8f6;
+  box-shadow: none;
 }
 
 .button.full {
@@ -323,7 +363,7 @@ input:focus-visible {
   height: 6px;
   border-radius: 999px;
   background: currentColor;
-  box-shadow: 0 0 0 0 rgba(0, 133, 119, 0.28);
+  box-shadow: 0 0 0 0 rgba(11, 136, 124, 0.22);
   animation: trail-pulse 1.8s ease-out infinite;
 }
 
@@ -362,30 +402,32 @@ input:focus-visible {
 
 .source-list {
   display: grid;
-  gap: 7px;
-  max-height: 210px;
-  overflow: auto;
+  gap: 2px;
+  max-height: none;
+  overflow: visible;
 }
 
 .popup-shell .source-list {
   max-height: 178px;
+  overflow: auto;
 }
 
 .source-item {
   display: grid;
   gap: 4px;
-  border: 1px solid var(--trail-border-soft);
+  border: 1px solid transparent;
+  border-bottom-color: var(--trail-border-soft);
   border-radius: 8px;
-  padding: 8px;
-  background: var(--trail-surface-muted);
+  padding: 9px 8px;
+  background: transparent;
   color: inherit;
   text-decoration: none;
 }
 
 .source-item:hover {
-  border-color: var(--trail-border);
-  background: var(--trail-surface);
-  transform: translateX(2px);
+  border-color: var(--trail-border-soft);
+  background: rgba(255, 253, 248, 0.72);
+  transform: translateX(1px);
 }
 
 .source-title {
@@ -439,12 +481,17 @@ input:focus-visible {
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  border: 1px solid var(--trail-border);
+  border: 1px solid var(--trail-border-soft);
   border-radius: 8px;
-  background: var(--trail-surface);
-  padding: 20px;
-  line-height: 1.6;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 253, 248, 0.76)),
+    var(--trail-surface);
+  padding: 24px;
+  color: #293443;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.72;
+  box-shadow: none;
 }
 
 .research-content .markdown-preview {
@@ -478,9 +525,9 @@ input:focus-visible {
 
 .sessions-grid .session-card:hover,
 button.session-card:hover {
-  border-color: #bdb4a6;
-  background: #fffdf7;
-  box-shadow: 0 12px 32px rgba(20, 28, 39, 0.08);
+  border-color: #d4ccbe;
+  background: rgba(255, 253, 248, 0.86);
+  box-shadow: 0 8px 20px rgba(24, 33, 44, 0.05);
 }
 
 .session-main {
@@ -509,14 +556,14 @@ button.session-card:hover {
   place-items: center;
   border: 1px solid var(--trail-border);
   border-radius: 8px;
-  background: var(--trail-surface);
+  background: rgba(255, 253, 248, 0.78);
   color: var(--trail-text);
 }
 
 .icon-button:hover {
-  border-color: #bcb4a6;
-  background: #fffdf6;
-  box-shadow: 0 8px 18px rgba(20, 28, 39, 0.08);
+  border-color: #cfc6b7;
+  background: #fffdfa;
+  box-shadow: 0 6px 14px rgba(24, 33, 44, 0.06);
 }
 
 .error-text {
@@ -525,15 +572,15 @@ button.session-card:hover {
 
 @keyframes trail-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(0, 133, 119, 0.28);
+    box-shadow: 0 0 0 0 rgba(11, 136, 124, 0.22);
   }
 
   70% {
-    box-shadow: 0 0 0 8px rgba(0, 133, 119, 0);
+    box-shadow: 0 0 0 8px rgba(11, 136, 124, 0);
   }
 
   100% {
-    box-shadow: 0 0 0 0 rgba(0, 133, 119, 0);
+    box-shadow: 0 0 0 0 rgba(11, 136, 124, 0);
   }
 }
 

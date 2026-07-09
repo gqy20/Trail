@@ -52,7 +52,7 @@ function ResearchApp() {
               {formatDateTime(session.startedAt)} · {session.tabs.length} 个来源
             </div>
             <div className="toolbar">
-              <button className="button" onClick={copyMarkdown}>
+              <button className="button primary" onClick={copyMarkdown}>
                 <Copy size={16} /> 复制
               </button>
               <button className="button secondary" onClick={downloadMarkdown}>

@@ -51,12 +51,12 @@ function SessionsApp() {
               </div>
               <div className="session-actions">
                 <button
-                  className="button"
+                  className="button primary"
                   onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL(`research.html?sessionId=${session.id}`) })}
                 >
                   <ExternalLink size={16} /> 打开
                 </button>
-                <button className="button secondary" onClick={() => removeSession(session.id)}>
+                <button className="button subtle danger" onClick={() => removeSession(session.id)}>
                   <Trash2 size={16} /> 删除
                 </button>
               </div>

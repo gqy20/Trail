@@ -84,7 +84,7 @@ function PopupApp() {
             <span className="badge recording-badge">记录中</span>
           </div>
           <div className="recording-actions">
-            <button className="button" disabled={busy} onClick={() => run(() => sendMessage({ type: "STOP_RECORDING" }))}>
+            <button className="button primary" disabled={busy} onClick={() => run(() => sendMessage({ type: "STOP_RECORDING" }))}>
               <Square size={16} /> 停止并生成
             </button>
           </div>
@@ -125,7 +125,7 @@ function PopupApp() {
 
           {currentGroup?.hasGroup ? (
             <>
-              <button className="button full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_GROUP_RECORDING", name: displayName }))}>
+              <button className="button primary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_GROUP_RECORDING", name: displayName }))}>
                 <Play size={16} /> 开始记录分组
               </button>
               <button className="button secondary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "GENERATE_FROM_CURRENT_GROUP", name: displayName }))}>
@@ -134,7 +134,7 @@ function PopupApp() {
             </>
           ) : (
             <>
-              <button className="button full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_NEW_GROUP_RECORDING", name: displayName }))}>
+              <button className="button primary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_NEW_GROUP_RECORDING", name: displayName }))}>
                 <Play size={16} /> 创建分组并记录
               </button>
               <button className="button secondary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "GENERATE_FROM_CURRENT_WINDOW", name: displayName }))}>
