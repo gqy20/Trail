@@ -51,3 +51,9 @@ feat(scope): message
 fix(scope): message
 chore(scope): message
 ```
+
+安装本地 Git hooks 后，会在提交前运行项目检查，并在提交时校验 commit message：
+
+```bash
+npm run install-hooks
+```

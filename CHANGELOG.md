@@ -20,6 +20,7 @@
 
 ### 工具链
 
+- 新增本地 Git hooks：`pre-commit` 运行项目检查，`commit-msg` 校验 Conventional Commits。
 ### 文档
 
 ## [0.1.0] - 2026-07-09
