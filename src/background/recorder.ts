@@ -1,4 +1,10 @@
-import { collectGroupTabs, collectWindowTabs, getCurrentGroupContext, toResearchTab } from "../shared/chromeTabs";
+import {
+  collectGroupTabs,
+  collectWindowTabs,
+  createNamedGroupFromCurrentSelection,
+  getCurrentGroupContext,
+  toResearchTab
+} from "../shared/chromeTabs";
 import { getDomain } from "../shared/domain";
 import { generateMockMarkdown } from "../shared/markdown";
 import { getActiveSession, getSessions, saveSession, setActiveSession } from "../shared/storage";
@@ -52,18 +58,53 @@ export async function startGroupRecording(name?: string): Promise<TrailSession> 
     throw new Error("Current tab is not inside a tab group.");
   }
 
+  const sessionName = name?.trim() || context.group.title || "Untitled Group Trail";
+  const group = await chrome.tabGroups.update(context.group.id, { title: sessionName });
+  const tabs = await collectGroupTabs(context.windowId, context.group.id);
+
   const session: TrailSession = {
     id: createId("session"),
     source: "tab_group",
-    name: name?.trim() || context.group.title || "Untitled Group Trail",
-    groupId: context.group.id,
-    groupTitle: context.group.title,
-    groupColor: context.group.color,
+    name: sessionName,
+    groupId: group?.id || context.group.id,
+    groupTitle: group?.title || sessionName,
+    groupColor: group?.color || context.group.color,
     windowId: context.windowId,
     status: "recording",
     startedAt: Date.now(),
-    tabs: context.tabs,
-    events: context.tabs.map((tab) => ({
+    tabs,
+    events: tabs.map((tab) => ({
+      id: createId("event"),
+      type: "created",
+      tabId: tab.id,
+      title: tab.title,
+      url: tab.url,
+      domain: tab.domain,
+      timestamp: tab.capturedAt
+    }))
+  };
+
+  await setActiveSession(session);
+  return session;
+}
+
+export async function startNewGroupRecording(name?: string): Promise<TrailSession> {
+  const sessionName = name?.trim() || "Research Trail";
+  const group = await createNamedGroupFromCurrentSelection(sessionName);
+  const tabs = await collectGroupTabs(group.windowId, group.id);
+
+  const session: TrailSession = {
+    id: createId("session"),
+    source: "tab_group",
+    name: sessionName,
+    groupId: group.id,
+    groupTitle: group.title || sessionName,
+    groupColor: group.color,
+    windowId: group.windowId,
+    status: "recording",
+    startedAt: Date.now(),
+    tabs,
+    events: tabs.map((tab) => ({
       id: createId("event"),
       type: "created",
       tabId: tab.id,

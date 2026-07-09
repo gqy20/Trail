@@ -5,6 +5,7 @@ import {
   recordGroupUpdate,
   recordTabEvent,
   startGroupRecording,
+  startNewGroupRecording,
   startWindowRecording,
   stopRecording
 } from "./recorder";
@@ -28,6 +29,8 @@ async function handleMessage(message: RuntimeMessage) {
       return getPopupState();
     case "START_GROUP_RECORDING":
       return startGroupRecording(message.name);
+    case "START_NEW_GROUP_RECORDING":
+      return startNewGroupRecording(message.name);
     case "START_WINDOW_RECORDING":
       return startWindowRecording(message.name);
     case "STOP_RECORDING":

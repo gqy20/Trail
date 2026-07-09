@@ -96,8 +96,12 @@ function PopupApp() {
           <div className="card stack">
             <div className="header-row">
               <div>
-                <strong>{currentGroup?.hasGroup ? currentGroup.group?.title || "Untitled Group" : "No tab group detected"}</strong>
-                <div className="muted">{currentGroup?.tabs.length || 0} tabs detected</div>
+                <strong>{currentGroup?.hasGroup ? currentGroup.group?.title || "Untitled Group" : "New group from current tab"}</strong>
+                <div className="muted">
+                  {currentGroup?.hasGroup
+                    ? `${currentGroup.tabs.length} tabs detected`
+                    : "Start will create and name a Chrome Tab Group"}
+                </div>
               </div>
               <FolderOpen size={18} />
             </div>
@@ -122,8 +126,8 @@ function PopupApp() {
             </>
           ) : (
             <>
-              <button className="button full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_WINDOW_RECORDING", name: displayName }))}>
-                <Play size={16} /> Start Recording Window
+              <button className="button full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_NEW_GROUP_RECORDING", name: displayName }))}>
+                <Play size={16} /> Start New Group
               </button>
               <button className="button secondary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "GENERATE_FROM_CURRENT_WINDOW", name: displayName }))}>
                 <FileText size={16} /> Generate from Window

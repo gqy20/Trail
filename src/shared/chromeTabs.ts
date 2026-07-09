@@ -51,3 +51,34 @@ export async function collectGroupTabs(windowId: number, groupId: number): Promi
   const tabs = await chrome.tabs.query({ windowId, groupId });
   return tabs.map((tab) => toResearchTab(tab));
 }
+
+export async function createNamedGroupFromCurrentSelection(title: string): Promise<chrome.tabGroups.TabGroup> {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab?.id || !activeTab.windowId) {
+    throw new Error("No active tab found for the new Trail group.");
+  }
+
+  const highlightedTabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+  const tabIds = highlightedTabs
+    .map((tab) => tab.id)
+    .filter((tabId): tabId is number => typeof tabId === "number");
+
+  const groupTabIds: number | [number, ...number[]] =
+    tabIds.length > 0 ? ([tabIds[0], ...tabIds.slice(1)] as [number, ...number[]]) : activeTab.id;
+
+  const groupId = await (chrome.tabs.group({
+    tabIds: groupTabIds
+  }) as Promise<number>);
+
+  const group = await chrome.tabGroups.update(groupId, {
+    title,
+    color: "cyan"
+  });
+
+  if (!group) {
+    throw new Error("Chrome did not return the created tab group.");
+  }
+
+  return group;
+}

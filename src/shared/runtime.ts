@@ -3,6 +3,7 @@ import type { PopupState, RuntimeMessage, TrailSession } from "./types";
 type RuntimeResponseMap = {
   GET_POPUP_STATE: PopupState;
   START_GROUP_RECORDING: TrailSession;
+  START_NEW_GROUP_RECORDING: TrailSession;
   START_WINDOW_RECORDING: TrailSession;
   STOP_RECORDING: TrailSession | undefined;
   GENERATE_FROM_CURRENT_GROUP: TrailSession;

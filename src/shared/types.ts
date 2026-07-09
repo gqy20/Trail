@@ -52,6 +52,7 @@ export type GroupContext = {
 export type RuntimeMessage =
   | { type: "GET_POPUP_STATE" }
   | { type: "START_GROUP_RECORDING"; name?: string }
+  | { type: "START_NEW_GROUP_RECORDING"; name?: string }
   | { type: "START_WINDOW_RECORDING"; name?: string }
   | { type: "STOP_RECORDING" }
   | { type: "GENERATE_FROM_CURRENT_GROUP"; name?: string }
