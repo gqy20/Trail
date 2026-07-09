@@ -1,4 +1,5 @@
-import type { TrailSession } from "./types";
+import { DEFAULT_INTERACTION_SETTINGS } from "./interactions";
+import type { TrailInteractionSettings, TrailSession } from "./types";
 
 const now = Date.now();
 
@@ -93,6 +94,21 @@ const sampleSession: TrailSession = {
       title: "Chrome Extensions Manifest V3",
       domain: "developer.chrome.com",
       timestamp: now - 1000 * 60 * 18
+    },
+    {
+      id: "event-3",
+      type: "text_copied",
+      tabId: 1,
+      title: "Playwright Browser Extension 文档",
+      url: "https://playwright.dev/docs/chrome-extensions",
+      domain: "playwright.dev",
+      timestamp: now - 1000 * 60 * 8,
+      selectedText: "Extensions can be loaded in persistent contexts by passing a path to the extension directory.",
+      surroundingText: "Chrome extensions are supported in Chromium. Extensions can be loaded in persistent contexts by passing a path to the extension directory.",
+      sectionTitle: "Chrome extensions",
+      elementTag: "p",
+      cssSelector: "main > article > p",
+      privacyLevel: "safe"
     }
   ],
   markdown: `# Playwright 插件开发调研
@@ -107,9 +123,18 @@ const sampleSession: TrailSession = {
 2. [Chrome Extensions Manifest V3](https://developer.chrome.com/docs/extensions/mv3/intro) - developer.chrome.com
 3. [GitHub - microsoft/playwright](https://github.com/microsoft/playwright) - github.com
 
+## 用户复制过的关键片段
+
+### 片段 1
+
+来源：[playwright.dev](https://playwright.dev/docs/chrome-extensions)，位置：Chrome extensions
+
+> Extensions can be loaded in persistent contexts by passing a path to the extension directory.
+
 ## 综合结论
 
-当前版本尚未接入 AI，本节先保留为人工或后续模型总结区域。`
+当前版本尚未接入 AI，本节先保留为人工或后续模型总结区域。
+`
 };
 
 export function installDevChromeMock() {
@@ -119,7 +144,8 @@ export function installDevChromeMock() {
   if (existingChrome?.runtime?.sendMessage && existingChrome?.storage?.local) return;
 
   const storage: Record<string, unknown> = {
-    "trail.sessions": [sampleSession]
+    "trail.sessions": [sampleSession],
+    "trail.interactionSettings": DEFAULT_INTERACTION_SETTINGS
   };
 
   const extensionRoot = window.location.origin;
@@ -127,7 +153,7 @@ export function installDevChromeMock() {
   globalThis.chrome = {
     runtime: {
       getURL: (path: string) => `${extensionRoot}/${path}`,
-      sendMessage: async (message: { type: string }) => {
+      sendMessage: async (message: { type: string; settings?: Partial<TrailInteractionSettings>; eventId?: string }) => {
         if (message.type === "GET_POPUP_STATE") {
           const isActivePreview = new URLSearchParams(window.location.search).get("active") === "1";
 
@@ -140,8 +166,26 @@ export function installDevChromeMock() {
               tabs: sampleSession.tabs,
               windowId: 1
             },
-            recentSessions: [sampleSession]
+            recentSessions: [sampleSession],
+            interactionSettings: storage["trail.interactionSettings"]
           };
+        }
+
+        if (message.type === "GET_INTERACTION_SETTINGS") {
+          return storage["trail.interactionSettings"];
+        }
+
+        if (message.type === "UPDATE_INTERACTION_SETTINGS") {
+          storage["trail.interactionSettings"] = {
+            ...(storage["trail.interactionSettings"] as TrailInteractionSettings),
+            ...(message.settings || {})
+          };
+          return storage["trail.interactionSettings"];
+        }
+
+        if (message.type === "DELETE_EVENT") {
+          sampleSession.events = sampleSession.events.filter((event) => event.id !== message.eventId);
+          return { deleted: true };
         }
 
         return sampleSession;
@@ -150,6 +194,7 @@ export function installDevChromeMock() {
     },
     tabs: {
       query: async () => sampleTabs,
+      get: async (tabId: number) => sampleTabs.find((tab) => tab.id === tabId) || sampleTabs[0],
       create: async ({ url }: { url?: string }) => {
         if (url) window.location.href = url;
         return sampleTabs[0];

@@ -7,9 +7,10 @@ import {
   toResearchTab
 } from "../shared/chromeTabs";
 import { getDomain } from "../shared/domain";
+import { isDomainExcluded, MAX_CONTEXT_TEXT_LENGTH, MAX_COPIED_TEXT_LENGTH, truncateText } from "../shared/interactions";
 import { generateMockMarkdown } from "../shared/markdown";
-import { getActiveSession, getSessions, saveSession, setActiveSession } from "../shared/storage";
-import type { PopupState, TrailEvent, TrailEventType, TrailSession } from "../shared/types";
+import { getActiveSession, getInteractionSettings, getSessions, saveSession, setActiveSession } from "../shared/storage";
+import type { CopyInteractionPayload, PopupState, TrailEvent, TrailEventType, TrailSession } from "../shared/types";
 
 function createId(prefix: string): string {
   return `${prefix}_${Date.now()}_${crypto.randomUUID()}`;
@@ -51,16 +52,18 @@ function eventsFromTabs(tabs: TrailSession["tabs"]): TrailEvent[] {
 }
 
 export async function getPopupState(): Promise<PopupState> {
-  const [activeSession, currentGroup, recentSessions] = await Promise.all([
+  const [activeSession, currentGroup, recentSessions, interactionSettings] = await Promise.all([
     getActiveSession(),
     getCurrentGroupContext(),
-    getSessions()
+    getSessions(),
+    getInteractionSettings()
   ]);
 
   return {
     activeSession,
     currentGroup,
-    recentSessions: recentSessions.slice(0, 5)
+    recentSessions: recentSessions.slice(0, 5),
+    interactionSettings
   };
 }
 
@@ -231,4 +234,82 @@ export async function recordGroupUpdate(group: chrome.tabGroups.TabGroup): Promi
       }
     ].slice(-200)
   });
+}
+
+export async function recordCopyInteraction(
+  payload: CopyInteractionPayload,
+  senderTab?: chrome.tabs.Tab
+): Promise<{ recorded: boolean; eventId?: string; reason?: string }> {
+  const [active, settings] = await Promise.all([getActiveSession(), getInteractionSettings()]);
+  if (!active) return { recorded: false, reason: "no_active_session" };
+  if (!settings.captureCopy) return { recorded: false, reason: "capture_disabled" };
+  if (isDomainExcluded(payload.domain, settings.excludedDomains)) {
+    return { recorded: false, reason: "domain_excluded" };
+  }
+
+  const tabId = senderTab?.id;
+  const windowId = senderTab?.windowId;
+  const groupId = senderTab?.groupId;
+  const belongsToSession =
+    active.source === "window"
+      ? windowId === active.windowId
+      : windowId === active.windowId && groupId === active.groupId;
+
+  if (!belongsToSession) return { recorded: false, reason: "outside_session" };
+
+  const selectedText = truncateText(payload.selectedText, MAX_COPIED_TEXT_LENGTH);
+  if (!selectedText) return { recorded: false, reason: "empty_text" };
+
+  const event: TrailEvent = {
+    id: createId("event"),
+    type: "text_copied",
+    tabId,
+    title: payload.pageTitle,
+    url: payload.pageUrl,
+    domain: payload.domain || getDomain(payload.pageUrl),
+    timestamp: payload.timestamp || Date.now(),
+    selectedText,
+    textLength: payload.selectedText.length,
+    privacyLevel: "safe"
+  };
+
+  if (settings.captureContext) {
+    event.surroundingText = payload.surroundingText
+      ? truncateText(payload.surroundingText, MAX_CONTEXT_TEXT_LENGTH)
+      : undefined;
+    event.sectionTitle = payload.sectionTitle ? truncateText(payload.sectionTitle, 120) : undefined;
+    event.elementTag = payload.elementTag;
+    event.elementRole = payload.elementRole;
+    event.cssSelector = payload.cssSelector;
+    event.viewportX = payload.viewportX;
+    event.viewportY = payload.viewportY;
+    event.pageX = payload.pageX;
+    event.pageY = payload.pageY;
+  }
+
+  const nextTabs = senderTab ? uniqueTabs([...active.tabs, toResearchTab(senderTab)]) : active.tabs;
+  await setActiveSession({
+    ...active,
+    tabs: nextTabs,
+    events: [...active.events, event].slice(-300),
+    updatedAt: Date.now()
+  });
+
+  return { recorded: true, eventId: event.id };
+}
+
+export async function deleteActiveEvent(eventId: string): Promise<{ deleted: boolean }> {
+  const active = await getActiveSession();
+  if (!active) return { deleted: false };
+
+  const nextEvents = active.events.filter((event) => event.id !== eventId);
+  if (nextEvents.length === active.events.length) return { deleted: false };
+
+  await setActiveSession({
+    ...active,
+    events: nextEvents,
+    updatedAt: Date.now()
+  });
+
+  return { deleted: true };
 }

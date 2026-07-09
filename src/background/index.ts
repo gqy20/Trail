@@ -1,7 +1,9 @@
 import {
+  deleteActiveEvent,
   generateFromCurrentGroup,
   generateFromCurrentWindow,
   getPopupState,
+  recordCopyInteraction,
   recordGroupUpdate,
   recordTabEvent,
   startGroupRecording,
@@ -9,11 +11,11 @@ import {
   startWindowRecording,
   stopRecording
 } from "./recorder";
-import { deleteSession } from "../shared/storage";
+import { deleteSession, getInteractionSettings, updateInteractionSettings } from "../shared/storage";
 import type { RuntimeMessage } from "../shared/types";
 
-chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
-  handleMessage(message)
+chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
+  handleMessage(message, sender)
     .then(sendResponse)
     .catch((error: unknown) => {
       const messageText = error instanceof Error ? error.message : "Unknown Trail error";
@@ -23,10 +25,14 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
   return true;
 });
 
-async function handleMessage(message: RuntimeMessage) {
+async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
   switch (message.type) {
     case "GET_POPUP_STATE":
       return getPopupState();
+    case "GET_INTERACTION_SETTINGS":
+      return getInteractionSettings();
+    case "UPDATE_INTERACTION_SETTINGS":
+      return updateInteractionSettings(message.settings);
     case "START_GROUP_RECORDING":
       return startGroupRecording(message.name);
     case "START_NEW_GROUP_RECORDING":
@@ -39,6 +45,10 @@ async function handleMessage(message: RuntimeMessage) {
       return generateFromCurrentGroup(message.name);
     case "GENERATE_FROM_CURRENT_WINDOW":
       return generateFromCurrentWindow(message.name);
+    case "RECORD_INTERACTION":
+      return recordCopyInteraction(message.payload, sender.tab);
+    case "DELETE_EVENT":
+      return deleteActiveEvent(message.eventId);
     case "OPEN_SESSION":
       await chrome.tabs.create({ url: chrome.runtime.getURL(`entries/research.html?sessionId=${message.sessionId}`) });
       return undefined;

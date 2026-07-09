@@ -1,7 +1,9 @@
-import type { TrailSession } from "./types";
+import { DEFAULT_INTERACTION_SETTINGS } from "./interactions";
+import type { TrailInteractionSettings, TrailSession } from "./types";
 
 const ACTIVE_SESSION_KEY = "trail.activeSession";
 const SESSIONS_KEY = "trail.sessions";
+const INTERACTION_SETTINGS_KEY = "trail.interactionSettings";
 const MAX_SESSIONS = 50;
 
 export async function getActiveSession(): Promise<TrailSession | undefined> {
@@ -46,4 +48,26 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await chrome.storage.local.set({
     [SESSIONS_KEY]: sessions.filter((session) => session.id !== sessionId)
   });
+}
+
+export async function getInteractionSettings(): Promise<TrailInteractionSettings> {
+  const result = await chrome.storage.local.get(INTERACTION_SETTINGS_KEY);
+  return {
+    ...DEFAULT_INTERACTION_SETTINGS,
+    ...((result[INTERACTION_SETTINGS_KEY] as Partial<TrailInteractionSettings> | undefined) || {})
+  };
+}
+
+export async function updateInteractionSettings(
+  settings: Partial<TrailInteractionSettings>
+): Promise<TrailInteractionSettings> {
+  const current = await getInteractionSettings();
+  const next: TrailInteractionSettings = {
+    ...current,
+    ...settings,
+    excludedDomains: settings.excludedDomains || current.excludedDomains
+  };
+
+  await chrome.storage.local.set({ [INTERACTION_SETTINGS_KEY]: next });
+  return next;
 }

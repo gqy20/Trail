@@ -2,7 +2,15 @@ export type TrailSource = "tab_group" | "window";
 
 export type TrailStatus = "recording" | "completed";
 
-export type TrailEventType = "created" | "updated" | "activated" | "removed" | "group_updated";
+export type TrailEventType =
+  | "created"
+  | "updated"
+  | "activated"
+  | "removed"
+  | "group_updated"
+  | "text_copied";
+
+export type TrailPrivacyLevel = "safe" | "sensitive" | "redacted";
 
 export type ResearchTab = {
   id?: number;
@@ -23,6 +31,18 @@ export type TrailEvent = {
   url?: string;
   domain?: string;
   timestamp: number;
+  selectedText?: string;
+  surroundingText?: string;
+  sectionTitle?: string;
+  elementTag?: string;
+  elementRole?: string;
+  cssSelector?: string;
+  viewportX?: number;
+  viewportY?: number;
+  pageX?: number;
+  pageY?: number;
+  textLength?: number;
+  privacyLevel?: TrailPrivacyLevel;
 };
 
 export type TrailSession = {
@@ -50,14 +70,42 @@ export type GroupContext = {
   windowId?: number;
 };
 
+export type CopyInteractionPayload = {
+  selectedText: string;
+  surroundingText?: string;
+  sectionTitle?: string;
+  elementTag?: string;
+  elementRole?: string;
+  cssSelector?: string;
+  pageUrl: string;
+  pageTitle: string;
+  domain: string;
+  viewportX?: number;
+  viewportY?: number;
+  pageX?: number;
+  pageY?: number;
+  timestamp: number;
+};
+
+export type TrailInteractionSettings = {
+  captureCopy: boolean;
+  captureContext: boolean;
+  showToast: boolean;
+  excludedDomains: string[];
+};
+
 export type RuntimeMessage =
   | { type: "GET_POPUP_STATE" }
+  | { type: "GET_INTERACTION_SETTINGS" }
+  | { type: "UPDATE_INTERACTION_SETTINGS"; settings: Partial<TrailInteractionSettings> }
   | { type: "START_GROUP_RECORDING"; name?: string }
   | { type: "START_NEW_GROUP_RECORDING"; name?: string }
   | { type: "START_WINDOW_RECORDING"; name?: string }
   | { type: "STOP_RECORDING" }
   | { type: "GENERATE_FROM_CURRENT_GROUP"; name?: string }
   | { type: "GENERATE_FROM_CURRENT_WINDOW"; name?: string }
+  | { type: "RECORD_INTERACTION"; payload: CopyInteractionPayload }
+  | { type: "DELETE_EVENT"; eventId: string }
   | { type: "OPEN_SESSION"; sessionId: string }
   | { type: "DELETE_SESSION"; sessionId: string };
 
@@ -65,4 +113,5 @@ export type PopupState = {
   activeSession?: TrailSession;
   currentGroup: GroupContext;
   recentSessions: TrailSession[];
+  interactionSettings: TrailInteractionSettings;
 };

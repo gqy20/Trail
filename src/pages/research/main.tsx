@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
-import { Copy, Download, Eye, Pencil, Save } from "lucide-react";
+import { Clipboard, Copy, Download, Eye, Pencil, Save, Trash2 } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { getSession, updateSavedSession } from "../../shared/storage";
 import { formatDateTime } from "../../shared/time";
-import type { TrailSession } from "../../shared/types";
+import type { TrailEvent, TrailSession } from "../../shared/types";
 import "../../styles.css";
 
 installDevChromeMock();
@@ -24,6 +24,11 @@ function ResearchApp() {
       setDraftMarkdown(next?.markdown || "");
     });
   }, []);
+
+  const copiedEvents = useMemo(
+    () => session?.events.filter((event) => event.type === "text_copied" && event.selectedText) || [],
+    [session]
+  );
 
   async function copyMarkdown() {
     if (draftMarkdown) await navigator.clipboard.writeText(draftMarkdown);
@@ -55,6 +60,17 @@ function ResearchApp() {
     setSaveState("saved");
   }
 
+  async function removeCopiedEvent(eventId: string) {
+    if (!session) return;
+    const next: TrailSession = {
+      ...session,
+      events: session.events.filter((event) => event.id !== eventId),
+      updatedAt: Date.now()
+    };
+    await updateSavedSession(next);
+    setSession(next);
+  }
+
   function updateDraft(value: string) {
     setDraftMarkdown(value);
     setSaveState(value === (session?.markdown || "") ? "saved" : "dirty");
@@ -63,7 +79,7 @@ function ResearchApp() {
   if (!session) {
     return (
       <main className="page-shell research-shell">
-        <div className="panel">未找到。</div>
+        <div className="panel">没有找到这条研究记录。</div>
       </main>
     );
   }
@@ -76,11 +92,11 @@ function ResearchApp() {
         <aside className="sidebar stack">
           <section className="panel stack">
             <span className="badge">{session.source === "tab_group" ? "标签页分组" : "浏览器窗口"}</span>
-            <h1 style={{ margin: 0, fontSize: 24 }}>{session.name}</h1>
+            <h1 className="sidebar-title">{session.name}</h1>
             <div className="muted">
               {formatDateTime(session.startedAt)} · {session.tabs.length} 个来源
             </div>
-            <div className="muted">{session.updatedAt ? `更新 ${formatDateTime(session.updatedAt)}` : statusText}</div>
+            <div className="muted">{session.updatedAt ? `更新于 ${formatDateTime(session.updatedAt)}` : statusText}</div>
             <div className="toolbar">
               <button className="button primary" disabled={saveState !== "dirty"} onClick={saveMarkdown}>
                 <Save size={16} /> 保存
@@ -93,6 +109,8 @@ function ResearchApp() {
               </button>
             </div>
           </section>
+
+          <CopiedPanel events={copiedEvents} onRemove={(eventId) => void removeCopiedEvent(eventId)} />
 
           <section className="panel stack">
             <strong>来源</strong>
@@ -113,7 +131,7 @@ function ResearchApp() {
               <BrandMark />
               <div>
                 <strong>研究文档</strong>
-                <div className="muted" style={{ fontSize: 12 }}>{statusText}</div>
+                <div className="muted text-small">{statusText}</div>
               </div>
             </div>
             <div className="toolbar">
@@ -126,7 +144,7 @@ function ResearchApp() {
                 </button>
               </div>
               <button className="button secondary" onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("entries/sessions.html") })}>
-                全部
+                全部记录
               </button>
             </div>
           </div>
@@ -160,6 +178,40 @@ function ResearchApp() {
   );
 }
 
+function CopiedPanel({ events, onRemove }: { events: TrailEvent[]; onRemove: (eventId: string) => void }) {
+  return (
+    <section className="panel stack">
+      <div className="header-row">
+        <div className="setting-title">
+          <Clipboard size={17} />
+          <strong>复制片段</strong>
+        </div>
+        <span className="badge">{events.length}</span>
+      </div>
+      {events.length === 0 ? (
+        <p className="setting-copy">录制期间复制网页文本后，关键片段会出现在这里。</p>
+      ) : (
+        <div className="copy-event-list">
+          {events.map((event) => (
+            <article className="copy-event" key={event.id}>
+              <div className="copy-event-meta">
+                <span>{event.sectionTitle || event.domain || "网页片段"}</span>
+                <button className="icon-button compact danger" title="删除片段" aria-label="删除片段" onClick={() => onRemove(event.id)}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+              <p>{event.selectedText}</p>
+              <a href={event.url} target="_blank" rel="noreferrer">
+                {event.domain || "打开来源"}
+              </a>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ResearchApp />
@@ -167,9 +219,11 @@ createRoot(document.getElementById("root")!).render(
 );
 
 function toFileName(value: string): string {
-  return value
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, "")
-    .replace(/\s+/g, "-")
-    .slice(0, 80) || "trail";
+  return (
+    value
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "")
+      .replace(/\s+/g, "-")
+      .slice(0, 80) || "trail"
+  );
 }

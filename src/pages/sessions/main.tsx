@@ -25,7 +25,7 @@ function SessionsApp() {
   }
 
   async function removeSession(sessionId: string) {
-    if (!confirm("删除这条记录？")) return;
+    if (!confirm("删除这条研究记录？")) return;
     await deleteSession(sessionId);
     await refresh();
   }
@@ -57,7 +57,8 @@ function SessionsApp() {
           session.name,
           session.groupTitle,
           session.source,
-          ...session.tabs.flatMap((tab) => [tab.title, tab.domain, tab.url])
+          ...session.tabs.flatMap((tab) => [tab.title, tab.domain, tab.url]),
+          ...session.events.map((event) => event.selectedText || "")
         ]
           .filter(Boolean)
           .join(" ")
@@ -74,72 +75,75 @@ function SessionsApp() {
           <div className="brand">
             <BrandMark />
             <div>
-              <h1 style={{ margin: 0, fontSize: 26 }}>研究记录</h1>
-              <div className="muted">本地保存</div>
+              <h1 className="page-title">研究记录</h1>
+              <div className="muted">本地保存，可搜索来源和复制片段</div>
             </div>
           </div>
           <label className="search-box">
             <Search size={16} />
-            <input value={query} placeholder="搜索" onChange={(event) => setQuery(event.target.value)} />
+            <input value={query} placeholder="搜索记录" onChange={(event) => setQuery(event.target.value)} />
           </label>
         </header>
 
         <section className="sessions-grid">
-          {visibleSessions.map((session) => (
-            <article className="card session-card" key={session.id}>
-              <div className="session-main">
-                <span className="badge">{session.source === "tab_group" ? session.groupTitle || "标签页分组" : "浏览器窗口"}</span>
-                {editingId === session.id ? (
-                  <input
-                    className="input compact"
-                    autoFocus
-                    value={editingName}
-                    onChange={(event) => setEditingName(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void saveRename(session);
-                      if (event.key === "Escape") setEditingId("");
-                    }}
-                  />
-                ) : (
-                  <strong>{session.name}</strong>
-                )}
-                <span className="muted">
-                  {formatDateTime(session.updatedAt || session.startedAt)} · {session.tabs.length} 个来源
-                </span>
-              </div>
-              <div className="session-actions">
-                {editingId === session.id ? (
-                  <>
-                    <button className="button primary" onClick={() => saveRename(session)}>
-                      <Check size={16} /> 保存
-                    </button>
-                    <button className="button secondary" onClick={() => setEditingId("")}>
-                      <X size={16} /> 取消
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      className="button primary"
-                      onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL(`entries/research.html?sessionId=${session.id}`) })}
-                    >
-                      <ExternalLink size={16} /> 打开
-                    </button>
-                    <button className="button secondary" onClick={() => startRename(session)}>
-                      <Pencil size={16} /> 重命名
-                    </button>
-                    <button className="button subtle danger" onClick={() => removeSession(session.id)}>
-                      <Trash2 size={16} /> 删除
-                    </button>
-                  </>
-                )}
-              </div>
-            </article>
-          ))}
+          {visibleSessions.map((session) => {
+            const copiedCount = session.events.filter((event) => event.type === "text_copied").length;
+            return (
+              <article className="card session-card" key={session.id}>
+                <div className="session-main">
+                  <span className="badge">{session.source === "tab_group" ? session.groupTitle || "标签页分组" : "浏览器窗口"}</span>
+                  {editingId === session.id ? (
+                    <input
+                      className="input compact"
+                      autoFocus
+                      value={editingName}
+                      onChange={(event) => setEditingName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void saveRename(session);
+                        if (event.key === "Escape") setEditingId("");
+                      }}
+                    />
+                  ) : (
+                    <strong>{session.name}</strong>
+                  )}
+                  <span className="muted">
+                    {formatDateTime(session.updatedAt || session.startedAt)} · {session.tabs.length} 个来源 · {copiedCount} 个复制片段
+                  </span>
+                </div>
+                <div className="session-actions">
+                  {editingId === session.id ? (
+                    <>
+                      <button className="button primary" onClick={() => saveRename(session)}>
+                        <Check size={16} /> 保存
+                      </button>
+                      <button className="button secondary" onClick={() => setEditingId("")}>
+                        <X size={16} /> 取消
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="button primary"
+                        onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL(`entries/research.html?sessionId=${session.id}`) })}
+                      >
+                        <ExternalLink size={16} /> 打开
+                      </button>
+                      <button className="button secondary" onClick={() => startRename(session)}>
+                        <Pencil size={16} /> 重命名
+                      </button>
+                      <button className="button subtle danger" onClick={() => removeSession(session.id)}>
+                        <Trash2 size={16} /> 删除
+                      </button>
+                    </>
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </section>
 
-        {sessions.length === 0 ? <section className="panel">暂无记录。</section> : null}
-        {sessions.length > 0 && visibleSessions.length === 0 ? <section className="panel">无匹配。</section> : null}
+        {sessions.length === 0 ? <section className="panel">还没有研究记录。</section> : null}
+        {sessions.length > 0 && visibleSessions.length === 0 ? <section className="panel">没有匹配的记录。</section> : null}
       </div>
     </main>
   );
