@@ -81,7 +81,7 @@ function PopupApp() {
                 {formatDuration(activeSession.startedAt)} · {activeSession.tabs.length} 个来源
               </div>
             </div>
-            <span className="badge">记录中</span>
+            <span className="badge recording-badge">记录中</span>
           </div>
           <div className="recording-actions">
             <button className="button" disabled={busy} onClick={() => run(() => sendMessage({ type: "STOP_RECORDING" }))}>
