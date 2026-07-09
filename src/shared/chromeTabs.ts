@@ -52,6 +52,30 @@ export async function collectGroupTabs(windowId: number, groupId: number): Promi
   return tabs.map((tab) => toResearchTab(tab));
 }
 
+export async function getUniqueGroupTitle(
+  windowId: number,
+  desiredTitle: string,
+  excludeGroupId?: number
+): Promise<string> {
+  const baseTitle = desiredTitle.trim() || "研究记录";
+  const groups = await chrome.tabGroups.query({ windowId });
+  const usedTitles = new Set(
+    groups
+      .filter((group) => group.id !== excludeGroupId)
+      .map((group) => group.title?.trim())
+      .filter((title): title is string => Boolean(title))
+  );
+
+  if (!usedTitles.has(baseTitle)) return baseTitle;
+
+  let suffix = 2;
+  while (usedTitles.has(`${baseTitle} ${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${baseTitle} ${suffix}`;
+}
+
 export async function createNamedGroupFromCurrentSelection(title: string): Promise<chrome.tabGroups.TabGroup> {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -59,6 +83,7 @@ export async function createNamedGroupFromCurrentSelection(title: string): Promi
     throw new Error("No active tab found for the new Trail group.");
   }
 
+  const uniqueTitle = await getUniqueGroupTitle(activeTab.windowId, title);
   const highlightedTabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
   const tabIds = highlightedTabs
     .map((tab) => tab.id)
@@ -72,7 +97,7 @@ export async function createNamedGroupFromCurrentSelection(title: string): Promi
   }) as Promise<number>);
 
   const group = await chrome.tabGroups.update(groupId, {
-    title,
+    title: uniqueTitle,
     color: "cyan"
   });
 

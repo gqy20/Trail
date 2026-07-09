@@ -162,6 +162,7 @@ export function installDevChromeMock() {
     tabGroups: {
       TAB_GROUP_ID_NONE: -1,
       get: async () => ({ id: 12, title: "Playwright 插件开发调研", color: "cyan", collapsed: false, windowId: 1 }),
+      query: async () => [{ id: 12, title: "Playwright 插件开发调研", color: "cyan", collapsed: false, windowId: 1 }],
       update: async (_id: number, properties: { title?: string }) => ({
         id: 12,
         title: properties.title || "Playwright 插件开发调研",

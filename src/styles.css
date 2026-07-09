@@ -42,6 +42,18 @@ button:disabled {
   margin: 0 auto;
 }
 
+.research-shell {
+  min-height: 100vh;
+}
+
+.research-workspace {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 16px;
+  width: 100%;
+  min-height: calc(100vh - 48px);
+}
+
 .header-row,
 .toolbar,
 .split {
@@ -326,11 +338,24 @@ button:disabled {
   top: 24px;
   width: 320px;
   flex: 0 0 320px;
+  align-content: start;
+}
+
+.sidebar.stack {
+  align-content: start;
+}
+
+.panel.stack {
+  align-content: start;
 }
 
 .content {
   min-width: 0;
   flex: 1;
+}
+
+.research-content {
+  min-height: calc(100vh - 48px);
 }
 
 .markdown-preview {
@@ -343,6 +368,10 @@ button:disabled {
   background: #fff;
   padding: 20px;
   line-height: 1.6;
+}
+
+.research-content .markdown-preview {
+  min-height: calc(100vh - 104px);
 }
 
 .sessions-grid {
@@ -379,6 +408,11 @@ button:disabled {
 
   .split {
     display: grid;
+  }
+
+  .research-workspace {
+    grid-template-columns: 1fr;
+    min-height: auto;
   }
 
   .sidebar {

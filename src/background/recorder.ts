@@ -3,6 +3,7 @@ import {
   collectWindowTabs,
   createNamedGroupFromCurrentSelection,
   getCurrentGroupContext,
+  getUniqueGroupTitle,
   toResearchTab
 } from "../shared/chromeTabs";
 import { getDomain } from "../shared/domain";
@@ -37,6 +38,18 @@ function uniqueTabs(tabs: TrailSession["tabs"]): TrailSession["tabs"] {
   return [...byUrl.values()];
 }
 
+function eventsFromTabs(tabs: TrailSession["tabs"]): TrailEvent[] {
+  return tabs.map((tab) => ({
+    id: createId("event"),
+    type: "created",
+    tabId: tab.id,
+    title: tab.title,
+    url: tab.url,
+    domain: tab.domain,
+    timestamp: tab.capturedAt
+  }));
+}
+
 export async function getPopupState(): Promise<PopupState> {
   const [activeSession, currentGroup, recentSessions] = await Promise.all([
     getActiveSession(),
@@ -55,10 +68,11 @@ export async function startGroupRecording(name?: string): Promise<TrailSession> 
   const context = await getCurrentGroupContext();
 
   if (!context.hasGroup || !context.group || !context.windowId) {
-    throw new Error("Current tab is not inside a tab group.");
+    throw new Error("当前标签页不在任何分组中。");
   }
 
-  const sessionName = name?.trim() || context.group.title || "未命名研究记录";
+  const requestedName = name?.trim() || context.group.title || "未命名研究记录";
+  const sessionName = await getUniqueGroupTitle(context.windowId, requestedName, context.group.id);
   const group = await chrome.tabGroups.update(context.group.id, { title: sessionName });
   const tabs = await collectGroupTabs(context.windowId, context.group.id);
 
@@ -73,15 +87,7 @@ export async function startGroupRecording(name?: string): Promise<TrailSession> 
     status: "recording",
     startedAt: Date.now(),
     tabs,
-    events: tabs.map((tab) => ({
-      id: createId("event"),
-      type: "created",
-      tabId: tab.id,
-      title: tab.title,
-      url: tab.url,
-      domain: tab.domain,
-      timestamp: tab.capturedAt
-    }))
+    events: eventsFromTabs(tabs)
   };
 
   await setActiveSession(session);
@@ -89,8 +95,9 @@ export async function startGroupRecording(name?: string): Promise<TrailSession> 
 }
 
 export async function startNewGroupRecording(name?: string): Promise<TrailSession> {
-  const sessionName = name?.trim() || "研究记录";
-  const group = await createNamedGroupFromCurrentSelection(sessionName);
+  const requestedName = name?.trim() || "研究记录";
+  const group = await createNamedGroupFromCurrentSelection(requestedName);
+  const sessionName = group.title || requestedName;
   const tabs = await collectGroupTabs(group.windowId, group.id);
 
   const session: TrailSession = {
@@ -98,21 +105,13 @@ export async function startNewGroupRecording(name?: string): Promise<TrailSessio
     source: "tab_group",
     name: sessionName,
     groupId: group.id,
-    groupTitle: group.title || sessionName,
+    groupTitle: sessionName,
     groupColor: group.color,
     windowId: group.windowId,
     status: "recording",
     startedAt: Date.now(),
     tabs,
-    events: tabs.map((tab) => ({
-      id: createId("event"),
-      type: "created",
-      tabId: tab.id,
-      title: tab.title,
-      url: tab.url,
-      domain: tab.domain,
-      timestamp: tab.capturedAt
-    }))
+    events: eventsFromTabs(tabs)
   };
 
   await setActiveSession(session);
@@ -124,7 +123,7 @@ export async function startWindowRecording(name?: string): Promise<TrailSession>
   const windowId = context.windowId;
 
   if (!windowId) {
-    throw new Error("No current browser window found.");
+    throw new Error("没有找到当前浏览器窗口。");
   }
 
   const tabs = await collectWindowTabs(windowId);
@@ -136,15 +135,7 @@ export async function startWindowRecording(name?: string): Promise<TrailSession>
     status: "recording",
     startedAt: Date.now(),
     tabs,
-    events: tabs.map((tab) => ({
-      id: createId("event"),
-      type: "created",
-      tabId: tab.id,
-      title: tab.title,
-      url: tab.url,
-      domain: tab.domain,
-      timestamp: tab.capturedAt
-    }))
+    events: eventsFromTabs(tabs)
   };
 
   await setActiveSession(session);

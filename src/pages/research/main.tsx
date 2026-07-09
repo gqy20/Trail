@@ -35,15 +35,15 @@ function ResearchApp() {
 
   if (!session) {
     return (
-      <main className="page-shell">
-        <div className="page-inner panel">没有找到这条记录。</div>
+      <main className="page-shell research-shell">
+        <div className="panel">没有找到这条记录。</div>
       </main>
     );
   }
 
   return (
-    <main className="page-shell">
-      <div className="page-inner split">
+    <main className="page-shell research-shell">
+      <div className="research-workspace">
         <aside className="sidebar stack">
           <section className="panel stack">
             <span className="badge">{session.source === "tab_group" ? "标签页分组" : "浏览器窗口"}</span>
@@ -74,7 +74,7 @@ function ResearchApp() {
           </section>
         </aside>
 
-        <section className="content stack">
+        <section className="content research-content stack">
           <div className="header-row">
             <div className="brand">
               <BrandMark />
