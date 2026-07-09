@@ -1,6 +1,6 @@
 {
   "name": "trail",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Trail Chrome extension for recording research sessions from tab groups.",
   "private": true,
   "scripts": {
