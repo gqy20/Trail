@@ -58,7 +58,7 @@ export async function startGroupRecording(name?: string): Promise<TrailSession> 
     throw new Error("Current tab is not inside a tab group.");
   }
 
-  const sessionName = name?.trim() || context.group.title || "Untitled Group Trail";
+  const sessionName = name?.trim() || context.group.title || "未命名研究记录";
   const group = await chrome.tabGroups.update(context.group.id, { title: sessionName });
   const tabs = await collectGroupTabs(context.windowId, context.group.id);
 
@@ -89,7 +89,7 @@ export async function startGroupRecording(name?: string): Promise<TrailSession> 
 }
 
 export async function startNewGroupRecording(name?: string): Promise<TrailSession> {
-  const sessionName = name?.trim() || "Research Trail";
+  const sessionName = name?.trim() || "研究记录";
   const group = await createNamedGroupFromCurrentSelection(sessionName);
   const tabs = await collectGroupTabs(group.windowId, group.id);
 
@@ -131,7 +131,7 @@ export async function startWindowRecording(name?: string): Promise<TrailSession>
   const session: TrailSession = {
     id: createId("session"),
     source: "window",
-    name: name?.trim() || "Window Trail",
+    name: name?.trim() || "窗口研究记录",
     windowId,
     status: "recording",
     startedAt: Date.now(),
@@ -227,13 +227,13 @@ export async function recordGroupUpdate(group: chrome.tabGroups.TabGroup): Promi
     ...active,
     groupTitle: group.title,
     groupColor: group.color,
-    name: active.name || group.title || "Untitled Group Trail",
+    name: active.name || group.title || "未命名研究记录",
     events: [
       ...active.events,
       {
         id: createId("event"),
         type: "group_updated" as const,
-        title: group.title || "Group updated",
+        title: group.title || "分组已更新",
         timestamp: Date.now()
       }
     ].slice(-200)

@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BookOpen, Clock, FileText, FolderOpen, Play, Square } from "lucide-react";
-import "../styles.css";
+import { Clock, FileText, FolderOpen, Play, Square } from "lucide-react";
+import { BrandMark } from "../shared/BrandMark";
+import { installDevChromeMock } from "../shared/devChromeMock";
 import { sendMessage } from "../shared/runtime";
 import { formatDuration } from "../shared/time";
 import type { PopupState, TrailSession } from "../shared/types";
+import "../styles.css";
+
+installDevChromeMock();
 
 function PopupApp() {
   const [state, setState] = useState<PopupState>();
@@ -18,7 +22,7 @@ function PopupApp() {
 
   const defaultName = useMemo(() => {
     if (state?.currentGroup.group?.title) return state.currentGroup.group.title;
-    return "Research Trail";
+    return "研究记录";
   }, [state]);
 
   async function refresh() {
@@ -37,7 +41,7 @@ function PopupApp() {
         await chrome.tabs.create({ url: chrome.runtime.getURL(`research.html?sessionId=${session.id}`) });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Trail action failed.");
+      setError(err instanceof Error ? err.message : "Trail 操作失败。");
     } finally {
       setBusy(false);
     }
@@ -51,19 +55,17 @@ function PopupApp() {
     <main className="popup-shell stack">
       <header className="header-row">
         <div className="brand">
-          <span className="brand-mark">
-            <BookOpen size={18} />
-          </span>
+          <BrandMark />
           <div>
             <div>Trail</div>
             <div className="muted" style={{ fontSize: 12 }}>
-              Capture your learning trail.
+              记录你的研究路径
             </div>
           </div>
         </div>
         <button
           className="icon-button"
-          title="Open sessions"
+          title="打开历史记录"
           onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("sessions.html") })}
         >
           <Clock size={17} />
@@ -72,19 +74,21 @@ function PopupApp() {
 
       {activeSession ? (
         <section className="panel stack">
-          <span className="badge">Recording</span>
+          <span className="badge">记录中</span>
           <div>
             <strong>{activeSession.name}</strong>
-            <div className="muted">{formatDuration(activeSession.startedAt)} · {activeSession.tabs.length} sources</div>
+            <div className="muted">
+              {formatDuration(activeSession.startedAt)} · {activeSession.tabs.length} 个来源
+            </div>
           </div>
           <button className="button full" disabled={busy} onClick={() => run(() => sendMessage({ type: "STOP_RECORDING" }))}>
-            <Square size={16} /> Stop & Generate
+            <Square size={16} /> 停止并生成
           </button>
         </section>
       ) : (
         <section className="panel stack">
           <label className="label">
-            Session Name
+            记录名称
             <input
               className="input"
               value={name}
@@ -96,11 +100,11 @@ function PopupApp() {
           <div className="card stack">
             <div className="header-row">
               <div>
-                <strong>{currentGroup?.hasGroup ? currentGroup.group?.title || "Untitled Group" : "New group from current tab"}</strong>
+                <strong>{currentGroup?.hasGroup ? currentGroup.group?.title || "未命名分组" : "从当前标签页创建新分组"}</strong>
                 <div className="muted">
                   {currentGroup?.hasGroup
-                    ? `${currentGroup.tabs.length} tabs detected`
-                    : "Start will create and name a Chrome Tab Group"}
+                    ? `检测到 ${currentGroup.tabs.length} 个标签页`
+                    : "开始记录时会自动创建并命名 Chrome 分组"}
                 </div>
               </div>
               <FolderOpen size={18} />
@@ -118,32 +122,32 @@ function PopupApp() {
           {currentGroup?.hasGroup ? (
             <>
               <button className="button full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_GROUP_RECORDING", name: displayName }))}>
-                <Play size={16} /> Start Recording Group
+                <Play size={16} /> 开始记录分组
               </button>
               <button className="button secondary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "GENERATE_FROM_CURRENT_GROUP", name: displayName }))}>
-                <FileText size={16} /> Generate from Group
+                <FileText size={16} /> 直接生成分组文档
               </button>
             </>
           ) : (
             <>
               <button className="button full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_NEW_GROUP_RECORDING", name: displayName }))}>
-                <Play size={16} /> Start New Group
+                <Play size={16} /> 创建分组并记录
               </button>
               <button className="button secondary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "GENERATE_FROM_CURRENT_WINDOW", name: displayName }))}>
-                <FileText size={16} /> Generate from Window
+                <FileText size={16} /> 直接生成窗口文档
               </button>
             </>
           )}
         </section>
       )}
 
-      {error ? <div className="card" style={{ color: "#b42318" }}>{error}</div> : null}
+      {error ? <div className="card error-text">{error}</div> : null}
 
       <section className="stack">
         <div className="header-row">
-          <strong>Recent Trails</strong>
+          <strong>最近记录</strong>
           <button className="button secondary" onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("sessions.html") })}>
-            View All
+            查看全部
           </button>
         </div>
         {(state?.recentSessions || []).map((session) => (
@@ -153,7 +157,7 @@ function PopupApp() {
             onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL(`research.html?sessionId=${session.id}`) })}
           >
             <strong>{session.name}</strong>
-            <span className="muted">{session.tabs.length} sources</span>
+            <span className="muted">{session.tabs.length} 个来源</span>
           </button>
         ))}
       </section>

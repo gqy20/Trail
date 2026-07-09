@@ -1,8 +1,8 @@
 import type { TrailSession } from "./types";
 
 export function generateMockMarkdown(session: TrailSession): string {
-  const title = session.name.trim() || session.groupTitle || "Untitled Trail";
-  const sourceName = session.source === "tab_group" ? `Chrome Tab Group: ${session.groupTitle || title}` : "Current Window";
+  const title = session.name.trim() || session.groupTitle || "未命名研究记录";
+  const sourceName = session.source === "tab_group" ? `Chrome 标签页分组：${session.groupTitle || title}` : "当前窗口";
   const sources = session.tabs
     .map((tab, index) => `${index + 1}. [${tab.title || tab.domain}](${tab.url}) - ${tab.domain}`)
     .join("\n");
@@ -15,7 +15,7 @@ export function generateMockMarkdown(session: TrailSession): string {
 
 ## 调研目标
 
-整理本次 ${sourceName} 中收集到的资料，形成一份可继续补充的 Research Document。
+整理本次 ${sourceName} 中收集到的资料，形成一份可继续补充的研究文档。
 
 ## 浏览资料
 
