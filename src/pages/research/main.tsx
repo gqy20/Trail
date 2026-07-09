@@ -37,7 +37,7 @@ function ResearchApp() {
   if (!session) {
     return (
       <main className="page-shell research-shell">
-        <div className="panel">没有找到这条记录。</div>
+        <div className="panel">未找到。</div>
       </main>
     );
   }
@@ -82,7 +82,7 @@ function ResearchApp() {
               <strong>研究文档</strong>
             </div>
             <button className="button secondary" onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("sessions.html") })}>
-              全部记录
+              全部
             </button>
           </div>
           <article className="markdown-preview">

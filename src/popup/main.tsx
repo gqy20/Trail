@@ -59,13 +59,14 @@ function PopupApp() {
           <div>
             <div>Trail</div>
             <div className="muted" style={{ fontSize: 12 }}>
-              记录你的研究路径
+              研究路径
             </div>
           </div>
         </div>
         <button
           className="icon-button"
-          title="打开历史记录"
+          title="全部"
+          aria-label="全部"
           onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("sessions.html") })}
         >
           <Clock size={17} />
@@ -85,14 +86,14 @@ function PopupApp() {
           </div>
           <div className="recording-actions">
             <button className="button primary" disabled={busy} onClick={() => run(() => sendMessage({ type: "STOP_RECORDING" }))}>
-              <Square size={16} /> 停止并生成
+              <Square size={16} /> 生成
             </button>
           </div>
         </section>
       ) : (
         <section className="panel stack">
           <label className="label">
-            记录名称
+            名称
             <input
               className="input"
               value={name}
@@ -104,11 +105,11 @@ function PopupApp() {
           <div className="card stack">
             <div className="header-row">
               <div>
-                <strong>{currentGroup?.hasGroup ? currentGroup.group?.title || "未命名分组" : "从当前标签页创建新分组"}</strong>
+                <strong>{currentGroup?.hasGroup ? currentGroup.group?.title || "未命名分组" : "新建分组"}</strong>
                 <div className="muted">
                   {currentGroup?.hasGroup
                     ? `检测到 ${currentGroup.tabs.length} 个标签页`
-                    : "开始记录时会自动创建并命名 Chrome 分组"}
+                    : "自动创建 Chrome 分组"}
                 </div>
               </div>
               <FolderOpen size={18} />
@@ -126,19 +127,19 @@ function PopupApp() {
           {currentGroup?.hasGroup ? (
             <>
               <button className="button primary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_GROUP_RECORDING", name: displayName }))}>
-                <Play size={16} /> 开始记录分组
+                <Play size={16} /> 开始
               </button>
               <button className="button secondary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "GENERATE_FROM_CURRENT_GROUP", name: displayName }))}>
-                <FileText size={16} /> 直接生成分组文档
+                <FileText size={16} /> 生成
               </button>
             </>
           ) : (
             <>
               <button className="button primary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "START_NEW_GROUP_RECORDING", name: displayName }))}>
-                <Play size={16} /> 创建分组并记录
+                <Play size={16} /> 开始
               </button>
               <button className="button secondary full" disabled={busy} onClick={() => run(() => sendMessage({ type: "GENERATE_FROM_CURRENT_WINDOW", name: displayName }))}>
-                <FileText size={16} /> 直接生成窗口文档
+                <FileText size={16} /> 生成
               </button>
             </>
           )}
@@ -151,7 +152,7 @@ function PopupApp() {
         <div className="header-row">
           <strong>最近记录</strong>
           <button className="button secondary" onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("sessions.html") })}>
-            查看全部
+            全部
           </button>
         </div>
         {(state?.recentSessions || []).map((session) => (

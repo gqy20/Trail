@@ -34,7 +34,7 @@ function SessionsApp() {
             <BrandMark />
             <div>
               <h1 style={{ margin: 0, fontSize: 26 }}>研究记录</h1>
-              <div className="muted">保存在本浏览器中的本地研究记录</div>
+              <div className="muted">本地保存</div>
             </div>
           </div>
         </header>
@@ -64,7 +64,7 @@ function SessionsApp() {
           ))}
         </section>
 
-        {sessions.length === 0 ? <section className="panel">还没有保存的研究记录。</section> : null}
+        {sessions.length === 0 ? <section className="panel">暂无记录。</section> : null}
       </div>
     </main>
   );
