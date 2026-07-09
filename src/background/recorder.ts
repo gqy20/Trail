@@ -1,0 +1,200 @@
+import { collectGroupTabs, collectWindowTabs, getCurrentGroupContext, toResearchTab } from "../shared/chromeTabs";
+import { getDomain } from "../shared/domain";
+import { generateMockMarkdown } from "../shared/markdown";
+import { getActiveSession, getSessions, saveSession, setActiveSession } from "../shared/storage";
+import type { PopupState, TrailEvent, TrailEventType, TrailSession } from "../shared/types";
+
+function createId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${crypto.randomUUID()}`;
+}
+
+function createEvent(type: TrailEventType, tab?: chrome.tabs.Tab): TrailEvent {
+  return {
+    id: createId("event"),
+    type,
+    tabId: tab?.id,
+    title: tab?.title || tab?.pendingUrl || tab?.url,
+    url: tab?.url || tab?.pendingUrl,
+    domain: getDomain(tab?.url || tab?.pendingUrl),
+    timestamp: Date.now()
+  };
+}
+
+function uniqueTabs(tabs: TrailSession["tabs"]): TrailSession["tabs"] {
+  const byUrl = new Map<string, TrailSession["tabs"][number]>();
+
+  for (const tab of tabs) {
+    const key = tab.url || `${tab.id || "unknown"}-${tab.title}`;
+    byUrl.set(key, tab);
+  }
+
+  return [...byUrl.values()];
+}
+
+export async function getPopupState(): Promise<PopupState> {
+  const [activeSession, currentGroup, recentSessions] = await Promise.all([
+    getActiveSession(),
+    getCurrentGroupContext(),
+    getSessions()
+  ]);
+
+  return {
+    activeSession,
+    currentGroup,
+    recentSessions: recentSessions.slice(0, 5)
+  };
+}
+
+export async function startGroupRecording(name?: string): Promise<TrailSession> {
+  const context = await getCurrentGroupContext();
+
+  if (!context.hasGroup || !context.group || !context.windowId) {
+    throw new Error("Current tab is not inside a tab group.");
+  }
+
+  const session: TrailSession = {
+    id: createId("session"),
+    source: "tab_group",
+    name: name?.trim() || context.group.title || "Untitled Group Trail",
+    groupId: context.group.id,
+    groupTitle: context.group.title,
+    groupColor: context.group.color,
+    windowId: context.windowId,
+    status: "recording",
+    startedAt: Date.now(),
+    tabs: context.tabs,
+    events: context.tabs.map((tab) => ({
+      id: createId("event"),
+      type: "created",
+      tabId: tab.id,
+      title: tab.title,
+      url: tab.url,
+      domain: tab.domain,
+      timestamp: tab.capturedAt
+    }))
+  };
+
+  await setActiveSession(session);
+  return session;
+}
+
+export async function startWindowRecording(name?: string): Promise<TrailSession> {
+  const context = await getCurrentGroupContext();
+  const windowId = context.windowId;
+
+  if (!windowId) {
+    throw new Error("No current browser window found.");
+  }
+
+  const tabs = await collectWindowTabs(windowId);
+  const session: TrailSession = {
+    id: createId("session"),
+    source: "window",
+    name: name?.trim() || "Window Trail",
+    windowId,
+    status: "recording",
+    startedAt: Date.now(),
+    tabs,
+    events: tabs.map((tab) => ({
+      id: createId("event"),
+      type: "created",
+      tabId: tab.id,
+      title: tab.title,
+      url: tab.url,
+      domain: tab.domain,
+      timestamp: tab.capturedAt
+    }))
+  };
+
+  await setActiveSession(session);
+  return session;
+}
+
+export async function stopRecording(): Promise<TrailSession | undefined> {
+  const active = await getActiveSession();
+
+  if (!active) return undefined;
+
+  const freshTabs =
+    active.source === "tab_group" && active.groupId !== undefined
+      ? await collectGroupTabs(active.windowId, active.groupId)
+      : await collectWindowTabs(active.windowId);
+
+  const completed: TrailSession = {
+    ...active,
+    status: "completed",
+    endedAt: Date.now(),
+    tabs: uniqueTabs([...active.tabs, ...freshTabs])
+  };
+
+  completed.markdown = generateMockMarkdown(completed);
+  await saveSession(completed);
+  await setActiveSession(undefined);
+  return completed;
+}
+
+export async function generateFromCurrentGroup(name?: string): Promise<TrailSession> {
+  const session = await startGroupRecording(name);
+  return finalizeSnapshot(session);
+}
+
+export async function generateFromCurrentWindow(name?: string): Promise<TrailSession> {
+  const session = await startWindowRecording(name);
+  return finalizeSnapshot(session);
+}
+
+async function finalizeSnapshot(session: TrailSession): Promise<TrailSession> {
+  const completed: TrailSession = {
+    ...session,
+    status: "completed",
+    endedAt: Date.now()
+  };
+  completed.markdown = generateMockMarkdown(completed);
+  await saveSession(completed);
+  await setActiveSession(undefined);
+  return completed;
+}
+
+export async function recordTabEvent(type: TrailEventType, tabId: number, tab?: chrome.tabs.Tab): Promise<void> {
+  const active = await getActiveSession();
+  if (!active) return;
+
+  const currentTab = tab || (await chrome.tabs.get(tabId).catch(() => undefined));
+  if (!currentTab) return;
+
+  const belongsToSession =
+    active.source === "window"
+      ? currentTab.windowId === active.windowId
+      : currentTab.windowId === active.windowId && currentTab.groupId === active.groupId;
+
+  if (!belongsToSession) return;
+
+  const next: TrailSession = {
+    ...active,
+    tabs: uniqueTabs([...active.tabs, toResearchTab(currentTab)]),
+    events: [...active.events, createEvent(type, currentTab)].slice(-200)
+  };
+
+  await setActiveSession(next);
+}
+
+export async function recordGroupUpdate(group: chrome.tabGroups.TabGroup): Promise<void> {
+  const active = await getActiveSession();
+  if (!active || active.source !== "tab_group" || active.groupId !== group.id) return;
+
+  await setActiveSession({
+    ...active,
+    groupTitle: group.title,
+    groupColor: group.color,
+    name: active.name || group.title || "Untitled Group Trail",
+    events: [
+      ...active.events,
+      {
+        id: createId("event"),
+        type: "group_updated" as const,
+        title: group.title || "Group updated",
+        timestamp: Date.now()
+      }
+    ].slice(-200)
+  });
+}
