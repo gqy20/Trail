@@ -27,8 +27,8 @@ function SessionsApp() {
   }
 
   return (
-    <main className="page-shell">
-      <div className="page-inner stack">
+    <main className="page-shell sessions-shell">
+      <div className="sessions-workspace stack">
         <header className="header-row">
           <div className="brand">
             <BrandMark />
@@ -42,12 +42,14 @@ function SessionsApp() {
         <section className="sessions-grid">
           {sessions.map((session) => (
             <article className="card session-card" key={session.id}>
-              <span className="badge">{session.source === "tab_group" ? session.groupTitle || "标签页分组" : "浏览器窗口"}</span>
-              <strong>{session.name}</strong>
-              <span className="muted">
-                {formatDateTime(session.startedAt)} · {session.tabs.length} 个来源
-              </span>
-              <div className="toolbar">
+              <div className="session-main">
+                <span className="badge">{session.source === "tab_group" ? session.groupTitle || "标签页分组" : "浏览器窗口"}</span>
+                <strong>{session.name}</strong>
+                <span className="muted">
+                  {formatDateTime(session.startedAt)} · {session.tabs.length} 个来源
+                </span>
+              </div>
+              <div className="session-actions">
                 <button
                   className="button"
                   onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL(`research.html?sessionId=${session.id}`) })}
