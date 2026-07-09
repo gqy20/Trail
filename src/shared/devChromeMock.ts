@@ -67,6 +67,7 @@ const sampleSession: TrailSession = {
   status: "completed",
   startedAt: now - 1000 * 60 * 28,
   endedAt: now - 1000 * 60 * 2,
+  updatedAt: now - 1000 * 60 * 2,
   tabs: sampleTabs.map((tab) => ({
     id: tab.id,
     title: tab.title || "",

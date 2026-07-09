@@ -160,6 +160,7 @@ export async function stopRecording(): Promise<TrailSession | undefined> {
   };
 
   completed.markdown = generateMockMarkdown(completed);
+  completed.updatedAt = completed.endedAt;
   await saveSession(completed);
   await setActiveSession(undefined);
   return completed;
@@ -182,6 +183,7 @@ async function finalizeSnapshot(session: TrailSession): Promise<TrailSession> {
     endedAt: Date.now()
   };
   completed.markdown = generateMockMarkdown(completed);
+  completed.updatedAt = completed.endedAt;
   await saveSession(completed);
   await setActiveSession(undefined);
   return completed;

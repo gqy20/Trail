@@ -36,6 +36,7 @@ export type TrailSession = {
   status: TrailStatus;
   startedAt: number;
   endedAt?: number;
+  updatedAt?: number;
   tabs: ResearchTab[];
   events: TrailEvent[];
   markdown?: string;
