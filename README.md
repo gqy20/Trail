@@ -1,28 +1,28 @@
 # Trail
 
-Capture a Chrome tab group as a research trail.
+把 Chrome 标签页分组记录成一次可保存的研究轨迹。
 
-## MVP scope
+## MVP 范围
 
-- Detect the current Chrome Tab Group from the active tab.
-- Start and stop semi-automatic recording for that group.
-- Fall back to the current window when the active tab is not grouped.
-- Save completed sessions in `chrome.storage.local`.
-- Generate a mock Research Markdown document without AI.
-- Copy or download the generated Markdown.
+- 从当前激活标签页检测 Chrome Tab Group。
+- 支持对当前分组开始和停止半自动记录。
+- 当前标签页不在分组内时，回退到记录当前窗口。
+- 使用 `chrome.storage.local` 保存已完成的 Sessions。
+- 暂不接入 AI，先生成 mock Research Markdown。
+- 支持复制或下载生成的 Markdown。
 
-## Development
+## 本地开发
 
 ```bash
 npm install
 npm run build
 ```
 
-Load the generated `dist/` directory as an unpacked extension in Chrome.
+构建完成后，在 Chrome 扩展管理页打开「开发者模式」，选择「加载已解压的扩展程序」，加载生成的 `dist/` 目录。
 
-## Commit style
+## 提交规范
 
-Use conventional commits:
+使用 Conventional Commits：
 
 ```text
 feat(scope): message
