@@ -7,7 +7,15 @@ import {
   toResearchTab
 } from "../shared/chromeTabs";
 import { getDomain } from "../shared/domain";
-import { isDomainExcluded, MAX_CONTEXT_TEXT_LENGTH, MAX_COPIED_TEXT_LENGTH, truncateText } from "../shared/interactions";
+import {
+  classifyCopiedText,
+  isDomainExcluded,
+  isSameCopiedText,
+  MAX_CONTEXT_TEXT_LENGTH,
+  MAX_COPIED_TEXT_LENGTH,
+  redactSensitiveText,
+  truncateText
+} from "../shared/interactions";
 import { generateMockMarkdown } from "../shared/markdown";
 import { getActiveSession, getInteractionSettings, getSessions, saveSession, setActiveSession } from "../shared/storage";
 import type { CopyInteractionPayload, PopupState, TrailEvent, TrailEventType, TrailSession } from "../shared/types";
@@ -257,8 +265,50 @@ export async function recordCopyInteraction(
 
   if (!belongsToSession) return { recorded: false, reason: "outside_session" };
 
-  const selectedText = truncateText(payload.selectedText, MAX_COPIED_TEXT_LENGTH);
+  const rawSelectedText = truncateText(payload.selectedText, MAX_COPIED_TEXT_LENGTH);
+  const redaction = settings.redactSensitive ? redactSensitiveText(rawSelectedText) : { text: rawSelectedText, redacted: false };
+  const selectedText = redaction.text;
   if (!selectedText) return { recorded: false, reason: "empty_text" };
+
+  const existingCopyEvent = settings.mergeDuplicates
+    ? active.events.find(
+        (event) =>
+          (event.type === "text_copied" || event.type === "text_selected") &&
+          event.url === payload.pageUrl &&
+          isSameCopiedText(event.selectedText, selectedText)
+      )
+    : undefined;
+
+  if (existingCopyEvent) {
+    const mergedContext = payload.surroundingText
+      ? settings.redactSensitive
+        ? redactSensitiveText(truncateText(payload.surroundingText, MAX_CONTEXT_TEXT_LENGTH)).text
+        : truncateText(payload.surroundingText, MAX_CONTEXT_TEXT_LENGTH)
+      : undefined;
+    const nextEvents = active.events.map((event) =>
+      event.id === existingCopyEvent.id
+        ? {
+            ...event,
+            type: "text_copied" as const,
+            timestamp: payload.timestamp || Date.now(),
+            duplicateCount: event.type === "text_selected" ? event.duplicateCount || 1 : (event.duplicateCount || 1) + 1,
+            firstCopiedAt: event.firstCopiedAt || event.timestamp,
+            privacyLevel: redaction.redacted ? "redacted" : event.privacyLevel || "safe",
+            copyKind: event.copyKind || classifyCopiedText(selectedText, payload.elementTag),
+            sectionTitle: event.sectionTitle || payload.sectionTitle,
+            surroundingText: event.surroundingText || mergedContext
+          }
+        : event
+    );
+
+    await setActiveSession({
+      ...active,
+      events: nextEvents,
+      updatedAt: Date.now()
+    });
+
+    return { recorded: true, eventId: existingCopyEvent.id, reason: "merged_duplicate" };
+  }
 
   const event: TrailEvent = {
     id: createId("event"),
@@ -270,12 +320,94 @@ export async function recordCopyInteraction(
     timestamp: payload.timestamp || Date.now(),
     selectedText,
     textLength: payload.selectedText.length,
-    privacyLevel: "safe"
+    privacyLevel: redaction.redacted ? "redacted" : "safe",
+    copyKind: classifyCopiedText(selectedText, payload.elementTag),
+    duplicateCount: 1
   };
 
   if (settings.captureContext) {
     event.surroundingText = payload.surroundingText
-      ? truncateText(payload.surroundingText, MAX_CONTEXT_TEXT_LENGTH)
+      ? settings.redactSensitive
+        ? redactSensitiveText(truncateText(payload.surroundingText, MAX_CONTEXT_TEXT_LENGTH)).text
+        : truncateText(payload.surroundingText, MAX_CONTEXT_TEXT_LENGTH)
+      : undefined;
+    event.sectionTitle = payload.sectionTitle ? truncateText(payload.sectionTitle, 120) : undefined;
+    event.elementTag = payload.elementTag;
+    event.elementRole = payload.elementRole;
+    event.cssSelector = payload.cssSelector;
+    event.viewportX = payload.viewportX;
+    event.viewportY = payload.viewportY;
+    event.pageX = payload.pageX;
+    event.pageY = payload.pageY;
+  }
+
+  const nextTabs = senderTab ? uniqueTabs([...active.tabs, toResearchTab(senderTab)]) : active.tabs;
+  await setActiveSession({
+    ...active,
+    tabs: nextTabs,
+    events: [...active.events, event].slice(-300),
+    updatedAt: Date.now()
+  });
+
+  return { recorded: true, eventId: event.id };
+}
+
+export async function recordSelectionInteraction(
+  payload: CopyInteractionPayload,
+  senderTab?: chrome.tabs.Tab
+): Promise<{ recorded: boolean; eventId?: string; reason?: string }> {
+  const [active, settings] = await Promise.all([getActiveSession(), getInteractionSettings()]);
+  if (!active) return { recorded: false, reason: "no_active_session" };
+  if (!settings.captureCopy) return { recorded: false, reason: "capture_disabled" };
+  if (!settings.captureSelection) return { recorded: false, reason: "selection_disabled" };
+  if (isDomainExcluded(payload.domain, settings.excludedDomains)) {
+    return { recorded: false, reason: "domain_excluded" };
+  }
+
+  const tabId = senderTab?.id;
+  const windowId = senderTab?.windowId;
+  const groupId = senderTab?.groupId;
+  const belongsToSession =
+    active.source === "window"
+      ? windowId === active.windowId
+      : windowId === active.windowId && groupId === active.groupId;
+
+  if (!belongsToSession) return { recorded: false, reason: "outside_session" };
+
+  const rawSelectedText = truncateText(payload.selectedText, MAX_COPIED_TEXT_LENGTH);
+  const redaction = settings.redactSensitive ? redactSensitiveText(rawSelectedText) : { text: rawSelectedText, redacted: false };
+  const selectedText = redaction.text;
+  if (!selectedText) return { recorded: false, reason: "empty_text" };
+
+  const existingEvent = active.events.find(
+    (event) =>
+      (event.type === "text_selected" || event.type === "text_copied") &&
+      event.url === payload.pageUrl &&
+      isSameCopiedText(event.selectedText, selectedText)
+  );
+
+  if (existingEvent) return { recorded: true, eventId: existingEvent.id, reason: "already_recorded" };
+
+  const event: TrailEvent = {
+    id: createId("event"),
+    type: "text_selected",
+    tabId,
+    title: payload.pageTitle,
+    url: payload.pageUrl,
+    domain: payload.domain || getDomain(payload.pageUrl),
+    timestamp: payload.timestamp || Date.now(),
+    selectedText,
+    textLength: payload.selectedText.length,
+    privacyLevel: redaction.redacted ? "redacted" : "safe",
+    copyKind: classifyCopiedText(selectedText, payload.elementTag),
+    duplicateCount: 1
+  };
+
+  if (settings.captureContext) {
+    event.surroundingText = payload.surroundingText
+      ? settings.redactSensitive
+        ? redactSensitiveText(truncateText(payload.surroundingText, MAX_CONTEXT_TEXT_LENGTH)).text
+        : truncateText(payload.surroundingText, MAX_CONTEXT_TEXT_LENGTH)
       : undefined;
     event.sectionTitle = payload.sectionTitle ? truncateText(payload.sectionTitle, 120) : undefined;
     event.elementTag = payload.elementTag;

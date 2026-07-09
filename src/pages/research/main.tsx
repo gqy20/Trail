@@ -6,7 +6,7 @@ import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { getSession, updateSavedSession } from "../../shared/storage";
 import { formatDateTime } from "../../shared/time";
-import type { TrailEvent, TrailSession } from "../../shared/types";
+import type { TrailCopyKind, TrailEvent, TrailSession } from "../../shared/types";
 import "../../styles.css";
 
 installDevChromeMock();
@@ -25,8 +25,11 @@ function ResearchApp() {
     });
   }, []);
 
-  const copiedEvents = useMemo(
-    () => session?.events.filter((event) => event.type === "text_copied" && event.selectedText) || [],
+  const attentionEvents = useMemo(
+    () =>
+      session?.events.filter(
+        (event) => (event.type === "text_copied" || event.type === "text_selected") && event.selectedText
+      ) || [],
     [session]
   );
 
@@ -110,7 +113,7 @@ function ResearchApp() {
             </div>
           </section>
 
-          <CopiedPanel events={copiedEvents} onRemove={(eventId) => void removeCopiedEvent(eventId)} />
+          <CopiedPanel events={attentionEvents} onRemove={(eventId) => void removeCopiedEvent(eventId)} />
 
           <section className="panel stack">
             <strong>来源</strong>
@@ -178,21 +181,39 @@ function ResearchApp() {
   );
 }
 
+type CopyFilter = "all" | TrailCopyKind;
+
 function CopiedPanel({ events, onRemove }: { events: TrailEvent[]; onRemove: (eventId: string) => void }) {
+  const [filter, setFilter] = useState<CopyFilter>("all");
+  const visibleEvents = filter === "all" ? events : events.filter((event) => event.copyKind === filter);
+
   return (
     <section className="panel stack">
       <div className="header-row">
         <div className="setting-title">
           <Clipboard size={17} />
-          <strong>复制片段</strong>
+          <strong>关注片段</strong>
         </div>
         <span className="badge">{events.length}</span>
       </div>
+      {events.length > 0 ? (
+        <div className="copy-filter" aria-label="片段筛选">
+          {(["all", "code", "command", "metric", "quote"] as CopyFilter[]).map((item) => (
+            <button
+              className={filter === item ? "copy-filter-button active" : "copy-filter-button"}
+              key={item}
+              onClick={() => setFilter(item)}
+            >
+              {copyFilterLabel(item)}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {events.length === 0 ? (
-        <p className="setting-copy">录制期间复制网页文本后，关键片段会出现在这里。</p>
+        <p className="setting-copy">录制期间稳定选中或复制网页文本后，关键片段会出现在这里。</p>
       ) : (
         <div className="copy-event-list">
-          {events.map((event) => (
+          {visibleEvents.map((event) => (
             <article className="copy-event" key={event.id}>
               <div className="copy-event-meta">
                 <span>{event.sectionTitle || event.domain || "网页片段"}</span>
@@ -200,16 +221,44 @@ function CopiedPanel({ events, onRemove }: { events: TrailEvent[]; onRemove: (ev
                   <Trash2 size={14} />
                 </button>
               </div>
+              <div className="copy-event-tags">
+                <span className="mini-badge">{event.type === "text_copied" ? "已复制" : "仅选中"}</span>
+                <span className="mini-badge">{copyKindLabel(event.copyKind)}</span>
+                {(event.duplicateCount || 1) > 1 ? <span className="mini-badge">重复 {event.duplicateCount}</span> : null}
+                {event.privacyLevel === "redacted" ? <span className="mini-badge">已脱敏</span> : null}
+              </div>
               <p>{event.selectedText}</p>
               <a href={event.url} target="_blank" rel="noreferrer">
                 {event.domain || "打开来源"}
               </a>
             </article>
           ))}
+          {visibleEvents.length === 0 ? <p className="setting-copy">这个筛选下还没有片段。</p> : null}
         </div>
       )}
     </section>
   );
+}
+
+function copyKindLabel(kind: TrailCopyKind | undefined): string {
+  switch (kind) {
+    case "code":
+      return "代码";
+    case "command":
+      return "命令";
+    case "metric":
+      return "指标";
+    case "link":
+      return "链接";
+    case "quote":
+      return "引用";
+    default:
+      return "文本";
+  }
+}
+
+function copyFilterLabel(filter: CopyFilter): string {
+  return filter === "all" ? "全部" : copyKindLabel(filter);
 }
 
 createRoot(document.getElementById("root")!).render(

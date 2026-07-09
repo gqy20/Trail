@@ -8,9 +8,12 @@ export type TrailEventType =
   | "activated"
   | "removed"
   | "group_updated"
+  | "text_selected"
   | "text_copied";
 
 export type TrailPrivacyLevel = "safe" | "sensitive" | "redacted";
+
+export type TrailCopyKind = "text" | "quote" | "code" | "command" | "metric" | "link";
 
 export type ResearchTab = {
   id?: number;
@@ -43,6 +46,9 @@ export type TrailEvent = {
   pageY?: number;
   textLength?: number;
   privacyLevel?: TrailPrivacyLevel;
+  copyKind?: TrailCopyKind;
+  duplicateCount?: number;
+  firstCopiedAt?: number;
 };
 
 export type TrailSession = {
@@ -89,8 +95,11 @@ export type CopyInteractionPayload = {
 
 export type TrailInteractionSettings = {
   captureCopy: boolean;
+  captureSelection: boolean;
   captureContext: boolean;
   showToast: boolean;
+  mergeDuplicates: boolean;
+  redactSensitive: boolean;
   excludedDomains: string[];
 };
 
@@ -105,6 +114,7 @@ export type RuntimeMessage =
   | { type: "GENERATE_FROM_CURRENT_GROUP"; name?: string }
   | { type: "GENERATE_FROM_CURRENT_WINDOW"; name?: string }
   | { type: "RECORD_INTERACTION"; payload: CopyInteractionPayload }
+  | { type: "RECORD_SELECTION"; payload: CopyInteractionPayload }
   | { type: "DELETE_EVENT"; eventId: string }
   | { type: "OPEN_SESSION"; sessionId: string }
   | { type: "DELETE_SESSION"; sessionId: string };

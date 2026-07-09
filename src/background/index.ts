@@ -5,6 +5,7 @@ import {
   getPopupState,
   recordCopyInteraction,
   recordGroupUpdate,
+  recordSelectionInteraction,
   recordTabEvent,
   startGroupRecording,
   startNewGroupRecording,
@@ -47,6 +48,8 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return generateFromCurrentWindow(message.name);
     case "RECORD_INTERACTION":
       return recordCopyInteraction(message.payload, sender.tab);
+    case "RECORD_SELECTION":
+      return recordSelectionInteraction(message.payload, sender.tab);
     case "DELETE_EVENT":
       return deleteActiveEvent(message.eventId);
     case "OPEN_SESSION":

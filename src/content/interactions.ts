@@ -4,40 +4,26 @@ const TOAST_ID = "trail-copy-toast";
 const MAX_COPIED_TEXT_LENGTH = 1200;
 const MAX_CONTEXT_TEXT_LENGTH = 420;
 const MIN_COPIED_TEXT_LENGTH = 8;
+const SELECTION_STABLE_DELAY = 800;
 let toastTimer: number | undefined;
+let selectionTimer: number | undefined;
+let lastSelectionKey = "";
 
 document.addEventListener("copy", () => {
+  window.clearTimeout(selectionTimer);
   void handleCopy();
 });
 
+document.addEventListener("selectionchange", () => {
+  window.clearTimeout(selectionTimer);
+  selectionTimer = window.setTimeout(() => {
+    void handleStableSelection();
+  }, SELECTION_STABLE_DELAY);
+});
+
 async function handleCopy() {
-  const selection = window.getSelection();
-  const rawText = selection?.toString() || "";
-  const selectedText = truncateText(rawText, MAX_COPIED_TEXT_LENGTH);
-
-  if (!selection || !selectedText || selectedText.length < MIN_COPIED_TEXT_LENGTH) return;
-  if (isSelectionInsideSensitiveSurface(selection)) return;
-
-  const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined;
-  const element = getElementFromRange(range);
-  const rect = range?.getBoundingClientRect();
-
-  const payload: CopyInteractionPayload = {
-    selectedText,
-    surroundingText: getSurroundingText(element, selectedText),
-    sectionTitle: getSectionTitle(element),
-    elementTag: element?.tagName.toLowerCase(),
-    elementRole: element?.getAttribute("role") || undefined,
-    cssSelector: element ? getCssSelector(element) : undefined,
-    pageUrl: location.href,
-    pageTitle: document.title,
-    domain: location.hostname,
-    viewportX: rect ? Math.round(rect.left) : undefined,
-    viewportY: rect ? Math.round(rect.top) : undefined,
-    pageX: rect ? Math.round(rect.left + window.scrollX) : undefined,
-    pageY: rect ? Math.round(rect.top + window.scrollY) : undefined,
-    timestamp: Date.now()
-  };
+  const payload = getSelectionPayload();
+  if (!payload) return;
 
   const response = await chrome.runtime
     .sendMessage<RuntimeMessage, { recorded: boolean; eventId?: string; reason?: string }>({
@@ -55,6 +41,52 @@ async function handleCopy() {
   if (settings?.showToast !== false) {
     showToast(response.eventId);
   }
+}
+
+async function handleStableSelection() {
+  const payload = getSelectionPayload();
+  if (!payload) return;
+
+  const selectionKey = `${payload.pageUrl}::${payload.selectedText}`;
+  if (selectionKey === lastSelectionKey) return;
+  lastSelectionKey = selectionKey;
+
+  await chrome.runtime
+    .sendMessage<RuntimeMessage, { recorded: boolean; eventId?: string; reason?: string }>({
+      type: "RECORD_SELECTION",
+      payload
+    })
+    .catch(() => undefined);
+}
+
+function getSelectionPayload(): CopyInteractionPayload | undefined {
+  const selection = window.getSelection();
+  const rawText = selection?.toString() || "";
+  const selectedText = truncateText(rawText, MAX_COPIED_TEXT_LENGTH);
+
+  if (!selection || !selectedText || selectedText.length < MIN_COPIED_TEXT_LENGTH) return undefined;
+  if (isSelectionInsideSensitiveSurface(selection)) return undefined;
+
+  const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined;
+  const element = getElementFromRange(range);
+  const rect = range?.getBoundingClientRect();
+
+  return {
+    selectedText,
+    surroundingText: getSurroundingText(element, selectedText),
+    sectionTitle: getSectionTitle(element),
+    elementTag: element?.tagName.toLowerCase(),
+    elementRole: element?.getAttribute("role") || undefined,
+    cssSelector: element ? getCssSelector(element) : undefined,
+    pageUrl: location.href,
+    pageTitle: document.title,
+    domain: location.hostname,
+    viewportX: rect ? Math.round(rect.left) : undefined,
+    viewportY: rect ? Math.round(rect.top) : undefined,
+    pageX: rect ? Math.round(rect.left + window.scrollX) : undefined,
+    pageY: rect ? Math.round(rect.top + window.scrollY) : undefined,
+    timestamp: Date.now()
+  };
 }
 
 function isSelectionInsideSensitiveSurface(selection: Selection): boolean {

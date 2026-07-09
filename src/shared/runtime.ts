@@ -11,6 +11,7 @@ type RuntimeResponseMap = {
   GENERATE_FROM_CURRENT_GROUP: TrailSession;
   GENERATE_FROM_CURRENT_WINDOW: TrailSession;
   RECORD_INTERACTION: { recorded: boolean; eventId?: string; reason?: string };
+  RECORD_SELECTION: { recorded: boolean; eventId?: string; reason?: string };
   DELETE_EVENT: { deleted: boolean };
   OPEN_SESSION: undefined;
   DELETE_SESSION: undefined;

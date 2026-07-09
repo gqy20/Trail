@@ -58,6 +58,7 @@ function PopupApp() {
   const displayName = name.trim() || defaultName;
   const currentDomain = normalizeDomain(currentGroup?.activeTab?.url ? new URL(currentGroup.activeTab.url).hostname : "");
   const copiedCount = activeSession?.events.filter((event) => event.type === "text_copied").length || 0;
+  const selectedCount = activeSession?.events.filter((event) => event.type === "text_selected").length || 0;
 
   return (
     <main className="popup-shell stack">
@@ -85,7 +86,7 @@ function PopupApp() {
             <div className="recording-title">
               <strong>{activeSession.name}</strong>
               <div className="muted">
-                {formatDuration(activeSession.startedAt)} · {activeSession.tabs.length} 个来源 · {copiedCount} 个复制片段
+                {formatDuration(activeSession.startedAt)} · {activeSession.tabs.length} 个来源 · {copiedCount} 个复制 · {selectedCount} 个选中
               </div>
             </div>
             <span className="badge recording-badge">记录中</span>
@@ -226,11 +227,32 @@ function InteractionPanel({
           onChange={(captureContext) => onChange({ captureContext })}
         />
         <ToggleRow
+          label="记录稳定选中"
+          description="选中文本停留片刻后，作为低权重关注片段保存。"
+          checked={settings.captureSelection}
+          disabled={!settings.captureCopy}
+          onChange={(captureSelection) => onChange({ captureSelection })}
+        />
+        <ToggleRow
           label="复制后轻提示"
           description="显示“已记录到 Trail”，并提供撤销。"
           checked={settings.showToast}
           disabled={!settings.captureCopy}
           onChange={(showToast) => onChange({ showToast })}
+        />
+        <ToggleRow
+          label="合并重复片段"
+          description="同一页面重复复制同一段内容时，只保留一条记录。"
+          checked={settings.mergeDuplicates}
+          disabled={!settings.captureCopy}
+          onChange={(mergeDuplicates) => onChange({ mergeDuplicates })}
+        />
+        <ToggleRow
+          label="自动脱敏"
+          description="保存前隐藏常见邮箱、token 和密钥形态。"
+          checked={settings.redactSensitive}
+          disabled={!settings.captureCopy}
+          onChange={(redactSensitive) => onChange({ redactSensitive })}
         />
       </div>
       {currentDomain ? (

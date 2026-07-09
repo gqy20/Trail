@@ -108,7 +108,44 @@ const sampleSession: TrailSession = {
       sectionTitle: "Chrome extensions",
       elementTag: "p",
       cssSelector: "main > article > p",
-      privacyLevel: "safe"
+      privacyLevel: "safe",
+      copyKind: "quote",
+      duplicateCount: 2,
+      firstCopiedAt: now - 1000 * 60 * 12
+    },
+    {
+      id: "event-4",
+      type: "text_copied",
+      tabId: 1,
+      title: "Playwright Browser Extension 文档",
+      url: "https://playwright.dev/docs/chrome-extensions",
+      domain: "playwright.dev",
+      timestamp: now - 1000 * 60 * 6,
+      selectedText: "npm install @playwright/test",
+      surroundingText: "Install Playwright Test before loading and validating the extension.",
+      sectionTitle: "Installation",
+      elementTag: "code",
+      cssSelector: "main > article > pre > code",
+      privacyLevel: "safe",
+      copyKind: "command",
+      duplicateCount: 1
+    },
+    {
+      id: "event-5",
+      type: "text_selected",
+      tabId: 2,
+      title: "Chrome Extensions Manifest V3",
+      url: "https://developer.chrome.com/docs/extensions/mv3/intro",
+      domain: "developer.chrome.com",
+      timestamp: now - 1000 * 60 * 4,
+      selectedText: "Manifest V3 uses a service worker as the extension's central event handler.",
+      surroundingText: "Manifest V3 uses a service worker as the extension's central event handler. Service workers are started when needed and unloaded when idle.",
+      sectionTitle: "Extension service worker",
+      elementTag: "p",
+      cssSelector: "main > article > p",
+      privacyLevel: "safe",
+      copyKind: "quote",
+      duplicateCount: 1
     }
   ],
   markdown: `# Playwright 插件开发调研
@@ -123,13 +160,31 @@ const sampleSession: TrailSession = {
 2. [Chrome Extensions Manifest V3](https://developer.chrome.com/docs/extensions/mv3/intro) - developer.chrome.com
 3. [GitHub - microsoft/playwright](https://github.com/microsoft/playwright) - github.com
 
-## 用户复制过的关键片段
+## 用户关注过的关键片段
 
 ### 片段 1
 
 来源：[playwright.dev](https://playwright.dev/docs/chrome-extensions)，位置：Chrome extensions
 
+状态：已复制 · 类型：引用 · 重复复制：2 次
+
 > Extensions can be loaded in persistent contexts by passing a path to the extension directory.
+
+### 片段 2
+
+来源：[playwright.dev](https://playwright.dev/docs/chrome-extensions)，位置：Installation
+
+状态：已复制 · 类型：命令
+
+> npm install @playwright/test
+
+### 片段 3
+
+来源：[developer.chrome.com](https://developer.chrome.com/docs/extensions/mv3/intro)，位置：Extension service worker
+
+状态：仅选中 · 类型：引用
+
+> Manifest V3 uses a service worker as the extension's central event handler.
 
 ## 综合结论
 

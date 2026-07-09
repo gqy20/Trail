@@ -841,6 +841,31 @@ button.session-card:hover {
   overflow: auto;
 }
 
+.copy-filter {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.copy-filter-button {
+  min-height: 28px;
+  border: 1px solid var(--trail-border-soft);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--trail-muted);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.copy-filter-button.active {
+  border-color: rgba(11, 136, 124, 0.36);
+  background: var(--trail-accent-soft);
+  color: var(--trail-accent);
+}
+
 .copy-event {
   display: grid;
   gap: 8px;
@@ -875,6 +900,24 @@ button.session-card:hover {
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
+}
+
+.copy-event-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mini-badge {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--trail-surface-muted);
+  color: #566273;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 850;
 }
 
 .copy-event a {
