@@ -9,11 +9,16 @@ export type TrailEventType =
   | "removed"
   | "group_updated"
   | "text_selected"
-  | "text_copied";
+  | "text_copied"
+  | "link_clicked";
 
 export type TrailPrivacyLevel = "safe" | "sensitive" | "redacted";
 
 export type TrailCopyKind = "text" | "quote" | "code" | "command" | "metric" | "link";
+
+export type TrailLinkKind = "external" | "search_result" | "doc_toc" | "github" | "download" | "reference";
+
+export type TrailSourceLevel = "core" | "reference" | "passing";
 
 export type ResearchTab = {
   id?: number;
@@ -49,6 +54,25 @@ export type TrailEvent = {
   copyKind?: TrailCopyKind;
   duplicateCount?: number;
   firstCopiedAt?: number;
+  targetUrl?: string;
+  targetText?: string;
+  targetDomain?: string;
+  linkKind?: TrailLinkKind;
+};
+
+export type TrailPageStat = {
+  url: string;
+  domain: string;
+  title: string;
+  firstSeenAt: number;
+  lastSeenAt: number;
+  activeMs: number;
+  visitCount: number;
+  selectedCount: number;
+  copiedCount: number;
+  outboundClickCount: number;
+  score: number;
+  level: TrailSourceLevel;
 };
 
 export type TrailSession = {
@@ -65,6 +89,7 @@ export type TrailSession = {
   updatedAt?: number;
   tabs: ResearchTab[];
   events: TrailEvent[];
+  pageStats?: TrailPageStat[];
   markdown?: string;
 };
 
@@ -93,9 +118,25 @@ export type CopyInteractionPayload = {
   timestamp: number;
 };
 
+export type LinkClickPayload = {
+  pageUrl: string;
+  pageTitle: string;
+  domain: string;
+  targetUrl: string;
+  targetText?: string;
+  targetDomain: string;
+  sectionTitle?: string;
+  elementTag?: string;
+  elementRole?: string;
+  cssSelector?: string;
+  linkKind: TrailLinkKind;
+  timestamp: number;
+};
+
 export type TrailInteractionSettings = {
   captureCopy: boolean;
   captureSelection: boolean;
+  captureClicks: boolean;
   captureContext: boolean;
   showToast: boolean;
   mergeDuplicates: boolean;
@@ -115,6 +156,7 @@ export type RuntimeMessage =
   | { type: "GENERATE_FROM_CURRENT_WINDOW"; name?: string }
   | { type: "RECORD_INTERACTION"; payload: CopyInteractionPayload }
   | { type: "RECORD_SELECTION"; payload: CopyInteractionPayload }
+  | { type: "RECORD_LINK_CLICK"; payload: LinkClickPayload }
   | { type: "DELETE_EVENT"; eventId: string }
   | { type: "OPEN_SESSION"; sessionId: string }
   | { type: "DELETE_SESSION"; sessionId: string };

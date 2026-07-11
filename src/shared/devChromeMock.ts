@@ -146,6 +146,66 @@ const sampleSession: TrailSession = {
       privacyLevel: "safe",
       copyKind: "quote",
       duplicateCount: 1
+    },
+    {
+      id: "event-6",
+      type: "link_clicked",
+      tabId: 1,
+      title: "Playwright Browser Extension 文档",
+      url: "https://playwright.dev/docs/chrome-extensions",
+      domain: "playwright.dev",
+      timestamp: now - 1000 * 60 * 3,
+      targetUrl: "https://github.com/microsoft/playwright/issues",
+      targetText: "microsoft/playwright issues",
+      targetDomain: "github.com",
+      sectionTitle: "Troubleshooting",
+      elementTag: "a",
+      cssSelector: "main > article > a",
+      linkKind: "github"
+    }
+  ],
+  pageStats: [
+    {
+      url: "https://playwright.dev/docs/chrome-extensions",
+      domain: "playwright.dev",
+      title: "Playwright Browser Extension 文档",
+      firstSeenAt: now - 1000 * 60 * 28,
+      lastSeenAt: now - 1000 * 60 * 3,
+      activeMs: 1000 * 60 * 12,
+      visitCount: 2,
+      selectedCount: 0,
+      copiedCount: 2,
+      outboundClickCount: 1,
+      score: 28,
+      level: "core"
+    },
+    {
+      url: "https://developer.chrome.com/docs/extensions/mv3/intro",
+      domain: "developer.chrome.com",
+      title: "Chrome Extensions Manifest V3",
+      firstSeenAt: now - 1000 * 60 * 18,
+      lastSeenAt: now - 1000 * 60 * 4,
+      activeMs: 1000 * 60 * 6,
+      visitCount: 1,
+      selectedCount: 1,
+      copiedCount: 0,
+      outboundClickCount: 0,
+      score: 9,
+      level: "reference"
+    },
+    {
+      url: "https://github.com/microsoft/playwright",
+      domain: "github.com",
+      title: "GitHub - microsoft/playwright",
+      firstSeenAt: now - 1000 * 60 * 12,
+      lastSeenAt: now - 1000 * 60 * 12,
+      activeMs: 1000 * 30,
+      visitCount: 1,
+      selectedCount: 0,
+      copiedCount: 0,
+      outboundClickCount: 0,
+      score: 0,
+      level: "passing"
     }
   ],
   markdown: `# Playwright 插件开发调研
@@ -159,6 +219,24 @@ const sampleSession: TrailSession = {
 1. [Playwright Browser Extension 文档](https://playwright.dev/docs/chrome-extensions) - playwright.dev
 2. [Chrome Extensions Manifest V3](https://developer.chrome.com/docs/extensions/mv3/intro) - developer.chrome.com
 3. [GitHub - microsoft/playwright](https://github.com/microsoft/playwright) - github.com
+
+## 来源分级
+
+### 核心来源
+
+- [Playwright Browser Extension 文档](https://playwright.dev/docs/chrome-extensions) - playwright.dev，评分 28，复制 2，选中 0，点击 1
+
+### 参考来源
+
+- [Chrome Extensions Manifest V3](https://developer.chrome.com/docs/extensions/mv3/intro) - developer.chrome.com，评分 9，复制 0，选中 1，点击 0
+
+### 过渡页面
+
+- [GitHub - microsoft/playwright](https://github.com/microsoft/playwright) - github.com，评分 0，复制 0，选中 0，点击 0
+
+## 调研路径
+
+- [playwright.dev](https://playwright.dev/docs/chrome-extensions) → [microsoft/playwright issues](https://github.com/microsoft/playwright/issues)（GitHub）
 
 ## 用户关注过的关键片段
 

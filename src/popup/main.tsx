@@ -59,6 +59,7 @@ function PopupApp() {
   const currentDomain = normalizeDomain(currentGroup?.activeTab?.url ? new URL(currentGroup.activeTab.url).hostname : "");
   const copiedCount = activeSession?.events.filter((event) => event.type === "text_copied").length || 0;
   const selectedCount = activeSession?.events.filter((event) => event.type === "text_selected").length || 0;
+  const clickedCount = activeSession?.events.filter((event) => event.type === "link_clicked").length || 0;
 
   return (
     <main className="popup-shell stack">
@@ -86,7 +87,7 @@ function PopupApp() {
             <div className="recording-title">
               <strong>{activeSession.name}</strong>
               <div className="muted">
-                {formatDuration(activeSession.startedAt)} · {activeSession.tabs.length} 个来源 · {copiedCount} 个复制 · {selectedCount} 个选中
+                {formatDuration(activeSession.startedAt)} · {activeSession.tabs.length} 个来源 · {copiedCount} 个复制 · {selectedCount} 个选中 · {clickedCount} 次点击
               </div>
             </div>
             <span className="badge recording-badge">记录中</span>
@@ -209,7 +210,7 @@ function InteractionPanel({
       <div className="header-row">
         <div className="setting-title">
           <Clipboard size={17} />
-          <strong>复制捕获</strong>
+          <strong>交互捕获</strong>
         </div>
         <Toggle
           checked={settings.captureCopy}
@@ -223,15 +224,19 @@ function InteractionPanel({
           label="保留来源上下文"
           description="记录页面章节、附近文本和大致位置，便于回看。"
           checked={settings.captureContext}
-          disabled={!settings.captureCopy}
           onChange={(captureContext) => onChange({ captureContext })}
         />
         <ToggleRow
           label="记录稳定选中"
           description="选中文本停留片刻后，作为低权重关注片段保存。"
           checked={settings.captureSelection}
-          disabled={!settings.captureCopy}
           onChange={(captureSelection) => onChange({ captureSelection })}
+        />
+        <ToggleRow
+          label="记录链接点击"
+          description="只保存搜索结果、外链、文档目录、GitHub 和下载链接。"
+          checked={settings.captureClicks}
+          onChange={(captureClicks) => onChange({ captureClicks })}
         />
         <ToggleRow
           label="复制后轻提示"
@@ -244,14 +249,12 @@ function InteractionPanel({
           label="合并重复片段"
           description="同一页面重复复制同一段内容时，只保留一条记录。"
           checked={settings.mergeDuplicates}
-          disabled={!settings.captureCopy}
           onChange={(mergeDuplicates) => onChange({ mergeDuplicates })}
         />
         <ToggleRow
           label="自动脱敏"
           description="保存前隐藏常见邮箱、token 和密钥形态。"
           checked={settings.redactSensitive}
-          disabled={!settings.captureCopy}
           onChange={(redactSensitive) => onChange({ redactSensitive })}
         />
       </div>

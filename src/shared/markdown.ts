@@ -7,8 +7,10 @@ export function generateMockMarkdown(session: TrailSession): string {
     .map((tab, index) => `${index + 1}. [${tab.title || tab.domain}](${tab.url}) - ${tab.domain}`)
     .join("\n");
   const copiedNotes = copiedEventsToMarkdown(session.events);
+  const sourceLevels = pageStatsToMarkdown(session);
+  const researchPath = linkEventsToMarkdown(session.events);
   const events = session.events
-    .filter((event) => event.type !== "text_copied")
+    .filter((event) => !["text_copied", "text_selected", "link_clicked"].includes(event.type))
     .slice(-12)
     .map(
       (event) =>
@@ -28,6 +30,14 @@ export function generateMockMarkdown(session: TrailSession): string {
 ## 浏览资料
 
 ${sources || "- 暂无资料"}
+
+## 来源分级
+
+${sourceLevels || "- 暂无来源评分"}
+
+## 调研路径
+
+${researchPath || "- 暂无链接点击路径"}
 
 ## 用户关注过的关键片段
 
@@ -84,6 +94,60 @@ ${tags}
 ${copiedText}${context}`;
     })
     .join("\n\n");
+}
+
+function pageStatsToMarkdown(session: TrailSession): string {
+  const stats = [...(session.pageStats || [])].sort((a, b) => b.score - a.score);
+  if (stats.length === 0) return "";
+
+  const groups = [
+    ["核心来源", stats.filter((item) => item.level === "core")],
+    ["参考来源", stats.filter((item) => item.level === "reference")],
+    ["过渡页面", stats.filter((item) => item.level === "passing")]
+  ] as const;
+
+  return groups
+    .filter(([, items]) => items.length > 0)
+    .map(([label, items]) => {
+      const rows = items
+        .slice(0, 8)
+        .map(
+          (item) =>
+            `- [${item.title || item.domain}](${item.url}) - ${item.domain}，评分 ${item.score}，复制 ${item.copiedCount}，选中 ${item.selectedCount}，点击 ${item.outboundClickCount}`
+        )
+        .join("\n");
+      return `### ${label}\n\n${rows}`;
+    })
+    .join("\n\n");
+}
+
+function linkEventsToMarkdown(events: TrailEvent[]): string {
+  return events
+    .filter((event) => event.type === "link_clicked" && event.targetUrl)
+    .slice(-20)
+    .map((event) => {
+      const source = event.url ? `[${event.domain || "来源"}](${event.url})` : event.domain || "未知来源";
+      const target = `[${event.targetText || event.targetDomain || "目标"}](${event.targetUrl})`;
+      return `- ${source} → ${target}（${linkKindLabel(event.linkKind)}）`;
+    })
+    .join("\n");
+}
+
+function linkKindLabel(kind: TrailEvent["linkKind"]): string {
+  switch (kind) {
+    case "search_result":
+      return "搜索结果";
+    case "doc_toc":
+      return "文档目录";
+    case "github":
+      return "GitHub";
+    case "download":
+      return "下载";
+    case "reference":
+      return "参考链接";
+    default:
+      return "外链";
+  }
 }
 
 function copyKindLabel(kind: TrailEvent["copyKind"]): string {

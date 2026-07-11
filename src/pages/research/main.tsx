@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
-import { Clipboard, Copy, Download, Eye, Pencil, Save, Trash2 } from "lucide-react";
+import { Clipboard, Copy, Download, Eye, MousePointerClick, Pencil, Route, Save, Trash2 } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { getSession, updateSavedSession } from "../../shared/storage";
 import { formatDateTime } from "../../shared/time";
-import type { TrailCopyKind, TrailEvent, TrailSession } from "../../shared/types";
+import type { TrailCopyKind, TrailEvent, TrailLinkKind, TrailPageStat, TrailSession } from "../../shared/types";
 import "../../styles.css";
 
 installDevChromeMock();
@@ -30,6 +30,10 @@ function ResearchApp() {
       session?.events.filter(
         (event) => (event.type === "text_copied" || event.type === "text_selected") && event.selectedText
       ) || [],
+    [session]
+  );
+  const linkEvents = useMemo(
+    () => session?.events.filter((event) => event.type === "link_clicked" && event.targetUrl) || [],
     [session]
   );
 
@@ -114,6 +118,8 @@ function ResearchApp() {
           </section>
 
           <CopiedPanel events={attentionEvents} onRemove={(eventId) => void removeCopiedEvent(eventId)} />
+          <PageStatsPanel stats={session.pageStats || []} />
+          <LinkPathPanel events={linkEvents} />
 
           <section className="panel stack">
             <strong>来源</strong>
@@ -178,6 +184,68 @@ function ResearchApp() {
         </section>
       </div>
     </main>
+  );
+}
+
+function PageStatsPanel({ stats }: { stats: TrailPageStat[] }) {
+  const visibleStats = [...stats].sort((a, b) => b.score - a.score).slice(0, 6);
+
+  return (
+    <section className="panel stack">
+      <div className="header-row">
+        <div className="setting-title">
+          <Route size={17} />
+          <strong>来源分级</strong>
+        </div>
+        <span className="badge">{stats.length}</span>
+      </div>
+      {visibleStats.length === 0 ? (
+        <p className="setting-copy">录制期间的停留、选中、复制和点击会汇总到这里。</p>
+      ) : (
+        <div className="source-list compact-list">
+          {visibleStats.map((stat) => (
+            <a className="source-item" href={stat.url} key={stat.url} target="_blank" rel="noreferrer">
+              <span className="source-title">{stat.title || stat.domain}</span>
+              <span className="source-domain">
+                {sourceLevelLabel(stat.level)} · 评分 {stat.score} · 复制 {stat.copiedCount} · 选中 {stat.selectedCount}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LinkPathPanel({ events }: { events: TrailEvent[] }) {
+  return (
+    <section className="panel stack">
+      <div className="header-row">
+        <div className="setting-title">
+          <MousePointerClick size={17} />
+          <strong>路径点击</strong>
+        </div>
+        <span className="badge">{events.length}</span>
+      </div>
+      {events.length === 0 ? (
+        <p className="setting-copy">点击搜索结果、外链、文档目录或 GitHub 链接后，会形成调研路径。</p>
+      ) : (
+        <div className="copy-event-list path-list">
+          {events.slice(-8).map((event) => (
+            <article className="copy-event" key={event.id}>
+              <div className="copy-event-tags">
+                <span className="mini-badge">{linkKindLabel(event.linkKind)}</span>
+                <span className="mini-badge">{event.targetDomain || "目标"}</span>
+              </div>
+              <p>{event.targetText || event.targetUrl}</p>
+              <a href={event.targetUrl} target="_blank" rel="noreferrer">
+                {event.domain || "来源"} → {event.targetDomain || "目标"}
+              </a>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -259,6 +327,34 @@ function copyKindLabel(kind: TrailCopyKind | undefined): string {
 
 function copyFilterLabel(filter: CopyFilter): string {
   return filter === "all" ? "全部" : copyKindLabel(filter);
+}
+
+function sourceLevelLabel(level: TrailPageStat["level"]): string {
+  switch (level) {
+    case "core":
+      return "核心来源";
+    case "reference":
+      return "参考来源";
+    default:
+      return "过渡页面";
+  }
+}
+
+function linkKindLabel(kind: TrailLinkKind | undefined): string {
+  switch (kind) {
+    case "search_result":
+      return "搜索结果";
+    case "doc_toc":
+      return "文档目录";
+    case "github":
+      return "GitHub";
+    case "download":
+      return "下载";
+    case "reference":
+      return "参考链接";
+    default:
+      return "外链";
+  }
 }
 
 createRoot(document.getElementById("root")!).render(

@@ -841,6 +841,15 @@ button.session-card:hover {
   overflow: auto;
 }
 
+.compact-list {
+  max-height: 236px;
+  overflow: auto;
+}
+
+.path-list {
+  max-height: 240px;
+}
+
 .copy-filter {
   display: flex;
   gap: 6px;

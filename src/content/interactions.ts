@@ -1,4 +1,4 @@
-import type { CopyInteractionPayload, RuntimeMessage } from "../shared/types";
+import type { CopyInteractionPayload, LinkClickPayload, RuntimeMessage, TrailLinkKind } from "../shared/types";
 
 const TOAST_ID = "trail-copy-toast";
 const MAX_COPIED_TEXT_LENGTH = 1200;
@@ -13,6 +13,14 @@ document.addEventListener("copy", () => {
   window.clearTimeout(selectionTimer);
   void handleCopy();
 });
+
+document.addEventListener(
+  "click",
+  (event) => {
+    void handleLinkClick(event);
+  },
+  true
+);
 
 document.addEventListener("selectionchange", () => {
   window.clearTimeout(selectionTimer);
@@ -59,6 +67,22 @@ async function handleStableSelection() {
     .catch(() => undefined);
 }
 
+async function handleLinkClick(event: MouseEvent) {
+  const target = event.target instanceof Element ? event.target : undefined;
+  const anchor = target?.closest("a[href]");
+  if (!(anchor instanceof HTMLAnchorElement)) return;
+
+  const payload = getLinkClickPayload(anchor);
+  if (!payload) return;
+
+  await chrome.runtime
+    .sendMessage<RuntimeMessage, { recorded: boolean; eventId?: string; reason?: string }>({
+      type: "RECORD_LINK_CLICK",
+      payload
+    })
+    .catch(() => undefined);
+}
+
 function getSelectionPayload(): CopyInteractionPayload | undefined {
   const selection = window.getSelection();
   const rawText = selection?.toString() || "";
@@ -87,6 +111,71 @@ function getSelectionPayload(): CopyInteractionPayload | undefined {
     pageY: rect ? Math.round(rect.top + window.scrollY) : undefined,
     timestamp: Date.now()
   };
+}
+
+function getLinkClickPayload(anchor: HTMLAnchorElement): LinkClickPayload | undefined {
+  const targetUrl = normalizeHref(anchor.href);
+  if (!targetUrl) return undefined;
+
+  const target = new URL(targetUrl);
+  const current = new URL(location.href);
+  const linkKind = classifyLink(anchor, target, current);
+  if (!linkKind) return undefined;
+
+  const targetText = truncateText(
+    anchor.innerText || anchor.getAttribute("aria-label") || anchor.title || target.href,
+    180
+  );
+
+  return {
+    pageUrl: location.href,
+    pageTitle: document.title,
+    domain: location.hostname,
+    targetUrl: target.href,
+    targetText,
+    targetDomain: target.hostname,
+    sectionTitle: getSectionTitle(anchor),
+    elementTag: anchor.tagName.toLowerCase(),
+    elementRole: anchor.getAttribute("role") || undefined,
+    cssSelector: getCssSelector(anchor),
+    linkKind,
+    timestamp: Date.now()
+  };
+}
+
+function normalizeHref(href: string): string | undefined {
+  try {
+    const url = new URL(href, location.href);
+    if (!["http:", "https:"].includes(url.protocol)) return undefined;
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
+function classifyLink(anchor: HTMLAnchorElement, target: URL, current: URL): TrailLinkKind | undefined {
+  const pathname = target.pathname.toLowerCase();
+  const targetText = `${anchor.innerText} ${anchor.getAttribute("aria-label") || ""} ${anchor.title || ""}`.toLowerCase();
+  const currentHost = current.hostname.replace(/^www\./, "");
+  const targetHost = target.hostname.replace(/^www\./, "");
+
+  if (/\.(pdf|zip|tar|gz|dmg|exe|pkg|csv|xlsx?|docx?|pptx?)$/i.test(pathname)) return "download";
+  if (targetHost === "github.com" && /\/(issues|pull|releases|blob|tree)\//.test(pathname)) return "github";
+  if (isSearchPage(current) && targetHost !== currentHost) return "search_result";
+  if (targetHost === currentHost && target.pathname === current.pathname && target.hash) return "doc_toc";
+  if (targetHost !== currentHost) return "external";
+  if (/\b(readme|docs?|guide|reference|api|issue|pull request|release)\b/i.test(targetText)) return "reference";
+
+  return undefined;
+}
+
+function isSearchPage(url: URL): boolean {
+  const host = url.hostname.replace(/^www\./, "");
+  return (
+    ["google.com", "bing.com", "duckduckgo.com", "kagi.com", "perplexity.ai"].some(
+      (domain) => host === domain || host.endsWith(`.${domain}`)
+    ) || ["/search", "/html"].some((path) => url.pathname.startsWith(path))
+  );
 }
 
 function isSelectionInsideSensitiveSurface(selection: Selection): boolean {

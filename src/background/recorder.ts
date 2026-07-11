@@ -18,7 +18,18 @@ import {
 } from "../shared/interactions";
 import { generateMockMarkdown } from "../shared/markdown";
 import { getActiveSession, getInteractionSettings, getSessions, saveSession, setActiveSession } from "../shared/storage";
-import type { CopyInteractionPayload, PopupState, TrailEvent, TrailEventType, TrailSession } from "../shared/types";
+import type {
+  CopyInteractionPayload,
+  LinkClickPayload,
+  PopupState,
+  ResearchTab,
+  TrailEvent,
+  TrailEventType,
+  TrailPageStat,
+  TrailSession
+} from "../shared/types";
+
+let activeAttentionTimer: { sessionId: string; url: string; startedAt: number } | undefined;
 
 function createId(prefix: string): string {
   return `${prefix}_${Date.now()}_${crypto.randomUUID()}`;
@@ -57,6 +68,114 @@ function eventsFromTabs(tabs: TrailSession["tabs"]): TrailEvent[] {
     domain: tab.domain,
     timestamp: tab.capturedAt
   }));
+}
+
+function initialPageStats(tabs: ResearchTab[]): TrailPageStat[] {
+  return tabs.map((tab) =>
+    scorePageStat({
+      url: tab.url,
+      domain: tab.domain,
+      title: tab.title,
+      firstSeenAt: tab.capturedAt,
+      lastSeenAt: tab.capturedAt,
+      activeMs: 0,
+      visitCount: 1,
+      selectedCount: 0,
+      copiedCount: 0,
+      outboundClickCount: 0,
+      score: 0,
+      level: "passing"
+    })
+  );
+}
+
+function scorePageStat(stat: TrailPageStat): TrailPageStat {
+  const activeMinutes = Math.min(30, Math.floor(stat.activeMs / 60000));
+  const score =
+    activeMinutes * 1 +
+    stat.selectedCount * 3 +
+    stat.copiedCount * 6 +
+    stat.outboundClickCount * 2 +
+    Math.max(0, stat.visitCount - 1) * 2;
+
+  return {
+    ...stat,
+    score,
+    level: score >= 12 ? "core" : score >= 5 ? "reference" : "passing"
+  };
+}
+
+function updatePageStats(
+  session: TrailSession,
+  page: { url?: string; domain?: string; title?: string; timestamp?: number },
+  increment: Partial<Pick<TrailPageStat, "visitCount" | "selectedCount" | "copiedCount" | "outboundClickCount">> & {
+    activeMs?: number;
+  } = {}
+): TrailPageStat[] {
+  const url = page.url || "";
+  if (!url) return session.pageStats || [];
+
+  const timestamp = page.timestamp || Date.now();
+  const domain = page.domain || getDomain(url);
+  const title = page.title || url;
+  const stats = [...(session.pageStats || [])];
+  const index = stats.findIndex((item) => item.url === url);
+  const current =
+    index >= 0
+      ? stats[index]
+      : {
+          url,
+          domain,
+          title,
+          firstSeenAt: timestamp,
+          lastSeenAt: timestamp,
+          activeMs: 0,
+          visitCount: 0,
+          selectedCount: 0,
+          copiedCount: 0,
+          outboundClickCount: 0,
+          score: 0,
+          level: "passing" as const
+        };
+
+  const next = scorePageStat({
+    ...current,
+    domain: current.domain || domain,
+    title: title || current.title,
+    lastSeenAt: Math.max(current.lastSeenAt, timestamp),
+    activeMs: current.activeMs + (increment.activeMs || 0),
+    visitCount: current.visitCount + (increment.visitCount || 0),
+    selectedCount: current.selectedCount + (increment.selectedCount || 0),
+    copiedCount: current.copiedCount + (increment.copiedCount || 0),
+    outboundClickCount: current.outboundClickCount + (increment.outboundClickCount || 0)
+  });
+
+  if (index >= 0) stats[index] = next;
+  else stats.push(next);
+
+  return stats;
+}
+
+function beginAttentionTimer(session: TrailSession, tab?: chrome.tabs.Tab): void {
+  if (!tab?.url) return;
+  activeAttentionTimer = {
+    sessionId: session.id,
+    url: tab.url,
+    startedAt: Date.now()
+  };
+}
+
+function settleAttentionTimer(session: TrailSession): TrailSession {
+  if (!activeAttentionTimer || activeAttentionTimer.sessionId !== session.id) return session;
+
+  const activeMs = Math.max(0, Date.now() - activeAttentionTimer.startedAt);
+  const pageStats = updatePageStats(session, { url: activeAttentionTimer.url }, { activeMs });
+  activeAttentionTimer = undefined;
+
+  return {
+    ...session,
+    pageStats
+  };
 }
 
 export async function getPopupState(): Promise<PopupState> {
@@ -98,10 +217,12 @@ export async function startGroupRecording(name?: string): Promise<TrailSession> 
     status: "recording",
     startedAt: Date.now(),
     tabs,
-    events: eventsFromTabs(tabs)
+    events: eventsFromTabs(tabs),
+    pageStats: initialPageStats(tabs)
   };
 
   await setActiveSession(session);
+  beginAttentionTimer(session, context.activeTab);
   return session;
 }
 
@@ -122,10 +243,13 @@ export async function startNewGroupRecording(name?: string): Promise<TrailSessio
     status: "recording",
     startedAt: Date.now(),
     tabs,
-    events: eventsFromTabs(tabs)
+    events: eventsFromTabs(tabs),
+    pageStats: initialPageStats(tabs)
   };
 
   await setActiveSession(session);
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  beginAttentionTimer(session, activeTab);
   return session;
 }
 
@@ -146,10 +270,12 @@ export async function startWindowRecording(name?: string): Promise<TrailSession>
     status: "recording",
     startedAt: Date.now(),
     tabs,
-    events: eventsFromTabs(tabs)
+    events: eventsFromTabs(tabs),
+    pageStats: initialPageStats(tabs)
   };
 
   await setActiveSession(session);
+  beginAttentionTimer(session, context.activeTab);
   return session;
 }
 
@@ -158,16 +284,17 @@ export async function stopRecording(): Promise<TrailSession | undefined> {
 
   if (!active) return undefined;
 
+  const settled = settleAttentionTimer(active);
   const freshTabs =
-    active.source === "tab_group" && active.groupId !== undefined
-      ? await collectGroupTabs(active.windowId, active.groupId)
-      : await collectWindowTabs(active.windowId);
+    settled.source === "tab_group" && settled.groupId !== undefined
+      ? await collectGroupTabs(settled.windowId, settled.groupId)
+      : await collectWindowTabs(settled.windowId);
 
   const completed: TrailSession = {
-    ...active,
+    ...settled,
     status: "completed",
     endedAt: Date.now(),
-    tabs: uniqueTabs([...active.tabs, ...freshTabs])
+    tabs: uniqueTabs([...settled.tabs, ...freshTabs])
   };
 
   completed.markdown = generateMockMarkdown(completed);
@@ -201,7 +328,7 @@ async function finalizeSnapshot(session: TrailSession): Promise<TrailSession> {
 }
 
 export async function recordTabEvent(type: TrailEventType, tabId: number, tab?: chrome.tabs.Tab): Promise<void> {
-  const active = await getActiveSession();
+  let active = await getActiveSession();
   if (!active) return;
 
   const currentTab = tab || (await chrome.tabs.get(tabId).catch(() => undefined));
@@ -214,10 +341,25 @@ export async function recordTabEvent(type: TrailEventType, tabId: number, tab?: 
 
   if (!belongsToSession) return;
 
+  if (type === "activated") {
+    active = settleAttentionTimer(active);
+    beginAttentionTimer(active, currentTab);
+  }
+
   const next: TrailSession = {
     ...active,
     tabs: uniqueTabs([...active.tabs, toResearchTab(currentTab)]),
-    events: [...active.events, createEvent(type, currentTab)].slice(-200)
+    events: [...active.events, createEvent(type, currentTab)].slice(-200),
+    pageStats: updatePageStats(
+      active,
+      {
+        url: currentTab.url || currentTab.pendingUrl,
+        domain: getDomain(currentTab.url || currentTab.pendingUrl),
+        title: currentTab.title || currentTab.pendingUrl || currentTab.url,
+        timestamp: Date.now()
+      },
+      type === "activated" ? { visitCount: 1 } : {}
+    )
   };
 
   await setActiveSession(next);
@@ -304,6 +446,11 @@ export async function recordCopyInteraction(
     await setActiveSession({
       ...active,
       events: nextEvents,
+      pageStats: updatePageStats(
+        active,
+        { url: payload.pageUrl, domain: payload.domain, title: payload.pageTitle, timestamp: payload.timestamp },
+        { copiedCount: existingCopyEvent.type === "text_selected" ? 1 : 0 }
+      ),
       updatedAt: Date.now()
     });
 
@@ -346,6 +493,11 @@ export async function recordCopyInteraction(
     ...active,
     tabs: nextTabs,
     events: [...active.events, event].slice(-300),
+    pageStats: updatePageStats(
+      active,
+      { url: payload.pageUrl, domain: payload.domain, title: payload.pageTitle, timestamp: payload.timestamp },
+      { copiedCount: 1 }
+    ),
     updatedAt: Date.now()
   });
 
@@ -358,7 +510,6 @@ export async function recordSelectionInteraction(
 ): Promise<{ recorded: boolean; eventId?: string; reason?: string }> {
   const [active, settings] = await Promise.all([getActiveSession(), getInteractionSettings()]);
   if (!active) return { recorded: false, reason: "no_active_session" };
-  if (!settings.captureCopy) return { recorded: false, reason: "capture_disabled" };
   if (!settings.captureSelection) return { recorded: false, reason: "selection_disabled" };
   if (isDomainExcluded(payload.domain, settings.excludedDomains)) {
     return { recorded: false, reason: "domain_excluded" };
@@ -424,6 +575,75 @@ export async function recordSelectionInteraction(
     ...active,
     tabs: nextTabs,
     events: [...active.events, event].slice(-300),
+    pageStats: updatePageStats(
+      active,
+      { url: payload.pageUrl, domain: payload.domain, title: payload.pageTitle, timestamp: payload.timestamp },
+      { selectedCount: 1 }
+    ),
+    updatedAt: Date.now()
+  });
+
+  return { recorded: true, eventId: event.id };
+}
+
+export async function recordLinkClick(
+  payload: LinkClickPayload,
+  senderTab?: chrome.tabs.Tab
+): Promise<{ recorded: boolean; eventId?: string; reason?: string }> {
+  const [active, settings] = await Promise.all([getActiveSession(), getInteractionSettings()]);
+  if (!active) return { recorded: false, reason: "no_active_session" };
+  if (!settings.captureClicks) return { recorded: false, reason: "click_capture_disabled" };
+  if (isDomainExcluded(payload.domain, settings.excludedDomains)) {
+    return { recorded: false, reason: "domain_excluded" };
+  }
+
+  const tabId = senderTab?.id;
+  const windowId = senderTab?.windowId;
+  const groupId = senderTab?.groupId;
+  const belongsToSession =
+    active.source === "window"
+      ? windowId === active.windowId
+      : windowId === active.windowId && groupId === active.groupId;
+
+  if (!belongsToSession) return { recorded: false, reason: "outside_session" };
+
+  const duplicate = active.events.find(
+    (event) =>
+      event.type === "link_clicked" &&
+      event.url === payload.pageUrl &&
+      event.targetUrl === payload.targetUrl &&
+      Math.abs(event.timestamp - payload.timestamp) < 1500
+  );
+  if (duplicate) return { recorded: true, eventId: duplicate.id, reason: "duplicate_click" };
+
+  const event: TrailEvent = {
+    id: createId("event"),
+    type: "link_clicked",
+    tabId,
+    title: payload.pageTitle,
+    url: payload.pageUrl,
+    domain: payload.domain || getDomain(payload.pageUrl),
+    timestamp: payload.timestamp || Date.now(),
+    targetUrl: payload.targetUrl,
+    targetText: payload.targetText ? truncateText(payload.targetText, 180) : undefined,
+    targetDomain: payload.targetDomain || getDomain(payload.targetUrl),
+    sectionTitle: payload.sectionTitle ? truncateText(payload.sectionTitle, 120) : undefined,
+    elementTag: payload.elementTag,
+    elementRole: payload.elementRole,
+    cssSelector: payload.cssSelector,
+    linkKind: payload.linkKind
+  };
+
+  const nextTabs = senderTab ? uniqueTabs([...active.tabs, toResearchTab(senderTab)]) : active.tabs;
+  await setActiveSession({
+    ...active,
+    tabs: nextTabs,
+    events: [...active.events, event].slice(-300),
+    pageStats: updatePageStats(
+      active,
+      { url: payload.pageUrl, domain: payload.domain, title: payload.pageTitle, timestamp: payload.timestamp },
+      { outboundClickCount: 1 }
+    ),
     updatedAt: Date.now()
   });
 

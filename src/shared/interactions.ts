@@ -3,6 +3,7 @@ import type { TrailCopyKind, TrailInteractionSettings } from "./types";
 export const DEFAULT_INTERACTION_SETTINGS: TrailInteractionSettings = {
   captureCopy: true,
   captureSelection: true,
+  captureClicks: true,
   captureContext: true,
   showToast: true,
   mergeDuplicates: true,

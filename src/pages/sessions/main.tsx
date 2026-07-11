@@ -58,7 +58,13 @@ function SessionsApp() {
           session.groupTitle,
           session.source,
           ...session.tabs.flatMap((tab) => [tab.title, tab.domain, tab.url]),
-          ...session.events.map((event) => event.selectedText || "")
+          ...(session.pageStats || []).flatMap((stat) => [stat.title, stat.domain, stat.url, stat.level]),
+          ...session.events.flatMap((event) => [
+            event.selectedText || "",
+            event.targetText || "",
+            event.targetUrl || "",
+            event.targetDomain || ""
+          ])
         ]
           .filter(Boolean)
           .join(" ")
@@ -76,7 +82,7 @@ function SessionsApp() {
             <BrandMark />
             <div>
               <h1 className="page-title">研究记录</h1>
-              <div className="muted">本地保存，可搜索来源和复制片段</div>
+              <div className="muted">本地保存，可搜索来源、关注片段和路径点击</div>
             </div>
           </div>
           <label className="search-box">
@@ -88,6 +94,8 @@ function SessionsApp() {
         <section className="sessions-grid">
           {visibleSessions.map((session) => {
             const copiedCount = session.events.filter((event) => event.type === "text_copied").length;
+            const selectedCount = session.events.filter((event) => event.type === "text_selected").length;
+            const clickCount = session.events.filter((event) => event.type === "link_clicked").length;
             return (
               <article className="card session-card" key={session.id}>
                 <div className="session-main">
@@ -107,7 +115,7 @@ function SessionsApp() {
                     <strong>{session.name}</strong>
                   )}
                   <span className="muted">
-                    {formatDateTime(session.updatedAt || session.startedAt)} · {session.tabs.length} 个来源 · {copiedCount} 个复制片段
+                    {formatDateTime(session.updatedAt || session.startedAt)} · {session.tabs.length} 个来源 · {copiedCount} 个复制 · {selectedCount} 个选中 · {clickCount} 次点击
                   </span>
                 </div>
                 <div className="session-actions">
