@@ -247,6 +247,24 @@ textarea:focus-visible {
   padding: 14px;
 }
 
+.disclosure-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.disclosure-panel > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure-panel:not([open]) {
+  gap: 0;
+}
+
 .card {
   padding: 11px;
 }

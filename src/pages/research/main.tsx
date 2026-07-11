@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
-import { Clipboard, Copy, Download, Eye, MousePointerClick, Pencil, Route, Save, Trash2 } from "lucide-react";
+import { Clipboard, Copy, Download, Eye, MousePointerClick, Pencil, Save, Trash2 } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { getSession, updateSavedSession } from "../../shared/storage";
 import { formatDateTime } from "../../shared/time";
-import type { TrailCopyKind, TrailEvent, TrailLinkKind, TrailPageStat, TrailSession } from "../../shared/types";
+import type { ResearchTab, TrailCopyKind, TrailEvent, TrailLinkKind, TrailPageStat, TrailSession } from "../../shared/types";
 import "../../styles.css";
 
 installDevChromeMock();
@@ -118,20 +118,8 @@ function ResearchApp() {
           </section>
 
           <CopiedPanel events={attentionEvents} onRemove={(eventId) => void removeCopiedEvent(eventId)} />
-          <PageStatsPanel stats={session.pageStats || []} />
+          <SourcesPanel tabs={session.tabs} stats={session.pageStats || []} />
           <LinkPathPanel events={linkEvents} />
-
-          <section className="panel stack">
-            <strong>来源</strong>
-            <div className="source-list">
-              {session.tabs.map((tab) => (
-                <a className="source-item" href={tab.url} key={`${tab.url}-${tab.capturedAt}`} target="_blank" rel="noreferrer">
-                  <span className="source-title">{tab.title}</span>
-                  <span className="source-domain">{tab.domain}</span>
-                </a>
-              ))}
-            </div>
-          </section>
         </aside>
 
         <section className="content research-content stack">
@@ -187,46 +175,47 @@ function ResearchApp() {
   );
 }
 
-function PageStatsPanel({ stats }: { stats: TrailPageStat[] }) {
-  const visibleStats = [...stats].sort((a, b) => b.score - a.score).slice(0, 6);
+function SourcesPanel({ tabs, stats }: { tabs: ResearchTab[]; stats: TrailPageStat[] }) {
+  const statByUrl = new Map(stats.map((stat) => [stat.url, stat]));
+  const sortedTabs = [...tabs].sort((left, right) => {
+    const leftScore = statByUrl.get(left.url)?.score || 0;
+    const rightScore = statByUrl.get(right.url)?.score || 0;
+    return rightScore - leftScore;
+  });
 
   return (
     <section className="panel stack">
       <div className="header-row">
-        <div className="setting-title">
-          <Route size={17} />
-          <strong>来源分级</strong>
-        </div>
-        <span className="badge">{stats.length}</span>
+        <strong>来源</strong>
+        <span className="badge">{tabs.length}</span>
       </div>
-      {visibleStats.length === 0 ? (
-        <p className="setting-copy">录制期间的停留、选中、复制和点击会汇总到这里。</p>
-      ) : (
-        <div className="source-list compact-list">
-          {visibleStats.map((stat) => (
-            <a className="source-item" href={stat.url} key={stat.url} target="_blank" rel="noreferrer">
-              <span className="source-title">{stat.title || stat.domain}</span>
+      <div className="source-list compact-list">
+        {sortedTabs.map((tab) => {
+          const stat = statByUrl.get(tab.url);
+          return (
+            <a className="source-item" href={tab.url} key={`${tab.url}-${tab.capturedAt}`} target="_blank" rel="noreferrer">
+              <span className="source-title">{tab.title}</span>
               <span className="source-domain">
-                {sourceLevelLabel(stat.level)} · 评分 {stat.score} · 复制 {stat.copiedCount} · 选中 {stat.selectedCount}
+                {sourceLevelLabel(stat?.level)} · {tab.domain}
               </span>
             </a>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </section>
   );
 }
 
 function LinkPathPanel({ events }: { events: TrailEvent[] }) {
   return (
-    <section className="panel stack">
-      <div className="header-row">
+    <details className="panel disclosure-panel">
+      <summary className="header-row">
         <div className="setting-title">
           <MousePointerClick size={17} />
-          <strong>路径点击</strong>
+          <strong>调研路径</strong>
         </div>
         <span className="badge">{events.length}</span>
-      </div>
+      </summary>
       {events.length === 0 ? (
         <p className="setting-copy">点击搜索结果、外链、文档目录或 GitHub 链接后，会形成调研路径。</p>
       ) : (
@@ -245,7 +234,7 @@ function LinkPathPanel({ events }: { events: TrailEvent[] }) {
           ))}
         </div>
       )}
-    </section>
+    </details>
   );
 }
 
@@ -329,14 +318,16 @@ function copyFilterLabel(filter: CopyFilter): string {
   return filter === "all" ? "全部" : copyKindLabel(filter);
 }
 
-function sourceLevelLabel(level: TrailPageStat["level"]): string {
+function sourceLevelLabel(level: TrailPageStat["level"] | undefined): string {
   switch (level) {
     case "core":
       return "核心来源";
     case "reference":
       return "参考来源";
-    default:
+    case "passing":
       return "过渡页面";
+    default:
+      return "未分级";
   }
 }
 
