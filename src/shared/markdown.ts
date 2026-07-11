@@ -25,45 +25,37 @@ export function generateMockMarkdown(session: TrailSession): string {
 
 ## 调研目标
 
-整理本次 ${sourceName} 中收集到的资料，形成一份可继续补充的研究文档。
+${session.goal?.trim() || `整理本次 ${sourceName} 中收集到的资料，形成一份可继续补充的研究文档。`}
 
-## 浏览资料
+## 核心结论
 
-${sources || "- 暂无资料"}
+- 待补充：当前版本先保存来源、路径和关注片段；接入 AI 后可基于证据自动生成结论。
+
+## 关键证据
+
+${copiedNotes || "- 暂无关注片段"}
 
 ## 来源分级
 
-${sourceLevels || "- 暂无来源评分"}
+${sourceLevels || "- 暂无来源分级"}
 
 ## 调研路径
 
 ${researchPath || "- 暂无链接点击路径"}
 
-## 用户关注过的关键片段
+## 浏览资料
 
-${copiedNotes || "- 暂无关注片段"}
-
-## 每个资料一句总结
-
-${
-  session.tabs
-    .map((tab) => `- **${tab.title || tab.domain}**：来自 ${tab.domain}，需要后续接入 AI 或正文提取后补充更准确摘要。`)
-    .join("\n") || "- 暂无资料"
-}
+${sources || "- 暂无资料"}
 
 ## 浏览轨迹
 
 ${events || "- 暂无记录事件"}
 
-## 综合结论
+## 待确认问题
 
-当前版本尚未接入 AI，本节先保留为人工或后续模型总结区域。本次 Trail 已经保存了分组名称、来源列表、浏览事件和用户关注过的片段，可作为后续研究资产继续迭代。
-
-## 后续值得继续研究的问题
-
-- 哪些资料是核心来源，哪些只是过渡页面？
-- 用户关注过的片段是否已经足够支撑结论？
-- 是否需要抓取正文以提高总结质量？
+- 哪些证据足够支撑核心结论？
+- 哪些来源需要补充正文抽取或二次验证？
+- 是否存在相互冲突的信息？
 - 这次调研最终支持了什么决策？
 `;
 }
@@ -85,7 +77,7 @@ function copiedEventsToMarkdown(events: TrailEvent[]): string {
       const copiedText = blockquote(event.selectedText || "");
       const context = event.surroundingText ? `\n\n上下文：${event.surroundingText}` : "";
 
-      return `### 片段 ${index + 1}
+      return `### 证据 ${index + 1}
 
 来源：${source}${section}
 
@@ -113,7 +105,7 @@ function pageStatsToMarkdown(session: TrailSession): string {
         .slice(0, 8)
         .map(
           (item) =>
-            `- [${item.title || item.domain}](${item.url}) - ${item.domain}，评分 ${item.score}，复制 ${item.copiedCount}，选中 ${item.selectedCount}，点击 ${item.outboundClickCount}`
+            `- [${item.title || item.domain}](${item.url}) - ${item.domain}，复制 ${item.copiedCount}，选中 ${item.selectedCount}，点击 ${item.outboundClickCount}`
         )
         .join("\n");
       return `### ${label}\n\n${rows}`;
@@ -128,7 +120,7 @@ function linkEventsToMarkdown(events: TrailEvent[]): string {
     .map((event) => {
       const source = event.url ? `[${event.domain || "来源"}](${event.url})` : event.domain || "未知来源";
       const target = `[${event.targetText || event.targetDomain || "目标"}](${event.targetUrl})`;
-      return `- ${source} → ${target}（${linkKindLabel(event.linkKind)}）`;
+      return `- ${source} -> ${target}，${linkKindLabel(event.linkKind)}`;
     })
     .join("\n");
 }

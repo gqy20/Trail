@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
-import { Clipboard, Copy, Download, Eye, MousePointerClick, Pencil, Save, Trash2 } from "lucide-react";
+import { Clipboard, Copy, Download, Eye, FileJson, MousePointerClick, Pencil, Save, Trash2 } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
+import { buildResearchReportInput } from "../../shared/reportInput";
 import { getSession, updateSavedSession } from "../../shared/storage";
 import { formatDateTime } from "../../shared/time";
 import type { ResearchTab, TrailCopyKind, TrailEvent, TrailLinkKind, TrailPageStat, TrailSession } from "../../shared/types";
@@ -14,6 +15,7 @@ installDevChromeMock();
 function ResearchApp() {
   const [session, setSession] = useState<TrailSession>();
   const [draftMarkdown, setDraftMarkdown] = useState("");
+  const [goalDraft, setGoalDraft] = useState("");
   const [mode, setMode] = useState<"preview" | "edit">("preview");
   const [saveState, setSaveState] = useState<"saved" | "dirty" | "saving">("saved");
 
@@ -22,6 +24,7 @@ function ResearchApp() {
     void getSession(sessionId || "sample-session").then((next) => {
       setSession(next);
       setDraftMarkdown(next?.markdown || "");
+      setGoalDraft(next?.goal || "");
     });
   }, []);
 
@@ -41,15 +44,28 @@ function ResearchApp() {
     if (draftMarkdown) await navigator.clipboard.writeText(draftMarkdown);
   }
 
-  function downloadMarkdown() {
+  async function exportMarkdown() {
     if (!draftMarkdown || !session) return;
-    const blob = new Blob([draftMarkdown], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${toFileName(session.name || "trail")}.md`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    const fileName = `${getExportBaseName(session)}.md`;
+    downloadTextFile(draftMarkdown, fileName, "text/markdown;charset=utf-8");
+    const next: TrailSession = {
+      ...session,
+      exportFileName: fileName,
+      lastExportedAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    await updateSavedSession(next);
+    setSession(next);
+  }
+
+  function exportAiInput() {
+    if (!session) return;
+    const payload = buildResearchReportInput({
+      ...session,
+      goal: goalDraft,
+      markdown: draftMarkdown
+    });
+    downloadTextFile(JSON.stringify(payload, null, 2), `${getExportBaseName(session)}.report-input.json`, "application/json;charset=utf-8");
   }
 
   async function saveMarkdown() {
@@ -58,6 +74,7 @@ function ResearchApp() {
     setSaveState("saving");
     const next: TrailSession = {
       ...session,
+      goal: goalDraft.trim() || undefined,
       markdown: draftMarkdown,
       updatedAt: Date.now()
     };
@@ -65,6 +82,17 @@ function ResearchApp() {
     await updateSavedSession(next);
     setSession(next);
     setSaveState("saved");
+  }
+
+  async function saveGoal() {
+    if (!session || goalDraft === (session.goal || "")) return;
+    const next: TrailSession = {
+      ...session,
+      goal: goalDraft.trim() || undefined,
+      updatedAt: Date.now()
+    };
+    await updateSavedSession(next);
+    setSession(next);
   }
 
   async function removeCopiedEvent(eventId: string) {
@@ -100,10 +128,24 @@ function ResearchApp() {
           <section className="panel stack">
             <span className="badge">{session.source === "tab_group" ? "标签页分组" : "浏览器窗口"}</span>
             <h1 className="sidebar-title">{session.name}</h1>
+            <label className="label">
+              调研目标
+              <textarea
+                className="input goal-input"
+                value={goalDraft}
+                rows={3}
+                placeholder="这次调研想回答什么问题？"
+                onBlur={() => void saveGoal()}
+                onChange={(event) => setGoalDraft(event.target.value)}
+              />
+            </label>
             <div className="muted">
               {formatDateTime(session.startedAt)} · {session.tabs.length} 个来源
             </div>
             <div className="muted">{session.updatedAt ? `更新于 ${formatDateTime(session.updatedAt)}` : statusText}</div>
+            {session.lastExportedAt ? (
+              <div className="muted text-small">上次导出 {formatDateTime(session.lastExportedAt)}</div>
+            ) : null}
             <div className="toolbar">
               <button className="button primary" disabled={saveState !== "dirty"} onClick={saveMarkdown}>
                 <Save size={16} /> 保存
@@ -111,8 +153,11 @@ function ResearchApp() {
               <button className="button primary" onClick={copyMarkdown}>
                 <Copy size={16} /> 复制
               </button>
-              <button className="button secondary" onClick={downloadMarkdown}>
-                <Download size={16} /> 下载
+              <button className="button secondary" onClick={() => void exportMarkdown()}>
+                <Download size={16} /> 导出
+              </button>
+              <button className="button secondary" onClick={exportAiInput}>
+                <FileJson size={16} /> AI 输入
               </button>
             </div>
           </section>
@@ -362,4 +407,19 @@ function toFileName(value: string): string {
       .replace(/\s+/g, "-")
       .slice(0, 80) || "trail"
   );
+}
+
+function getExportBaseName(session: TrailSession): string {
+  const date = new Date().toISOString().slice(0, 10);
+  return `Trail-${toFileName(session.name || session.groupTitle || "research")}-${date}`;
+}
+
+function downloadTextFile(content: string, fileName: string, type: string): void {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

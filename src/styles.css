@@ -102,6 +102,10 @@ textarea:focus-visible {
   gap: 12px;
 }
 
+.toolbar {
+  flex-wrap: wrap;
+}
+
 .header-row {
   align-items: center;
   justify-content: space-between;
@@ -305,6 +309,12 @@ textarea:focus-visible {
   max-width: 440px;
   padding: 8px 10px;
   font-weight: 800;
+}
+
+.goal-input {
+  min-height: 76px;
+  resize: vertical;
+  line-height: 1.5;
 }
 
 .button {

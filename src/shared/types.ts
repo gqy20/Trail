@@ -79,6 +79,7 @@ export type TrailSession = {
   id: string;
   source: TrailSource;
   name: string;
+  goal?: string;
   groupId?: number;
   groupTitle?: string;
   groupColor?: string;
@@ -91,6 +92,68 @@ export type TrailSession = {
   events: TrailEvent[];
   pageStats?: TrailPageStat[];
   markdown?: string;
+  exportFileName?: string;
+  lastExportedAt?: number;
+};
+
+export type ResearchReportSourceInput = {
+  id: string;
+  title: string;
+  url: string;
+  domain: string;
+  level: TrailSourceLevel;
+  activeMs: number;
+  visitCount: number;
+  selectedCount: number;
+  copiedCount: number;
+  outboundClickCount: number;
+};
+
+export type ResearchReportClipInput = {
+  id: string;
+  status: "copied" | "selected";
+  kind: TrailCopyKind;
+  text: string;
+  context?: string;
+  sourceId?: string;
+  sourceUrl?: string;
+  domain?: string;
+  sectionTitle?: string;
+  privacyLevel?: TrailPrivacyLevel;
+  capturedAt: number;
+};
+
+export type ResearchReportClickInput = {
+  id: string;
+  sourceId?: string;
+  sourceUrl?: string;
+  sourceDomain?: string;
+  targetUrl: string;
+  targetDomain?: string;
+  targetText?: string;
+  kind: TrailLinkKind;
+  clickedAt: number;
+};
+
+export type ResearchReportInput = {
+  schemaVersion: 1;
+  sessionId: string;
+  title: string;
+  goal?: string;
+  source: TrailSource;
+  startedAt: number;
+  endedAt?: number;
+  generatedAt: number;
+  summary: {
+    sourceCount: number;
+    clipCount: number;
+    copiedClipCount: number;
+    selectedClipCount: number;
+    clickCount: number;
+  };
+  sources: ResearchReportSourceInput[];
+  clips: ResearchReportClipInput[];
+  clickPath: ResearchReportClickInput[];
 };
 
 export type GroupContext = {
