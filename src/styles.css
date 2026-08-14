@@ -235,6 +235,61 @@ textarea:focus-visible {
   font: 12px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
+.run-export-actions {
+  margin-top: 2px;
+}
+
+.result-table-wrap {
+  margin-top: 10px;
+  overflow-x: auto;
+  border: 1px solid var(--trail-border-soft);
+  border-radius: 7px;
+  background: var(--trail-surface);
+}
+
+.result-preview-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.result-preview-table th,
+.result-preview-table td {
+  max-width: 260px;
+  padding: 8px 10px;
+  overflow: hidden;
+  border-right: 1px solid var(--trail-border-soft);
+  border-bottom: 1px solid var(--trail-border-soft);
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.result-preview-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--trail-surface-muted);
+  color: var(--trail-muted);
+  font-weight: 750;
+}
+
+.result-preview-table th:last-child,
+.result-preview-table td:last-child {
+  border-right: 0;
+}
+
+.result-preview-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.result-preview-note {
+  padding: 8px 10px;
+}
+
 .visually-hidden {
   position: absolute !important;
   width: 1px !important;
@@ -259,6 +314,76 @@ textarea:focus-visible {
   .target-tab-panel {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .tools-shell {
+    padding: 12px;
+  }
+
+  .tools-header {
+    align-items: flex-start;
+  }
+
+  .tools-header .page-title {
+    font-size: 21px;
+  }
+
+  .target-tab-panel {
+    padding: 11px;
+  }
+
+  .yaml-editor {
+    min-height: 150px;
+  }
+
+  .run-export-actions .button {
+    flex: 1 1 130px;
+  }
+
+  .result-preview-table {
+    min-width: 0;
+  }
+
+  .result-preview-table thead {
+    display: none;
+  }
+
+  .result-preview-table,
+  .result-preview-table tbody,
+  .result-preview-table tr,
+  .result-preview-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .result-preview-table tr {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--trail-border-soft);
+  }
+
+  .result-preview-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .result-preview-table td {
+    display: grid;
+    grid-template-columns: minmax(80px, 0.34fr) minmax(0, 1fr);
+    gap: 10px;
+    max-width: none;
+    padding: 5px 0;
+    border: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .result-preview-table td::before {
+    content: attr(data-label);
+    color: var(--trail-muted);
+    font-weight: 700;
   }
 }
 

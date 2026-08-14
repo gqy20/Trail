@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ExternalLink, FileUp, Play, RefreshCw, Trash2, Wrench } from "lucide-react";
+import { Download, ExternalLink, FileJson, FileUp, Play, RefreshCw, Trash2, Wrench } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
@@ -29,6 +29,13 @@ function BrowserToolsApp() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (targetTabId !== undefined) return;
+    const handleTabChange = () => void refresh();
+    chrome.tabs.onActivated.addListener(handleTabChange);
+    return () => chrome.tabs.onActivated.removeListener(handleTabChange);
+  }, [targetTabId]);
 
   const selectedTool = state?.tools.find((tool) => tool.id === selectedId);
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
@@ -257,6 +264,7 @@ function BrowserToolsApp() {
                     <span><strong>{run.toolName}</strong><span className="muted text-small">{formatDateTime(run.savedAt)}</span></span>
                     <span className={`mini-badge run-${run.status}`}>{statusLabel(run.status)}</span>
                   </summary>
+                  <RunExportActions result={run} />
                   <RunCollections data={run.data} />
                   {run.error ? <p className="error-text">{run.error}</p> : null}
                 </details>
@@ -325,6 +333,7 @@ function RunResult({ result, title }: { result: BrowserToolRunResult; title: str
         <strong>{title}</strong>
         <span className={`mini-badge run-${result.status}`}>{statusLabel(result.status)}</span>
       </div>
+      <RunExportActions result={result} />
       <RunCollections data={result.data} />
       {result.warnings.map((warning) => <p className="muted" key={warning}>{warning}</p>)}
       {result.error ? <p className="error-text">{result.error}</p> : null}
@@ -337,14 +346,106 @@ function RunCollections({ data }: { data: BrowserToolRunResult["data"] }) {
   return (
     <div className="run-collections">
       {entries.map(([name, records]) => (
-        <details key={name}>
-          <summary><strong>{name}</strong><span className="badge">{records.length}</span></summary>
-          <pre>{JSON.stringify(records.slice(0, 20), null, 2)}</pre>
-        </details>
+        <CollectionPreview name={name} records={records} key={name} />
       ))}
       {entries.length === 0 ? <span className="muted">没有提取到数据。</span> : null}
     </div>
   );
+}
+
+function CollectionPreview({ name, records }: { name: string; records: Array<Record<string, unknown>> }) {
+  const columns = getCollectionColumns(records).slice(0, 10);
+  return (
+    <details open>
+      <summary><strong>{name}</strong><span className="badge">{records.length}</span></summary>
+      {records.length > 0 ? (
+        <div className="result-table-wrap">
+          <table className="result-preview-table">
+            <thead>
+              <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
+            </thead>
+            <tbody>
+              {records.slice(0, 20).map((record, index) => (
+                <tr key={index}>
+                  {columns.map((column) => <td data-label={column} key={column}>{formatCellValue(record[column])}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {records.length > 20 ? <div className="muted text-small result-preview-note">预览前 20 条，导出包含全部已保存记录。</div> : null}
+        </div>
+      ) : <span className="muted">没有记录。</span>}
+    </details>
+  );
+}
+
+function RunExportActions({ result }: { result: BrowserToolRunResult }) {
+  return (
+    <div className="toolbar run-export-actions">
+      <button className="button secondary" onClick={() => exportRunCsv(result)}>
+        <Download size={15} /> 导出 CSV
+      </button>
+      <button className="button secondary" onClick={() => exportRunJson(result)}>
+        <FileJson size={15} /> 导出 JSON
+      </button>
+    </div>
+  );
+}
+
+function exportRunCsv(result: BrowserToolRunResult): void {
+  const collections = Object.entries(result.data);
+  const columns = [...new Set(collections.flatMap(([, records]) => getCollectionColumns(records)))];
+  const includeCollection = collections.length > 1;
+  const header = includeCollection ? ["_collection", ...columns] : columns;
+  const rows = collections.flatMap(([collection, records]) =>
+    records.map((record) => {
+      const values = columns.map((column) => formatCsvValue(record[column]));
+      return includeCollection ? [collection, ...values] : values;
+    })
+  );
+  const csv = [header, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+  downloadTextFile(`\uFEFF${csv}`, `${getRunFileBase(result)}.csv`, "text/csv;charset=utf-8");
+}
+
+function exportRunJson(result: BrowserToolRunResult): void {
+  downloadTextFile(JSON.stringify(result, null, 2), `${getRunFileBase(result)}.json`, "application/json;charset=utf-8");
+}
+
+function getCollectionColumns(records: Array<Record<string, unknown>>): string[] {
+  return [...new Set(records.flatMap((record) => Object.keys(record)))];
+}
+
+function formatCellValue(value: unknown): string {
+  if (value === undefined || value === null) return "—";
+  if (Array.isArray(value)) return value.map(formatCsvValue).join("；");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function formatCsvValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (Array.isArray(value)) return value.map(formatCsvValue).join("; ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function escapeCsvCell(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function getRunFileBase(result: BrowserToolRunResult): string {
+  const timestamp = new Date(result.finishedAt).toISOString().replace(/[:.]/g, "-");
+  return `Trail-${result.toolId}-${timestamp}`;
+}
+
+function downloadTextFile(content: string, fileName: string, type: string): void {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function statusLabel(status: BrowserToolRunResult["status"]): string {

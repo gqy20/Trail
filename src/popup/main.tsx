@@ -53,6 +53,18 @@ function PopupApp() {
     setState((current) => (current ? { ...current, interactionSettings } : current));
   }
 
+  async function openBrowserTools() {
+    const targetTabId = state?.currentGroup.activeTab?.id;
+    if (targetTabId !== undefined && chrome.sidePanel?.open) {
+      await chrome.sidePanel.open({ tabId: targetTabId });
+      window.close();
+      return;
+    }
+
+    const query = targetTabId === undefined ? "" : `?targetTabId=${targetTabId}`;
+    await chrome.tabs.create({ url: chrome.runtime.getURL(`entries/tools.html${query}`) });
+  }
+
   const currentGroup = state?.currentGroup;
   const activeSession = state?.activeSession;
   const displayName = name.trim() || defaultName;
@@ -76,11 +88,7 @@ function PopupApp() {
             className="icon-button"
             title="Browser Tools"
             aria-label="Browser Tools"
-            onClick={() => {
-              const targetTabId = state?.currentGroup.activeTab?.id;
-              const query = targetTabId === undefined ? "" : `?targetTabId=${targetTabId}`;
-              void chrome.tabs.create({ url: chrome.runtime.getURL(`entries/tools.html${query}`) });
-            }}
+            onClick={() => void openBrowserTools()}
           >
             <Wrench size={17} />
           </button>
