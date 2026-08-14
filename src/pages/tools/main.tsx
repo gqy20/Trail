@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Download, ExternalLink, FileJson, FileUp, ListPlus, Play, RefreshCw, Settings2, Trash2, Wrench } from "lucide-react";
+import { Download, ExternalLink, FileJson, FileUp, History, Play, RefreshCw, Settings2, Trash2, Wrench } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
@@ -25,6 +25,7 @@ function BrowserToolsApp() {
   const [autoExportCsv, setAutoExportCsv] = useState(true);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
+  const [activeView, setActiveView] = useState<"collect" | "results" | "history" | "settings">("collect");
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keywordFileInputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +47,6 @@ function BrowserToolsApp() {
   const batchKeywords = useMemo(() => parseKeywordImport(keywordDraft), [keywordDraft]);
   const batchLimit = selectedTool?.definition.batch?.max_keywords || 25;
   const batchTooLarge = batchKeywords.length > batchLimit;
-  const recentRuns = (state?.recentRuns || []).filter((run) => run.runId !== lastResult?.runId);
 
   useEffect(() => {
     if (!selectedTool) {
@@ -107,6 +107,7 @@ function BrowserToolsApp() {
         userInitiated: true
       });
       setLastResult(result);
+      setActiveView("results");
       await refresh(selectedTool.id);
     } catch (err) {
       setError(toErrorMessage(err));
@@ -132,6 +133,7 @@ function BrowserToolsApp() {
         userInitiated: true
       });
       setLastResult(result);
+      setActiveView("results");
       if (autoExportCsv) exportRunCsv(result);
       await refresh(selectedTool.id);
     } catch (err) {
@@ -171,125 +173,50 @@ function BrowserToolsApp() {
         <header className="header-row tools-header">
           <div className="brand">
             <BrandMark />
-            <div>
-              <h1 className="page-title">文献采集</h1>
-              <div className="muted text-small">批量检索与结构化导出</div>
-            </div>
+            <h1 className="page-title">文献采集</h1>
           </div>
-          <button className="icon-button" title="刷新页面状态" aria-label="刷新页面状态" disabled={busy} onClick={() => void refresh(selectedId)}>
-            <RefreshCw size={16} />
-          </button>
+          <nav className="tools-nav" aria-label="文献采集导航">
+            <button className={activeView === "collect" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collect")}>采集</button>
+            {lastResult ? <button className={activeView === "results" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("results")}>结果</button> : null}
+            <button className={activeView === "history" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("history")}>
+              <History size={15} /> 历史
+            </button>
+            <button className={activeView === "settings" ? "icon-button active" : "icon-button"} title="设置" aria-label="设置" onClick={() => setActiveView("settings")}>
+              <Settings2 size={16} />
+            </button>
+          </nav>
         </header>
-
-        <section className="target-tab-panel">
-          <span className={state?.targetTab ? "target-status online" : "target-status"} aria-hidden="true" />
-          <div className="target-tab-copy">
-            <span className="muted text-small">当前网页</span>
-            <strong title={state?.targetTab?.title}>{state?.targetTab?.title || "未连接普通网页"}</strong>
-          </div>
-          {state?.targetTab?.url ? (
-            <a className="icon-button" title="在标签页中打开" aria-label="在标签页中打开" href={state.targetTab.url} target="_blank" rel="noreferrer">
-              <ExternalLink size={15} />
-            </a>
-          ) : null}
-        </section>
 
         {error ? <div className="card error-text">{error}</div> : null}
 
-        <div className="tools-grid">
-          <aside className="stack">
-            <section className="panel stack tool-library">
-              <div className="header-row">
-                <strong className="section-title">工具</strong>
-                <span className="muted text-small">{state?.tools.length || 0} 个</span>
-              </div>
-              <div className="tool-list">
-                {(state?.tools || []).map((tool) => {
-                  const matched = state?.matchedToolIds.includes(tool.id);
-                  return (
-                    <button
-                      className={selectedId === tool.id ? "tool-list-item active" : "tool-list-item"}
-                      key={tool.id}
-                      onClick={() => setSelectedId(tool.id)}
-                    >
-                      <span>
-                        <strong>{tool.definition.name}</strong>
-                      </span>
-                      <span className={matched ? "tool-state available" : "tool-state"}>{matched ? "可用" : "其他页面"}</span>
-                    </button>
-                  );
-                })}
-                {state?.tools.length === 0 ? <p className="muted">还没有导入 Browser Tool。</p> : null}
-              </div>
-            </section>
+        {activeView === "collect" ? (
+          <section className="collector-view">
+            <div className={isMatched ? "connection-line connected" : "connection-line"}>
+              <span className={isMatched ? "target-status online" : "target-status"} aria-hidden="true" />
+              <span>{isMatched ? `已连接 · ${getPlatformName(state?.targetTab?.url)}` : "当前网页暂不支持采集"}</span>
+            </div>
 
-            <details className="panel stack tool-config-disclosure">
-              <summary>
-                <span><Settings2 size={16} /> 工具配置</span>
-                <span className="muted text-small">YAML</span>
-              </summary>
-              <textarea
-                className="input yaml-editor"
-                value={yamlDraft}
-                spellCheck={false}
-                placeholder="粘贴 tool.yml，或从本地选择文件"
-                onChange={(event) => setYamlDraft(event.target.value)}
-              />
-              <input
-                ref={fileInputRef}
-                className="visually-hidden"
-                type="file"
-                accept=".yml,.yaml,text/yaml,application/yaml"
-                onChange={(event) => void loadFile(event.target.files?.[0])}
-              />
-              <div className="toolbar">
-                <button className="button secondary" onClick={() => fileInputRef.current?.click()}>
-                  <FileUp size={16} /> 选择文件
-                </button>
-                <button className="button primary" disabled={busy || !yamlDraft.trim()} onClick={() => void importTool()}>
-                  导入或更新
-                </button>
-              </div>
-            </details>
-          </aside>
-
-          <section className="stack tools-main">
             {selectedTool ? (
-              <section className="panel stack tool-runner">
-                <div className="header-row tool-runner-header">
-                  <div className="tool-heading">
-                    <span className="tool-eyebrow">当前工具 · v{selectedTool.definition.version}</span>
-                    <h2 className="tool-title">{selectedTool.definition.name}</h2>
-                    {selectedTool.definition.description ? <p className="muted tool-description">{selectedTool.definition.description}</p> : null}
-                  </div>
-                  <button className="icon-button danger" title="删除工具" aria-label="删除工具" onClick={() => void deleteTool(selectedTool)}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-
-                <ParameterForm
-                  definitions={selectedTool.definition.parameters || {}}
-                  values={parameters}
-                  onChange={(name, value) => setParameters((current) => ({ ...current, [name]: value }))}
-                />
-
+              <div className="collector-form">
                 {selectedTool.definition.batch ? (
-                  <div className="batch-import stack">
-                    <div className="header-row">
-                      <div>
-                        <div className="setting-title"><ListPlus size={17} /><strong>检索词</strong></div>
-                        <div className="muted text-small">每行一个，也可导入 TXT 或 CSV</div>
+                  <section className="keyword-section">
+                    <div className="field-heading">
+                      <label htmlFor="batch-keywords">检索词</label>
+                      <div className="field-actions">
+                        <button className="text-button" disabled={busy} onClick={() => keywordFileInputRef.current?.click()}>
+                          <FileUp size={14} /> 导入 TXT/CSV
+                        </button>
+                        {keywordDraft ? <button className="text-button muted-action" disabled={busy} onClick={() => setKeywordDraft("")}>清空</button> : null}
                       </div>
-                      <span className={batchTooLarge ? "mini-badge run-failed" : "badge"}>{batchKeywords.length}/{batchLimit}</span>
                     </div>
                     <textarea
-                      className="input keyword-editor"
+                      id="batch-keywords"
+                      className="input keyword-editor collector-keywords"
                       value={keywordDraft}
                       spellCheck={false}
-                      placeholder={"人工智能\n机器学习\n大语言模型"}
+                      placeholder={"每行输入一个检索词\n例如：大语言模型"}
                       onChange={(event) => setKeywordDraft(event.target.value)}
                     />
-                    {batchTooLarge ? <div className="error-text text-small">当前工具最多支持 {batchLimit} 个检索词。</div> : null}
                     <input
                       ref={keywordFileInputRef}
                       className="visually-hidden"
@@ -300,59 +227,141 @@ function BrowserToolsApp() {
                         event.currentTarget.value = "";
                       }}
                     />
-                    <label className="batch-export-option">
-                      <input type="checkbox" checked={autoExportCsv} onChange={(event) => setAutoExportCsv(event.target.checked)} />
-                      完成后自动导出 CSV
-                    </label>
-                    <div className="toolbar">
-                      <button className="button secondary" disabled={busy} onClick={() => keywordFileInputRef.current?.click()}>
-                        <FileUp size={16} /> 导入文件
-                      </button>
-                      <button
-                        className="button primary"
-                        disabled={busy || !isMatched || !state?.targetTab || batchKeywords.length === 0 || batchTooLarge}
-                        onClick={() => void runBatch()}
-                      >
-                        <Play size={16} /> {busyAction === "batch" ? "正在检索…" : `检索并提取 ${batchKeywords.length} 个词`}
-                      </button>
+                    <div className="keyword-summary">
+                      <span className={batchTooLarge ? "error-text" : "muted"}>{batchKeywords.length} / {batchLimit} 个检索词</span>
+                      {batchTooLarge ? <span className="error-text">请减少 {batchKeywords.length - batchLimit} 个</span> : null}
                     </div>
-                  </div>
+                  </section>
                 ) : null}
 
-                <button className="button subtle full single-run-button" disabled={busy || !isMatched || !state?.targetTab} onClick={() => void runTool()}>
-                  <Play size={15} /> {busyAction === "single" ? "正在提取…" : isMatched ? "仅提取当前结果页" : "当前网页不适用此工具"}
-                </button>
-              </section>
+                <section className="collection-options">
+                  {selectedTool.definition.parameters?.max_pages ? (
+                    <label className="page-sentence">
+                      <span>每个检索词提取</span>
+                      <input
+                        className="page-count-input"
+                        type="number"
+                        min={selectedTool.definition.parameters.max_pages.min}
+                        max={selectedTool.definition.parameters.max_pages.max}
+                        value={parameters.max_pages === undefined ? "" : String(parameters.max_pages)}
+                        onChange={(event) => setParameters((current) => ({ ...current, max_pages: event.target.value === "" ? undefined : Number(event.target.value) }))}
+                      />
+                      <span>页</span>
+                    </label>
+                  ) : null}
+                  <label className="batch-export-option">
+                    <input type="checkbox" checked={autoExportCsv} onChange={(event) => setAutoExportCsv(event.target.checked)} />
+                    完成后自动导出 CSV
+                  </label>
+                </section>
+
+                {selectedTool.definition.batch ? (
+                  <button
+                    className="button primary full collect-button"
+                    disabled={busy || !isMatched || !state?.targetTab || batchKeywords.length === 0 || batchTooLarge}
+                    onClick={() => void runBatch()}
+                  >
+                    <Play size={16} /> {busyAction === "batch" ? "正在检索…" : batchKeywords.length ? `开始采集 ${batchKeywords.length} 个检索词` : "输入检索词后开始"}
+                  </button>
+                ) : (
+                  <button className="button primary full collect-button" disabled={busy || !isMatched || !state?.targetTab} onClick={() => void runTool()}>
+                    <Play size={16} /> {busyAction === "single" ? "正在提取…" : "提取当前页面"}
+                  </button>
+                )}
+
+              </div>
             ) : (
-              <section className="panel empty-tools-state">
+              <section className="empty-tools-state">
                 <Wrench size={24} />
-                <strong>选择或导入一个 Browser Tool</strong>
-                <span className="muted">工具会在匹配的目标标签页中运行。</span>
+                <strong>尚未配置采集工具</strong>
+                <button className="button secondary" onClick={() => setActiveView("settings")}>前往设置</button>
               </section>
             )}
+          </section>
+        ) : null}
 
-            {lastResult ? <RunResult result={lastResult} title="本次运行" /> : null}
+        {activeView === "results" ? (
+          lastResult ? <RunResult result={lastResult} title="本次采集" /> : <EmptyResult onBack={() => setActiveView("collect")} />
+        ) : null}
 
-            <details className="panel stack history-panel">
-              <summary>
-                <strong>历史记录</strong>
-                <span className="muted text-small">{recentRuns.length} 次</span>
-              </summary>
-              {recentRuns.map((run) => (
-                <details className="run-history-item" key={run.runId}>
+        {activeView === "history" ? (
+          <section className="history-view stack">
+            <div className="view-heading">
+              <h2>历史记录</h2>
+              <span className="muted">{state?.recentRuns.length || 0} 次采集</span>
+            </div>
+            {(state?.recentRuns || []).map((run) => (
+                <details className="panel run-history-item" key={run.runId}>
                   <summary>
-                    <span><strong>{run.toolName}</strong><span className="muted text-small">{formatDateTime(run.savedAt)}</span></span>
+                    <span><strong>{getPlatformName(run.pageUrl)} · {countRecords(run.data)} 条文献</strong><span className="muted text-small">{formatDateTime(run.savedAt)}</span></span>
                     <span className={`mini-badge run-${run.status}`}>{statusLabel(run.status)}</span>
                   </summary>
                   <RunExportActions result={run} />
                   <RunCollections data={run.data} initiallyOpen={false} />
                   {run.error ? <p className="error-text">{run.error}</p> : null}
                 </details>
-              ))}
-              {recentRuns.length === 0 ? <p className="muted text-small">暂无其他运行记录。</p> : null}
+            ))}
+            {state?.recentRuns.length === 0 ? <EmptyResult onBack={() => setActiveView("collect")} /> : null}
+          </section>
+        ) : null}
+
+        {activeView === "settings" ? (
+          <section className="settings-view stack">
+            <div className="view-heading header-row">
+              <div><h2>设置</h2><span className="muted">工具和高级参数</span></div>
+              <button className="icon-button" title="刷新页面状态" aria-label="刷新页面状态" disabled={busy} onClick={() => void refresh(selectedId)}><RefreshCw size={16} /></button>
+            </div>
+
+            <section className="settings-section stack">
+              <div className="section-heading"><strong>当前网页</strong></div>
+              <div className="settings-target-row">
+                <span className={isMatched ? "target-status online" : "target-status"} />
+                <span>{state?.targetTab?.title || "未连接普通网页"}</span>
+                {state?.targetTab?.url ? <a className="icon-button" href={state.targetTab.url} target="_blank" rel="noreferrer" aria-label="打开当前网页"><ExternalLink size={15} /></a> : null}
+              </div>
+              {selectedTool?.definition.batch ? (
+                <button className="button secondary" disabled={busy || !isMatched || !state?.targetTab} onClick={() => void runTool()}>
+                  <Play size={15} /> {busyAction === "single" ? "正在提取当前页…" : "只提取当前结果页"}
+                </button>
+              ) : null}
+            </section>
+
+            <section className="settings-section stack">
+              <div className="section-heading"><strong>采集工具</strong><span className="muted text-small">{state?.tools.length || 0} 个</span></div>
+              <div className="tool-list">
+                {(state?.tools || []).map((tool) => {
+                  const matched = state?.matchedToolIds.includes(tool.id);
+                  return (
+                    <div className={selectedId === tool.id ? "tool-settings-row active" : "tool-settings-row"} key={tool.id}>
+                      <button className="tool-select-button" onClick={() => setSelectedId(tool.id)}>
+                        <span><strong>{tool.definition.name}</strong><small>v{tool.definition.version}</small></span>
+                        <span className={matched ? "tool-state available" : "tool-state"}>{matched ? "当前可用" : "其他页面"}</span>
+                      </button>
+                      <button className="icon-button danger" aria-label={`删除${tool.definition.name}`} onClick={() => void deleteTool(tool)}><Trash2 size={15} /></button>
+                    </div>
+                  );
+                })}
+              </div>
+              {selectedTool ? (
+                <ParameterForm
+                  definitions={Object.fromEntries(Object.entries(selectedTool.definition.parameters || {}).filter(([name]) => name !== "max_pages"))}
+                  values={parameters}
+                  onChange={(name, value) => setParameters((current) => ({ ...current, [name]: value }))}
+                />
+              ) : null}
+            </section>
+
+            <details className="settings-section stack yaml-settings">
+              <summary><strong>导入或更新 YAML 工具</strong><span className="muted text-small">高级</span></summary>
+              <textarea className="input yaml-editor" value={yamlDraft} spellCheck={false} placeholder="粘贴 tool.yml，或选择本地文件" onChange={(event) => setYamlDraft(event.target.value)} />
+              <input ref={fileInputRef} className="visually-hidden" type="file" accept=".yml,.yaml,text/yaml,application/yaml" onChange={(event) => void loadFile(event.target.files?.[0])} />
+              <div className="toolbar">
+                <button className="button secondary" onClick={() => fileInputRef.current?.click()}><FileUp size={16} /> 选择文件</button>
+                <button className="button primary" disabled={busy || !yamlDraft.trim()} onClick={() => void importTool()}>导入或更新</button>
+              </div>
             </details>
           </section>
-        </div>
+        ) : null}
       </div>
     </main>
   );
@@ -406,6 +415,16 @@ function ParameterForm({
   );
 }
 
+function EmptyResult({ onBack }: { onBack: () => void }) {
+  return (
+    <section className="empty-result">
+      <strong>还没有采集结果</strong>
+      <span className="muted">输入检索词并完成一次采集后，结果会显示在这里。</span>
+      <button className="button secondary" onClick={onBack}>开始采集</button>
+    </section>
+  );
+}
+
 function RunResult({ result, title }: { result: BrowserToolRunResult; title: string }) {
   const recordCount = countRecords(result.data);
   return (
@@ -413,7 +432,7 @@ function RunResult({ result, title }: { result: BrowserToolRunResult; title: str
       <div className="header-row run-result-header">
         <div className="run-result-heading">
           <span className="tool-eyebrow">{title}</span>
-          <strong>{recordCount} 条记录</strong>
+          <strong>{recordCount} 条文献</strong>
         </div>
         <div className="run-result-controls">
           <span className={`mini-badge run-${result.status}`}>{statusLabel(result.status)}</span>
@@ -437,36 +456,50 @@ function RunCollections({ data, initiallyOpen = true }: { data: BrowserToolRunRe
   return (
     <div className="run-collections">
       {entries.map(([name, records]) => (
-        <CollectionPreview name={name} records={records} initiallyOpen={initiallyOpen} key={name} />
+        <CollectionPreview name={name} records={records} initiallyOpen={initiallyOpen} showHeader={entries.length > 1} key={name} />
       ))}
       {entries.length === 0 ? <span className="muted">没有提取到数据。</span> : null}
     </div>
   );
 }
 
-function CollectionPreview({ name, records, initiallyOpen }: { name: string; records: Array<Record<string, unknown>>; initiallyOpen: boolean }) {
+function CollectionPreview({
+  name,
+  records,
+  initiallyOpen,
+  showHeader
+}: {
+  name: string;
+  records: Array<Record<string, unknown>>;
+  initiallyOpen: boolean;
+  showHeader: boolean;
+}) {
   const columns = getOrderedColumns(records).slice(0, 10);
-  return (
+  const content = records.length > 0 ? (
+    <div className="result-table-wrap">
+      <table className="result-preview-table">
+        <thead>
+          <tr>{columns.map((column) => <th key={column}>{columnLabel(column)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {records.slice(0, 20).map((record, index) => (
+            <tr key={index}>
+              {columns.map((column) => <td data-label={columnLabel(column)} key={column}>{renderCellValue(record[column])}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {records.length > 20 ? <div className="muted text-small result-preview-note">预览前 20 条，导出包含全部已保存记录。</div> : null}
+    </div>
+  ) : <span className="muted">没有记录。</span>;
+
+  return showHeader ? (
     <details open={initiallyOpen}>
       <summary><strong>{collectionLabel(name)}</strong><span className="muted text-small">{records.length} 条</span></summary>
-      {records.length > 0 ? (
-        <div className="result-table-wrap">
-          <table className="result-preview-table">
-            <thead>
-              <tr>{columns.map((column) => <th key={column}>{columnLabel(column)}</th>)}</tr>
-            </thead>
-            <tbody>
-              {records.slice(0, 20).map((record, index) => (
-                <tr key={index}>
-                  {columns.map((column) => <td data-label={columnLabel(column)} key={column}>{renderCellValue(record[column])}</td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {records.length > 20 ? <div className="muted text-small result-preview-note">预览前 20 条，导出包含全部已保存记录。</div> : null}
-        </div>
-      ) : <span className="muted">没有记录。</span>}
+      {content}
     </details>
+  ) : (
+    <div className="collection-preview">{content}</div>
   );
 }
 
@@ -621,6 +654,18 @@ function statusLabel(status: BrowserToolRunResult["status"]): string {
     case "partial": return "部分完成";
     case "cancelled": return "已取消";
     case "failed": return "失败";
+  }
+}
+
+function getPlatformName(pageUrl?: string): string {
+  if (!pageUrl) return "当前网页";
+  try {
+    const hostname = new URL(pageUrl).hostname;
+    if (hostname.includes("cnki")) return "中国知网";
+    if (hostname.includes("webofscience")) return "Web of Science";
+    return hostname;
+  } catch {
+    return "当前网页";
   }
 }
 
