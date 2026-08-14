@@ -180,7 +180,8 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
             selector: field.selector === undefined ? undefined : validatedSelector(field.selector, `${path}.fields.${fieldName}.selector`),
             attribute: attribute as BrowserToolFieldDefinition["attribute"],
             transforms: transforms as BrowserToolTransform[] | undefined,
-            optional: readOptionalBoolean(field.optional, `${path}.fields.${fieldName}.optional`)
+            optional: readOptionalBoolean(field.optional, `${path}.fields.${fieldName}.optional`),
+            multiple: readOptionalBoolean(field.multiple, `${path}.fields.${fieldName}.multiple`)
           };
         }
         if (Object.keys(fields).length === 0) throw new Error(`${path}.fields 不能为空。`);
@@ -192,14 +193,21 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
         };
       }
       case "repeat": {
-        const max = readNumber(step.max, `${path}.max`);
-        if (!Number.isInteger(max) || max < 1 || max > BROWSER_TOOL_LIMITS.maxRepeat) {
-          throw new Error(`${path}.max 必须是 1-${BROWSER_TOOL_LIMITS.maxRepeat} 的整数。`);
+        const max = typeof step.max === "string" ? readString(step.max, `${path}.max`) : readNumber(step.max, `${path}.max`);
+        if (typeof max === "number" && (!Number.isInteger(max) || max < 1 || max > BROWSER_TOOL_LIMITS.maxRepeat)) {
+          throw new Error(`${path}.max 必须是 1-${BROWSER_TOOL_LIMITS.maxRepeat} 的整数或参数模板。`);
+        }
+        if (typeof max === "string" && !/\{\{\s*parameters\.[a-zA-Z0-9_-]+\s*\}\}|\$\{parameters\.[a-zA-Z0-9_-]+\}/.test(max)) {
+          throw new Error(`${path}.max 字符串必须引用 parameters 中的数字参数。`);
         }
         return {
           action,
           max,
-          steps: validateSteps(asArray(step.steps, `${path}.steps`), depth + 1, countStep)
+          steps: validateSteps(asArray(step.steps, `${path}.steps`), depth + 1, countStep),
+          between:
+            step.between === undefined
+              ? undefined
+              : validateSteps(asArray(step.between, `${path}.between`), depth + 1, countStep)
         };
       }
       case "pause_for_user":

@@ -1,0 +1,91 @@
+schema_version: 1
+
+id: cnki-literature-results
+name: 知网文献结果提取
+description: 从当前知网检索结果页逐页提取题名、作者、来源、日期、文献类型和计数信息
+version: 0.1.0
+
+match:
+  domains:
+    - kns.cnki.net
+    - "*.cnki.mdjsf.utuvpn.utuedu.com"
+  urls:
+    - "*/kns8s/defaultresult/index*"
+
+parameters:
+  max_pages:
+    type: number
+    label: 提取页数
+    required: true
+    default: 3
+    min: 1
+    max: 20
+
+selectors:
+  result_rows: "table.result-table-list tbody tr"
+  first_title: "table.result-table-list tbody tr:first-child td.name a.fz14"
+  next_page: "#PageNext"
+
+workflow:
+  - action: wait_for
+    selector: "{{ selectors.result_rows }}"
+    timeout_ms: 20000
+
+  - action: repeat
+    max: "{{ parameters.max_pages }}"
+    steps:
+      - action: extract
+        collection: literature
+        selector: "{{ selectors.result_rows }}"
+        fields:
+          title:
+            selector: "td.name a.fz14"
+            attribute: text
+            transforms: [normalize_whitespace]
+          url:
+            selector: "td.name a.fz14"
+            attribute: href
+          authors:
+            selector: "td.author a"
+            attribute: text
+            transforms: [normalize_whitespace]
+            multiple: true
+            optional: true
+          source:
+            selector: "td.source a"
+            attribute: text
+            transforms: [normalize_whitespace]
+            optional: true
+          published_at:
+            selector: "td.date"
+            attribute: text
+            transforms: [normalize_whitespace]
+            optional: true
+          database:
+            selector: "td.data"
+            attribute: text
+            transforms: [normalize_whitespace]
+            optional: true
+          citation_count:
+            selector: "td.quote"
+            attribute: text
+            transforms: [parse_number]
+            optional: true
+          download_count:
+            selector: "td.download"
+            attribute: text
+            transforms: [parse_number]
+            optional: true
+    between:
+      - action: click
+        selector: "{{ selectors.next_page }}"
+        optional: true
+        stop_repeat_on_missing: true
+        wait_for_change:
+          selector: "{{ selectors.first_title }}"
+          timeout_ms: 20000
+
+limits:
+  delay_between_actions_ms: 800
+  max_records: 400
+  require_user_activation: true

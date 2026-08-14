@@ -14,6 +14,7 @@ export type BrowserToolFieldDefinition = {
   attribute?: "text" | "href" | "content" | "datetime";
   transforms?: BrowserToolTransform[];
   optional?: boolean;
+  multiple?: boolean;
 };
 
 export type BrowserToolTransform =
@@ -75,8 +76,9 @@ export type BrowserToolExtractStep = {
 
 export type BrowserToolRepeatStep = {
   action: "repeat";
-  max: number;
+  max: number | string;
   steps: BrowserToolStep[];
+  between?: BrowserToolStep[];
 };
 
 export type BrowserToolPauseStep = {

@@ -16,6 +16,8 @@ Browser Tool 是一份受限 YAML 工作流。它复用用户当前 Chrome 页�
 
 字段只允许读取文本、链接、`content` 和 `datetime`。转换只允许使用 `trim`、`normalize_whitespace`、`parse_year`、`parse_number` 和 `split_authors`。YAML 不能执行 JavaScript。
 
+`extract` 字段可以用 `multiple: true` 返回多个匹配元素。`repeat.max` 可以引用数字参数；`repeat.between` 只在相邻迭代之间运行，适合把“提取当前页”和“翻到下一页”分开。
+
 ## 调用链路
 
 扩展页面先发送 `VALIDATE_BROWSER_TOOL_YAML` 校验配置，再由明确的用户操作发送：

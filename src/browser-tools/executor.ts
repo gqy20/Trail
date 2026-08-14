@@ -135,10 +135,18 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
     case "extract":
       return extractCollection(step, context) ? "continue" : insideRepeat ? "stop_repeat" : "continue";
     case "repeat": {
-      for (let index = 0; index < step.max; index += 1) {
+      const requestedMax = typeof step.max === "number" ? step.max : Number(resolve(step.max, context));
+      if (!Number.isInteger(requestedMax) || requestedMax < 1) throw new Error("repeat.max 运行时参数必须是正整数。");
+      const max = Math.min(requestedMax, BROWSER_TOOL_LIMITS.maxRepeat);
+      for (let index = 0; index < max; index += 1) {
         const signal = await executeSteps(step.steps, context, true);
         if (signal === "pause") return signal;
         if (signal === "stop_repeat") break;
+        if (index < max - 1 && step.between?.length) {
+          const betweenSignal = await executeSteps(step.between, context, true);
+          if (betweenSignal === "pause") return betweenSignal;
+          if (betweenSignal === "stop_repeat") break;
+        }
       }
       return "continue";
     }
@@ -175,8 +183,19 @@ function extractCollection(step: BrowserToolExtractStep, context: ExecutionConte
 }
 
 function extractField(root: Element, field: BrowserToolFieldDefinition, context: ExecutionContext): unknown {
+  if (field.multiple) {
+    const elements = field.selector ? [...root.querySelectorAll(resolve(field.selector, context))] : [root];
+    if (elements.length === 0) return undefined;
+    return elements
+      .map((element) => extractElementValue(element, field))
+      .filter((value) => value !== undefined && value !== "");
+  }
+
   const element = field.selector ? root.querySelector(resolve(field.selector, context)) : root;
-  if (!element) return undefined;
+  return element ? extractElementValue(element, field) : undefined;
+}
+
+function extractElementValue(element: Element, field: BrowserToolFieldDefinition): unknown {
 
   let value: string | null | undefined;
   switch (field.attribute || "text") {
