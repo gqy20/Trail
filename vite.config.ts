@@ -13,12 +13,11 @@ export default defineConfig({
         research: resolve(__dirname, "entries/research.html"),
         sessions: resolve(__dirname, "entries/sessions.html"),
         tools: resolve(__dirname, "entries/tools.html"),
-        background: resolve(__dirname, "src/background/index.ts"),
-        content: resolve(__dirname, "src/content/index.ts")
+        background: resolve(__dirname, "src/background/index.ts")
       },
       output: {
         entryFileNames: (chunk) =>
-          chunk.name === "background" ? "background.js" : chunk.name === "content" ? "content.js" : "assets/[name]-[hash].js",
+          chunk.name === "background" ? "background.js" : "assets/[name]-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]"
       }
