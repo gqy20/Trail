@@ -246,6 +246,14 @@ export type RuntimeMessage =
       tabId?: number;
       userInitiated: true;
     }
+  | {
+      type: "RUN_BROWSER_TOOL_BATCH";
+      toolId: string;
+      keywords: string[];
+      parameters: Record<string, unknown>;
+      tabId?: number;
+      userInitiated: true;
+    }
   | { type: "OPEN_SESSION"; sessionId: string }
   | { type: "DELETE_SESSION"; sessionId: string };
 

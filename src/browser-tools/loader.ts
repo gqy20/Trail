@@ -53,6 +53,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
   if (workflow.length === 0) throw new Error("workflow 不能为空。");
 
   const limits = root.limits === undefined ? undefined : validateLimits(root.limits);
+  const batch = root.batch === undefined ? undefined : validateBatch(root.batch);
 
   return {
     schema_version: 1,
@@ -67,7 +68,31 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     parameters,
     selectors,
     workflow,
+    batch,
     limits
+  };
+}
+
+function validateBatch(value: unknown): BrowserToolDefinition["batch"] {
+  const batch = asRecord(value, "batch");
+  const navigation = asRecord(batch.navigation, "batch.navigation");
+  if (navigation.type !== "query_parameter") throw new Error("batch.navigation.type 目前只支持 query_parameter。");
+  const parameter = readString(navigation.parameter, "batch.navigation.parameter");
+  if (!/^[a-zA-Z0-9_.-]{1,80}$/.test(parameter)) throw new Error("batch.navigation.parameter 无效。");
+
+  const maxKeywords = readOptionalNumber(batch.max_keywords, "batch.max_keywords");
+  if (maxKeywords !== undefined && (!Number.isInteger(maxKeywords) || maxKeywords < 1 || maxKeywords > BROWSER_TOOL_LIMITS.maxBatchKeywords)) {
+    throw new Error(`batch.max_keywords 必须是 1-${BROWSER_TOOL_LIMITS.maxBatchKeywords} 的整数。`);
+  }
+  const delay = readOptionalNumber(batch.delay_between_keywords_ms, "batch.delay_between_keywords_ms");
+  if (delay !== undefined && (delay < 0 || delay > BROWSER_TOOL_LIMITS.maxBatchDelayMs)) {
+    throw new Error("batch.delay_between_keywords_ms 超出范围。");
+  }
+
+  return {
+    navigation: { type: "query_parameter", parameter },
+    max_keywords: maxKeywords,
+    delay_between_keywords_ms: delay
   };
 }
 

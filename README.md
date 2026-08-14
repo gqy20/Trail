@@ -68,7 +68,7 @@ Trail 只在录制期间捕获普通网页中的交互信号，不读取系统�
 - 密码框始终禁止填写；登录、验证码和机构认证应通过 `pause_for_user` 交还用户处理。
 - 后台在执行前会重新校验 YAML，并要求显式的用户启动标记。
 
-定义格式、调用方式和示例位于 [`browser-tools/`](browser-tools/README.md)。popup 中的扳手入口会在当前网页旁打开 Chrome Side Panel，可导入或更新 YAML、填写参数、运行工具、查看表格化结果，并将当前或历史结果导出为 CSV/JSON；不支持 Side Panel 的浏览器会回退到独立页面。暂停后的原地恢复尚未接入。
+定义格式、调用方式和示例位于 [`browser-tools/`](browser-tools/README.md)。popup 中的扳手入口会在当前网页旁打开 Chrome Side Panel，可导入或更新 YAML、填写参数，也可粘贴或从 TXT/CSV 导入一批检索词，逐词检索、提取并汇总带 `_query` 来源列的结果，再将当前或历史结果导出为 CSV/JSON；不支持 Side Panel 的浏览器会回退到独立页面。暂停后的原地恢复尚未接入。
 
 ## 当前边界
 

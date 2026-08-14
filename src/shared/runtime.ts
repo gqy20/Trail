@@ -29,6 +29,7 @@ type RuntimeResponseMap = {
   IMPORT_BROWSER_TOOL: StoredBrowserTool;
   DELETE_BROWSER_TOOL: undefined;
   RUN_STORED_BROWSER_TOOL: BrowserToolRunResult;
+  RUN_BROWSER_TOOL_BATCH: BrowserToolRunResult;
   OPEN_SESSION: undefined;
   DELETE_SESSION: undefined;
 };

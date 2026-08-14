@@ -20,6 +20,7 @@ import {
   importBrowserTool,
   removeBrowserTool,
   runBrowserTool,
+  runStoredBrowserToolBatch,
   runStoredBrowserTool,
   validateBrowserToolYaml
 } from "./browserTools";
@@ -75,6 +76,8 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return removeBrowserTool(message.toolId);
     case "RUN_STORED_BROWSER_TOOL":
       return runStoredBrowserTool(message);
+    case "RUN_BROWSER_TOOL_BATCH":
+      return runStoredBrowserToolBatch(message);
     case "OPEN_SESSION":
       await chrome.tabs.create({ url: chrome.runtime.getURL(`entries/research.html?sessionId=${message.sessionId}`) });
       return undefined;

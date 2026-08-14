@@ -6,6 +6,8 @@ export const BROWSER_TOOL_LIMITS = {
   maxRecords: 2_000,
   maxWaitMs: 60_000,
   maxDelayMs: 5_000,
+  maxBatchKeywords: 100,
+  maxBatchDelayMs: 10_000,
   maxSelectorLength: 1_000,
   maxTextLength: 10_000
 } as const;

@@ -110,6 +110,14 @@ export type BrowserToolDefinition = {
   parameters?: Record<string, BrowserToolParameterDefinition>;
   selectors?: Record<string, string>;
   workflow: BrowserToolStep[];
+  batch?: {
+    navigation: {
+      type: "query_parameter";
+      parameter: string;
+    };
+    max_keywords?: number;
+    delay_between_keywords_ms?: number;
+  };
   limits?: {
     delay_between_actions_ms?: number;
     max_records?: number;
@@ -143,6 +151,12 @@ export type StoredBrowserTool = {
 export type BrowserToolRunRecord = BrowserToolRunResult & {
   toolName: string;
   savedAt: number;
+};
+
+export type BrowserToolBatchProgress = {
+  completedKeywords: number;
+  totalKeywords: number;
+  currentKeyword?: string;
 };
 
 export type BrowserToolManagerState = {

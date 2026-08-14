@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Download, ExternalLink, FileJson, FileUp, Play, RefreshCw, Trash2, Wrench } from "lucide-react";
+import { Download, ExternalLink, FileJson, FileUp, ListPlus, Play, RefreshCw, Trash2, Wrench } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
@@ -21,9 +21,12 @@ function BrowserToolsApp() {
   const [yamlDraft, setYamlDraft] = useState("");
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [lastResult, setLastResult] = useState<BrowserToolRunResult>();
+  const [keywordDraft, setKeywordDraft] = useState("");
+  const [autoExportCsv, setAutoExportCsv] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const keywordFileInputRef = useRef<HTMLInputElement>(null);
   const targetTabId = useMemo(() => readTargetTabId(), []);
 
   useEffect(() => {
@@ -39,6 +42,9 @@ function BrowserToolsApp() {
 
   const selectedTool = state?.tools.find((tool) => tool.id === selectedId);
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
+  const batchKeywords = useMemo(() => parseKeywordImport(keywordDraft), [keywordDraft]);
+  const batchLimit = selectedTool?.definition.batch?.max_keywords || 25;
+  const batchTooLarge = batchKeywords.length > batchLimit;
 
   useEffect(() => {
     if (!selectedTool) {
@@ -98,6 +104,30 @@ function BrowserToolsApp() {
         userInitiated: true
       });
       setLastResult(result);
+      if (autoExportCsv) exportRunCsv(result);
+      await refresh(selectedTool.id);
+    } catch (err) {
+      setError(toErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runBatch() {
+    if (!selectedTool?.definition.batch || !state?.targetTab || batchKeywords.length === 0) return;
+    setBusy(true);
+    setError("");
+    setLastResult(undefined);
+    try {
+      const result = await sendMessage({
+        type: "RUN_BROWSER_TOOL_BATCH",
+        toolId: selectedTool.id,
+        keywords: batchKeywords,
+        parameters,
+        tabId: state.targetTab.id,
+        userInitiated: true
+      });
+      setLastResult(result);
       await refresh(selectedTool.id);
     } catch (err) {
       setError(toErrorMessage(err));
@@ -122,6 +152,11 @@ function BrowserToolsApp() {
   async function loadFile(file?: File) {
     if (!file) return;
     setYamlDraft(await file.text());
+  }
+
+  async function loadKeywordFile(file?: File) {
+    if (!file) return;
+    setKeywordDraft(await file.text());
   }
 
   return (
@@ -238,6 +273,52 @@ function BrowserToolsApp() {
                   values={parameters}
                   onChange={(name, value) => setParameters((current) => ({ ...current, [name]: value }))}
                 />
+
+                {selectedTool.definition.batch ? (
+                  <div className="batch-import stack">
+                    <div className="header-row">
+                      <div>
+                        <div className="setting-title"><ListPlus size={17} /><strong>批量检索词</strong></div>
+                        <div className="muted text-small">每行一个，或导入 TXT/CSV；CSV 支持“检索词 / keyword / query”列。</div>
+                      </div>
+                      <span className={batchTooLarge ? "mini-badge run-failed" : "badge"}>{batchKeywords.length}/{batchLimit}</span>
+                    </div>
+                    <textarea
+                      className="input keyword-editor"
+                      value={keywordDraft}
+                      spellCheck={false}
+                      placeholder={"人工智能\n机器学习\n大语言模型"}
+                      onChange={(event) => setKeywordDraft(event.target.value)}
+                    />
+                    {batchTooLarge ? <div className="error-text text-small">当前工具最多支持 {batchLimit} 个检索词。</div> : null}
+                    <input
+                      ref={keywordFileInputRef}
+                      className="visually-hidden"
+                      type="file"
+                      accept=".txt,.csv,text/plain,text/csv"
+                      onChange={(event) => {
+                        void loadKeywordFile(event.target.files?.[0]);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                    <label className="batch-export-option">
+                      <input type="checkbox" checked={autoExportCsv} onChange={(event) => setAutoExportCsv(event.target.checked)} />
+                      完成后自动导出 CSV
+                    </label>
+                    <div className="toolbar">
+                      <button className="button secondary" disabled={busy} onClick={() => keywordFileInputRef.current?.click()}>
+                        <FileUp size={16} /> 导入检索词
+                      </button>
+                      <button
+                        className="button primary"
+                        disabled={busy || !isMatched || !state?.targetTab || batchKeywords.length === 0 || batchTooLarge}
+                        onClick={() => void runBatch()}
+                      >
+                        <Play size={16} /> {busy ? "批量处理中…" : `检索并提取（${batchKeywords.length}）`}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
 
                 <button className="button primary full" disabled={busy || !isMatched || !state?.targetTab} onClick={() => void runTool()}>
                   <Play size={16} /> {busy ? "运行中…" : isMatched ? "在目标标签页运行" : "当前页面不匹配"}
@@ -431,6 +512,45 @@ function formatCsvValue(value: unknown): string {
 
 function escapeCsvCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function parseKeywordImport(source: string): string[] {
+  const text = source.replace(/^\uFEFF/, "").trim();
+  if (!text) return [];
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const rows = lines.map(parseCsvRow);
+  if (rows.length === 0) return [];
+
+  const headerAliases = new Set(["检索词", "关键词", "keyword", "keywords", "query", "search_term", "search term"]);
+  const headerIndex = rows[0].findIndex((cell) => headerAliases.has(cell.trim().toLowerCase()));
+  const values = headerIndex >= 0
+    ? rows.slice(1).map((row) => (row[headerIndex] || "").trim())
+    : lines;
+  return [...new Set(values.filter(Boolean))];
+}
+
+function parseCsvRow(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === "," && !quoted) {
+      cells.push(cell);
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell);
+  return cells;
 }
 
 function getRunFileBase(result: BrowserToolRunResult): string {

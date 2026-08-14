@@ -85,6 +85,13 @@ workflow:
           selector: "{{ selectors.first_title }}"
           timeout_ms: 20000
 
+batch:
+  navigation:
+    type: query_parameter
+    parameter: kw
+  max_keywords: 50
+  delay_between_keywords_ms: 1200
+
 limits:
   delay_between_actions_ms: 800
   max_records: 400
