@@ -1,4 +1,9 @@
-import type { BrowserToolDefinition, BrowserToolRunResult } from "../browser-tools/contracts";
+import type {
+  BrowserToolDefinition,
+  BrowserToolManagerState,
+  BrowserToolRunResult,
+  StoredBrowserTool
+} from "../browser-tools/contracts";
 
 export type TrailSource = "tab_group" | "window";
 
@@ -231,10 +236,20 @@ export type RuntimeMessage =
       tabId?: number;
       userInitiated: true;
     }
+  | { type: "GET_BROWSER_TOOL_STATE"; tabId?: number }
+  | { type: "IMPORT_BROWSER_TOOL"; yaml: string }
+  | { type: "DELETE_BROWSER_TOOL"; toolId: string }
+  | {
+      type: "RUN_STORED_BROWSER_TOOL";
+      toolId: string;
+      parameters: Record<string, unknown>;
+      tabId?: number;
+      userInitiated: true;
+    }
   | { type: "OPEN_SESSION"; sessionId: string }
   | { type: "DELETE_SESSION"; sessionId: string };
 
-export type { BrowserToolDefinition, BrowserToolRunResult };
+export type { BrowserToolDefinition, BrowserToolManagerState, BrowserToolRunResult, StoredBrowserTool };
 
 export type PopupState = {
   activeSession?: TrailSession;

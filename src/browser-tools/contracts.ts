@@ -130,6 +130,30 @@ export type BrowserToolRunResult = {
   error?: string;
 };
 
+export type StoredBrowserTool = {
+  id: string;
+  yaml: string;
+  definition: BrowserToolDefinition;
+  importedAt: number;
+  updatedAt: number;
+};
+
+export type BrowserToolRunRecord = BrowserToolRunResult & {
+  toolName: string;
+  savedAt: number;
+};
+
+export type BrowserToolManagerState = {
+  tools: StoredBrowserTool[];
+  recentRuns: BrowserToolRunRecord[];
+  targetTab?: {
+    id: number;
+    title: string;
+    url: string;
+  };
+  matchedToolIds: string[];
+};
+
 export type ExecuteBrowserToolMessage = {
   type: "EXECUTE_BROWSER_TOOL";
   definition: BrowserToolDefinition;

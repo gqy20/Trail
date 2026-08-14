@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Ban, Clock, Clipboard, FileText, FolderOpen, Play, Square } from "lucide-react";
+import { Ban, Clock, Clipboard, FileText, FolderOpen, Play, Square, Wrench } from "lucide-react";
 import { BrandMark } from "../shared/BrandMark";
 import { installDevChromeMock } from "../shared/devChromeMock";
 import { normalizeDomain } from "../shared/interactions";
@@ -71,14 +71,28 @@ function PopupApp() {
             <div className="muted text-small">研究路径</div>
           </div>
         </div>
-        <button
-          className="icon-button"
-          title="全部记录"
-          aria-label="全部记录"
-          onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("entries/sessions.html") })}
-        >
-          <Clock size={17} />
-        </button>
+        <div className="toolbar">
+          <button
+            className="icon-button"
+            title="Browser Tools"
+            aria-label="Browser Tools"
+            onClick={() => {
+              const targetTabId = state?.currentGroup.activeTab?.id;
+              const query = targetTabId === undefined ? "" : `?targetTabId=${targetTabId}`;
+              void chrome.tabs.create({ url: chrome.runtime.getURL(`entries/tools.html${query}`) });
+            }}
+          >
+            <Wrench size={17} />
+          </button>
+          <button
+            className="icon-button"
+            title="全部记录"
+            aria-label="全部记录"
+            onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("entries/sessions.html") })}
+          >
+            <Clock size={17} />
+          </button>
+        </div>
       </header>
 
       {activeSession ? (

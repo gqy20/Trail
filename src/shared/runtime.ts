@@ -1,11 +1,13 @@
 import type {
   BrowserToolDefinition,
+  BrowserToolManagerState,
   BrowserToolRunResult,
   PopupState,
   RuntimeMessage,
   TrailInteractionSettings,
   TrailSession
 } from "./types";
+import type { StoredBrowserTool } from "../browser-tools/contracts";
 
 type RuntimeResponseMap = {
   GET_POPUP_STATE: PopupState;
@@ -23,6 +25,10 @@ type RuntimeResponseMap = {
   DELETE_EVENT: { deleted: boolean };
   VALIDATE_BROWSER_TOOL_YAML: BrowserToolDefinition;
   RUN_BROWSER_TOOL: BrowserToolRunResult;
+  GET_BROWSER_TOOL_STATE: BrowserToolManagerState;
+  IMPORT_BROWSER_TOOL: StoredBrowserTool;
+  DELETE_BROWSER_TOOL: undefined;
+  RUN_STORED_BROWSER_TOOL: BrowserToolRunResult;
   OPEN_SESSION: undefined;
   DELETE_SESSION: undefined;
 };

@@ -12,6 +12,7 @@ export default defineConfig({
         popup: resolve(__dirname, "entries/popup.html"),
         research: resolve(__dirname, "entries/research.html"),
         sessions: resolve(__dirname, "entries/sessions.html"),
+        tools: resolve(__dirname, "entries/tools.html"),
         background: resolve(__dirname, "src/background/index.ts"),
         content: resolve(__dirname, "src/content/index.ts")
       },
