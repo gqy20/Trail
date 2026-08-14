@@ -16,6 +16,11 @@
   --trail-ink: #202b36;
   --trail-danger: #b9382f;
   --trail-danger-soft: #fbefec;
+  --trail-font-xs: 11px;
+  --trail-font-sm: 12px;
+  --trail-font-md: 14px;
+  --trail-font-lg: 17px;
+  --trail-font-xl: 22px;
 }
 
 body {
@@ -23,7 +28,9 @@ body {
   background: var(--trail-bg);
   color: var(--trail-text);
   font-family:
-    "Inter Tight", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    "Segoe UI Variable Text", "Microsoft YaHei UI", "PingFang SC", ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--trail-font-md);
+  line-height: 1.5;
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
 }
@@ -69,41 +76,76 @@ textarea:focus-visible {
 }
 
 .tools-page {
-  max-width: 1180px;
+  max-width: 1120px;
+  gap: 14px;
 }
 
 .tools-header {
-  margin-bottom: 4px;
+  min-height: 42px;
+}
+
+.tools-shell .button {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.tools-shell .input {
+  font-size: 13px;
+}
+
+.tools-shell .panel {
+  background: rgba(255, 253, 248, 0.68);
 }
 
 .target-tab-panel {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--trail-border-soft);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, 0.48);
 }
 
-.target-tab-panel > div {
+.target-tab-copy {
+  display: grid;
+  flex: 1;
+  gap: 1px;
   min-width: 0;
 }
 
-.tool-url {
-  max-width: 800px;
+.target-tab-copy strong {
   overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.target-status {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #c9c2b7;
+}
+
+.target-status.online {
+  background: var(--trail-accent);
+  box-shadow: 0 0 0 3px rgba(11, 136, 124, 0.1);
+}
+
 .tools-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
 }
 
 .tool-list {
   display: grid;
-  gap: 6px;
+  gap: 3px;
 }
 
 .tool-list-item {
@@ -112,9 +154,10 @@ textarea:focus-visible {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
-  padding: 10px;
+  min-height: 40px;
+  padding: 8px 9px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--trail-text);
   text-align: left;
@@ -125,6 +168,14 @@ textarea:focus-visible {
   min-width: 0;
 }
 
+.tool-list-item strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tool-list-item:hover,
 .tool-list-item.active {
   border-color: var(--trail-border);
@@ -132,7 +183,19 @@ textarea:focus-visible {
 }
 
 .tool-list-item.active {
-  border-color: color-mix(in srgb, var(--trail-accent) 45%, var(--trail-border));
+  border-color: #c6ded8;
+  background: var(--trail-accent-soft);
+}
+
+.tool-state {
+  flex: 0 0 auto;
+  color: var(--trail-muted);
+  font-size: var(--trail-font-xs);
+}
+
+.tool-state.available {
+  color: #08756b;
+  font-weight: 650;
 }
 
 .tool-match,
@@ -157,7 +220,7 @@ textarea:focus-visible {
 }
 
 .yaml-editor {
-  min-height: 230px;
+  min-height: 180px;
   resize: vertical;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
@@ -165,14 +228,14 @@ textarea:focus-visible {
 }
 
 .batch-import {
-  padding: 12px;
-  border: 1px solid var(--trail-border);
-  border-radius: 8px;
+  padding: 14px;
+  border: 1px solid var(--trail-border-soft);
+  border-radius: 7px;
   background: var(--trail-surface-muted);
 }
 
 .keyword-editor {
-  min-height: 124px;
+  min-height: 132px;
   resize: vertical;
   background: var(--trail-surface);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -185,7 +248,7 @@ textarea:focus-visible {
   align-items: center;
   gap: 8px;
   color: var(--trail-muted);
-  font-size: 13px;
+  font-size: var(--trail-font-sm);
 }
 
 .batch-export-option input {
@@ -196,19 +259,90 @@ textarea:focus-visible {
 
 .tool-title {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--trail-font-lg);
+  line-height: 1.3;
+  letter-spacing: -0.015em;
 }
 
-.tool-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.tool-heading {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.tool-eyebrow {
+  color: var(--trail-accent);
+  font-size: var(--trail-font-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.tool-description {
+  max-width: 68ch;
+  margin: 0;
+  font-size: var(--trail-font-sm);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .tool-parameter-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.tool-config-disclosure > summary,
+.history-panel > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.tool-config-disclosure > summary::-webkit-details-marker,
+.history-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-config-disclosure > summary > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.tool-config-disclosure:not([open]),
+.history-panel:not([open]) {
+  display: block;
+}
+
+.tool-runner {
+  gap: 14px;
+  padding: 16px;
+}
+
+.single-run-button {
+  min-height: 32px;
+  color: var(--trail-muted);
+  font-size: var(--trail-font-sm);
+  font-weight: 600;
+}
+
+.batch-import .toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.batch-import .toolbar .button.primary {
+  width: 100%;
 }
 
 .tool-parameter-grid input[type="checkbox"] {
@@ -228,6 +362,14 @@ textarea:focus-visible {
 .run-history-item {
   border-top: 1px solid var(--trail-border-soft);
   padding-top: 10px;
+}
+
+.history-panel {
+  gap: 10px;
+}
+
+.history-panel[open] > summary {
+  padding-bottom: 2px;
 }
 
 .run-history-item > summary,
@@ -266,7 +408,48 @@ textarea:focus-visible {
 }
 
 .run-export-actions {
-  margin-top: 2px;
+  gap: 6px;
+  margin: 0;
+}
+
+.run-result {
+  gap: 10px;
+}
+
+.run-result-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.run-result-heading strong {
+  font-size: var(--trail-font-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-result-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compact-button {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: var(--trail-font-sm);
+}
+
+.run-warnings {
+  color: var(--trail-muted);
+  font-size: var(--trail-font-sm);
+}
+
+.run-warnings summary {
+  cursor: pointer;
+}
+
+.run-warnings ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
 }
 
 .result-table-wrap {
@@ -281,8 +464,8 @@ textarea:focus-visible {
   width: 100%;
   min-width: 720px;
   border-collapse: collapse;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--trail-font-sm);
+  line-height: 1.5;
 }
 
 .result-preview-table th,
@@ -304,7 +487,9 @@ textarea:focus-visible {
   z-index: 1;
   background: var(--trail-surface-muted);
   color: var(--trail-muted);
-  font-weight: 750;
+  font-size: var(--trail-font-xs);
+  font-weight: 700;
+  letter-spacing: 0.025em;
 }
 
 .result-preview-table th:last-child,
@@ -318,6 +503,17 @@ textarea:focus-visible {
 
 .result-preview-note {
   padding: 8px 10px;
+}
+
+.result-link {
+  color: var(--trail-accent);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.result-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .visually-hidden {
@@ -337,13 +533,21 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .tools-main {
+    order: 1;
+  }
+
+  .tools-grid > aside {
+    order: 2;
+  }
+
   .tool-parameter-grid {
     grid-template-columns: 1fr;
   }
 
   .target-tab-panel {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
   }
 }
 
@@ -357,11 +561,11 @@ textarea:focus-visible {
   }
 
   .tools-header .page-title {
-    font-size: 21px;
+    font-size: var(--trail-font-xl);
   }
 
   .target-tab-panel {
-    padding: 11px;
+    padding: 8px 9px;
   }
 
   .yaml-editor {
@@ -369,7 +573,24 @@ textarea:focus-visible {
   }
 
   .run-export-actions .button {
-    flex: 1 1 130px;
+    flex: 0 1 auto;
+  }
+
+  .run-result-header {
+    align-items: flex-start;
+  }
+
+  .run-result-controls {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+
+  .batch-import .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-import .toolbar .button {
+    width: 100%;
   }
 
   .result-preview-table {

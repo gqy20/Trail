@@ -270,6 +270,67 @@ const sampleSession: TrailSession = {
 `
 };
 
+const sampleBrowserTool = {
+  id: "cnki-literature-results",
+  yaml: "",
+  definition: {
+    schema_version: 1,
+    id: "cnki-literature-results",
+    name: "知网文献结果提取",
+    description: "从当前知网检索结果页提取题名、作者、来源和计数信息",
+    version: "0.1.0",
+    match: { domains: ["kns.cnki.net"], urls: ["*/kns8s/defaultresult/index*"] },
+    parameters: {
+      max_pages: { type: "number", label: "提取页数", default: 3, min: 1, max: 20, required: true }
+    },
+    workflow: [{ action: "wait", duration_ms: 100 }],
+    batch: {
+      navigation: { type: "query_parameter", parameter: "kw" },
+      max_keywords: 50,
+      delay_between_keywords_ms: 1200
+    }
+  },
+  importedAt: now - 1000 * 60 * 60,
+  updatedAt: now - 1000 * 60 * 30
+};
+
+const sampleBrowserToolRun = {
+  toolId: sampleBrowserTool.id,
+  toolName: "知网文献结果提取 · 批量",
+  runId: "sample-browser-tool-run",
+  pageUrl: "https://kns.cnki.net/kns8s/defaultresult/index?kw=large+language+model",
+  pageTitle: "知网检索结果",
+  startedAt: now - 1000 * 70,
+  finishedAt: now - 1000 * 10,
+  savedAt: now - 1000 * 10,
+  status: "completed",
+  warnings: [],
+  data: {
+    literature: [
+      {
+        _query: "大语言模型",
+        title: "大语言模型研究进展与应用综述",
+        authors: ["张明", "李然"],
+        source: "计算机研究与发展",
+        published_at: "2025-06-18",
+        citation_count: 32,
+        download_count: 418,
+        url: "https://kns.cnki.net/sample/1"
+      },
+      {
+        _query: "知识图谱",
+        title: "知识图谱增强的科研文献检索方法",
+        authors: ["王欣"],
+        source: "情报学报",
+        published_at: "2025-03-02",
+        citation_count: 18,
+        download_count: 267,
+        url: "https://kns.cnki.net/sample/2"
+      }
+    ]
+  }
+};
+
 export function installDevChromeMock() {
   if (!import.meta.env.DEV) return;
 
@@ -321,6 +382,23 @@ export function installDevChromeMock() {
           return { deleted: true };
         }
 
+        if (message.type === "GET_BROWSER_TOOL_STATE") {
+          return {
+            tools: [sampleBrowserTool],
+            recentRuns: [sampleBrowserToolRun],
+            targetTab: {
+              id: 88,
+              title: "中国知网：文献检索结果",
+              url: "https://kns.cnki.net/kns8s/defaultresult/index?kw=large+language+model"
+            },
+            matchedToolIds: [sampleBrowserTool.id]
+          };
+        }
+
+        if (message.type === "RUN_STORED_BROWSER_TOOL" || message.type === "RUN_BROWSER_TOOL_BATCH") {
+          return sampleBrowserToolRun;
+        }
+
         return sampleSession;
       },
       onMessage: { addListener: () => undefined }
@@ -333,10 +411,10 @@ export function installDevChromeMock() {
         return sampleTabs[0];
       },
       group: async () => 12,
-      onCreated: { addListener: () => undefined },
-      onUpdated: { addListener: () => undefined },
-      onActivated: { addListener: () => undefined },
-      onRemoved: { addListener: () => undefined }
+      onCreated: { addListener: () => undefined, removeListener: () => undefined },
+      onUpdated: { addListener: () => undefined, removeListener: () => undefined },
+      onActivated: { addListener: () => undefined, removeListener: () => undefined },
+      onRemoved: { addListener: () => undefined, removeListener: () => undefined }
     },
     tabGroups: {
       TAB_GROUP_ID_NONE: -1,

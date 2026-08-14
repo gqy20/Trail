@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Download, ExternalLink, FileJson, FileUp, ListPlus, Play, RefreshCw, Trash2, Wrench } from "lucide-react";
+import { Download, ExternalLink, FileJson, FileUp, ListPlus, Play, RefreshCw, Settings2, Trash2, Wrench } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
@@ -24,6 +24,7 @@ function BrowserToolsApp() {
   const [keywordDraft, setKeywordDraft] = useState("");
   const [autoExportCsv, setAutoExportCsv] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<"single" | "batch">();
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keywordFileInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +46,7 @@ function BrowserToolsApp() {
   const batchKeywords = useMemo(() => parseKeywordImport(keywordDraft), [keywordDraft]);
   const batchLimit = selectedTool?.definition.batch?.max_keywords || 25;
   const batchTooLarge = batchKeywords.length > batchLimit;
+  const recentRuns = (state?.recentRuns || []).filter((run) => run.runId !== lastResult?.runId);
 
   useEffect(() => {
     if (!selectedTool) {
@@ -93,6 +95,7 @@ function BrowserToolsApp() {
   async function runTool() {
     if (!selectedTool || !state?.targetTab) return;
     setBusy(true);
+    setBusyAction("single");
     setError("");
     setLastResult(undefined);
     try {
@@ -104,18 +107,19 @@ function BrowserToolsApp() {
         userInitiated: true
       });
       setLastResult(result);
-      if (autoExportCsv) exportRunCsv(result);
       await refresh(selectedTool.id);
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
       setBusy(false);
+      setBusyAction(undefined);
     }
   }
 
   async function runBatch() {
     if (!selectedTool?.definition.batch || !state?.targetTab || batchKeywords.length === 0) return;
     setBusy(true);
+    setBusyAction("batch");
     setError("");
     setLastResult(undefined);
     try {
@@ -128,11 +132,13 @@ function BrowserToolsApp() {
         userInitiated: true
       });
       setLastResult(result);
+      if (autoExportCsv) exportRunCsv(result);
       await refresh(selectedTool.id);
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
       setBusy(false);
+      setBusyAction(undefined);
     }
   }
 
@@ -166,24 +172,24 @@ function BrowserToolsApp() {
           <div className="brand">
             <BrandMark />
             <div>
-              <h1 className="page-title">Browser Tools</h1>
-              <div className="muted">用 YAML 驱动当前浏览器页面</div>
+              <h1 className="page-title">文献采集</h1>
+              <div className="muted text-small">批量检索与结构化导出</div>
             </div>
           </div>
-          <button className="button secondary" disabled={busy} onClick={() => void refresh(selectedId)}>
-            <RefreshCw size={16} /> 刷新
+          <button className="icon-button" title="刷新页面状态" aria-label="刷新页面状态" disabled={busy} onClick={() => void refresh(selectedId)}>
+            <RefreshCw size={16} />
           </button>
         </header>
 
-        <section className="panel target-tab-panel">
-          <div>
-            <div className="muted text-small">目标标签页</div>
-            <strong>{state?.targetTab?.title || "未找到普通网页标签页"}</strong>
-            <div className="muted tool-url">{state?.targetTab?.url || "请从 Trail popup 打开 Browser Tools。"}</div>
+        <section className="target-tab-panel">
+          <span className={state?.targetTab ? "target-status online" : "target-status"} aria-hidden="true" />
+          <div className="target-tab-copy">
+            <span className="muted text-small">当前网页</span>
+            <strong title={state?.targetTab?.title}>{state?.targetTab?.title || "未连接普通网页"}</strong>
           </div>
           {state?.targetTab?.url ? (
-            <a className="button secondary" href={state.targetTab.url} target="_blank" rel="noreferrer">
-              <ExternalLink size={15} /> 打开
+            <a className="icon-button" title="在标签页中打开" aria-label="在标签页中打开" href={state.targetTab.url} target="_blank" rel="noreferrer">
+              <ExternalLink size={15} />
             </a>
           ) : null}
         </section>
@@ -192,10 +198,10 @@ function BrowserToolsApp() {
 
         <div className="tools-grid">
           <aside className="stack">
-            <section className="panel stack">
+            <section className="panel stack tool-library">
               <div className="header-row">
-                <strong>已安装工具</strong>
-                <span className="badge">{state?.tools.length || 0}</span>
+                <strong className="section-title">工具</strong>
+                <span className="muted text-small">{state?.tools.length || 0} 个</span>
               </div>
               <div className="tool-list">
                 {(state?.tools || []).map((tool) => {
@@ -208,9 +214,8 @@ function BrowserToolsApp() {
                     >
                       <span>
                         <strong>{tool.definition.name}</strong>
-                        <span className="muted text-small">{tool.id}</span>
                       </span>
-                      <span className={matched ? "mini-badge tool-match" : "mini-badge"}>{matched ? "当前可用" : "不匹配"}</span>
+                      <span className={matched ? "tool-state available" : "tool-state"}>{matched ? "可用" : "其他页面"}</span>
                     </button>
                   );
                 })}
@@ -218,8 +223,11 @@ function BrowserToolsApp() {
               </div>
             </section>
 
-            <section className="panel stack">
-              <strong>导入 YAML</strong>
+            <details className="panel stack tool-config-disclosure">
+              <summary>
+                <span><Settings2 size={16} /> 工具配置</span>
+                <span className="muted text-small">YAML</span>
+              </summary>
               <textarea
                 className="input yaml-editor"
                 value={yamlDraft}
@@ -242,30 +250,21 @@ function BrowserToolsApp() {
                   导入或更新
                 </button>
               </div>
-            </section>
+            </details>
           </aside>
 
-          <section className="stack">
+          <section className="stack tools-main">
             {selectedTool ? (
-              <section className="panel stack">
-                <div className="header-row">
-                  <div>
-                    <div className="setting-title">
-                      <Wrench size={18} />
-                      <h2 className="tool-title">{selectedTool.definition.name}</h2>
-                    </div>
-                    <div className="muted">{selectedTool.definition.description || selectedTool.id}</div>
+              <section className="panel stack tool-runner">
+                <div className="header-row tool-runner-header">
+                  <div className="tool-heading">
+                    <span className="tool-eyebrow">当前工具 · v{selectedTool.definition.version}</span>
+                    <h2 className="tool-title">{selectedTool.definition.name}</h2>
+                    {selectedTool.definition.description ? <p className="muted tool-description">{selectedTool.definition.description}</p> : null}
                   </div>
-                  <button className="icon-button danger" title="删除工具" onClick={() => void deleteTool(selectedTool)}>
+                  <button className="icon-button danger" title="删除工具" aria-label="删除工具" onClick={() => void deleteTool(selectedTool)}>
                     <Trash2 size={16} />
                   </button>
-                </div>
-
-                <div className="tool-meta">
-                  <span className="mini-badge">v{selectedTool.definition.version}</span>
-                  {selectedTool.definition.match.domains.map((domain) => (
-                    <span className="mini-badge" key={domain}>{domain}</span>
-                  ))}
                 </div>
 
                 <ParameterForm
@@ -278,8 +277,8 @@ function BrowserToolsApp() {
                   <div className="batch-import stack">
                     <div className="header-row">
                       <div>
-                        <div className="setting-title"><ListPlus size={17} /><strong>批量检索词</strong></div>
-                        <div className="muted text-small">每行一个，或导入 TXT/CSV；CSV 支持“检索词 / keyword / query”列。</div>
+                        <div className="setting-title"><ListPlus size={17} /><strong>检索词</strong></div>
+                        <div className="muted text-small">每行一个，也可导入 TXT 或 CSV</div>
                       </div>
                       <span className={batchTooLarge ? "mini-badge run-failed" : "badge"}>{batchKeywords.length}/{batchLimit}</span>
                     </div>
@@ -307,21 +306,21 @@ function BrowserToolsApp() {
                     </label>
                     <div className="toolbar">
                       <button className="button secondary" disabled={busy} onClick={() => keywordFileInputRef.current?.click()}>
-                        <FileUp size={16} /> 导入检索词
+                        <FileUp size={16} /> 导入文件
                       </button>
                       <button
                         className="button primary"
                         disabled={busy || !isMatched || !state?.targetTab || batchKeywords.length === 0 || batchTooLarge}
                         onClick={() => void runBatch()}
                       >
-                        <Play size={16} /> {busy ? "批量处理中…" : `检索并提取（${batchKeywords.length}）`}
+                        <Play size={16} /> {busyAction === "batch" ? "正在检索…" : `检索并提取 ${batchKeywords.length} 个词`}
                       </button>
                     </div>
                   </div>
                 ) : null}
 
-                <button className="button primary full" disabled={busy || !isMatched || !state?.targetTab} onClick={() => void runTool()}>
-                  <Play size={16} /> {busy ? "运行中…" : isMatched ? "在目标标签页运行" : "当前页面不匹配"}
+                <button className="button subtle full single-run-button" disabled={busy || !isMatched || !state?.targetTab} onClick={() => void runTool()}>
+                  <Play size={15} /> {busyAction === "single" ? "正在提取…" : isMatched ? "仅提取当前结果页" : "当前网页不适用此工具"}
                 </button>
               </section>
             ) : (
@@ -334,24 +333,24 @@ function BrowserToolsApp() {
 
             {lastResult ? <RunResult result={lastResult} title="本次运行" /> : null}
 
-            <section className="panel stack">
-              <div className="header-row">
-                <strong>最近运行</strong>
-                <span className="badge">{state?.recentRuns.length || 0}</span>
-              </div>
-              {(state?.recentRuns || []).map((run) => (
+            <details className="panel stack history-panel">
+              <summary>
+                <strong>历史记录</strong>
+                <span className="muted text-small">{recentRuns.length} 次</span>
+              </summary>
+              {recentRuns.map((run) => (
                 <details className="run-history-item" key={run.runId}>
                   <summary>
                     <span><strong>{run.toolName}</strong><span className="muted text-small">{formatDateTime(run.savedAt)}</span></span>
                     <span className={`mini-badge run-${run.status}`}>{statusLabel(run.status)}</span>
                   </summary>
                   <RunExportActions result={run} />
-                  <RunCollections data={run.data} />
+                  <RunCollections data={run.data} initiallyOpen={false} />
                   {run.error ? <p className="error-text">{run.error}</p> : null}
                 </details>
               ))}
-              {state?.recentRuns.length === 0 ? <p className="muted">运行结果会保存在本地。</p> : null}
-            </section>
+              {recentRuns.length === 0 ? <p className="muted text-small">暂无其他运行记录。</p> : null}
+            </details>
           </section>
         </div>
       </div>
@@ -369,7 +368,7 @@ function ParameterForm({
   onChange: (name: string, value: unknown) => void;
 }) {
   const entries = Object.entries(definitions);
-  if (entries.length === 0) return <p className="muted">这个工具不需要参数。</p>;
+  if (entries.length === 0) return null;
 
   return (
     <div className="tool-parameter-grid">
@@ -408,47 +407,58 @@ function ParameterForm({
 }
 
 function RunResult({ result, title }: { result: BrowserToolRunResult; title: string }) {
+  const recordCount = countRecords(result.data);
   return (
-    <section className="panel stack">
-      <div className="header-row">
-        <strong>{title}</strong>
-        <span className={`mini-badge run-${result.status}`}>{statusLabel(result.status)}</span>
+    <section className="panel stack run-result">
+      <div className="header-row run-result-header">
+        <div className="run-result-heading">
+          <span className="tool-eyebrow">{title}</span>
+          <strong>{recordCount} 条记录</strong>
+        </div>
+        <div className="run-result-controls">
+          <span className={`mini-badge run-${result.status}`}>{statusLabel(result.status)}</span>
+          <RunExportActions result={result} />
+        </div>
       </div>
-      <RunExportActions result={result} />
       <RunCollections data={result.data} />
-      {result.warnings.map((warning) => <p className="muted" key={warning}>{warning}</p>)}
+      {result.warnings.length > 0 ? (
+        <details className="run-warnings">
+          <summary>{result.warnings.length} 条运行提示</summary>
+          <ul>{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+        </details>
+      ) : null}
       {result.error ? <p className="error-text">{result.error}</p> : null}
     </section>
   );
 }
 
-function RunCollections({ data }: { data: BrowserToolRunResult["data"] }) {
+function RunCollections({ data, initiallyOpen = true }: { data: BrowserToolRunResult["data"]; initiallyOpen?: boolean }) {
   const entries = Object.entries(data);
   return (
     <div className="run-collections">
       {entries.map(([name, records]) => (
-        <CollectionPreview name={name} records={records} key={name} />
+        <CollectionPreview name={name} records={records} initiallyOpen={initiallyOpen} key={name} />
       ))}
       {entries.length === 0 ? <span className="muted">没有提取到数据。</span> : null}
     </div>
   );
 }
 
-function CollectionPreview({ name, records }: { name: string; records: Array<Record<string, unknown>> }) {
-  const columns = getCollectionColumns(records).slice(0, 10);
+function CollectionPreview({ name, records, initiallyOpen }: { name: string; records: Array<Record<string, unknown>>; initiallyOpen: boolean }) {
+  const columns = getOrderedColumns(records).slice(0, 10);
   return (
-    <details open>
-      <summary><strong>{name}</strong><span className="badge">{records.length}</span></summary>
+    <details open={initiallyOpen}>
+      <summary><strong>{collectionLabel(name)}</strong><span className="muted text-small">{records.length} 条</span></summary>
       {records.length > 0 ? (
         <div className="result-table-wrap">
           <table className="result-preview-table">
             <thead>
-              <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
+              <tr>{columns.map((column) => <th key={column}>{columnLabel(column)}</th>)}</tr>
             </thead>
             <tbody>
               {records.slice(0, 20).map((record, index) => (
                 <tr key={index}>
-                  {columns.map((column) => <td data-label={column} key={column}>{formatCellValue(record[column])}</td>)}
+                  {columns.map((column) => <td data-label={columnLabel(column)} key={column}>{renderCellValue(record[column])}</td>)}
                 </tr>
               ))}
             </tbody>
@@ -463,11 +473,11 @@ function CollectionPreview({ name, records }: { name: string; records: Array<Rec
 function RunExportActions({ result }: { result: BrowserToolRunResult }) {
   return (
     <div className="toolbar run-export-actions">
-      <button className="button secondary" onClick={() => exportRunCsv(result)}>
+      <button className="button secondary compact-button" onClick={() => exportRunCsv(result)}>
         <Download size={15} /> 导出 CSV
       </button>
-      <button className="button secondary" onClick={() => exportRunJson(result)}>
-        <FileJson size={15} /> 导出 JSON
+      <button className="icon-button" title="导出 JSON" aria-label="导出 JSON" onClick={() => exportRunJson(result)}>
+        <FileJson size={15} />
       </button>
     </div>
   );
@@ -494,6 +504,42 @@ function exportRunJson(result: BrowserToolRunResult): void {
 
 function getCollectionColumns(records: Array<Record<string, unknown>>): string[] {
   return [...new Set(records.flatMap((record) => Object.keys(record)))];
+}
+
+function getOrderedColumns(records: Array<Record<string, unknown>>): string[] {
+  const columns = getCollectionColumns(records);
+  const preferred = ["_query", "title", "authors", "source", "published_at", "citation_count", "download_count", "database", "url"];
+  return [...preferred.filter((column) => columns.includes(column)), ...columns.filter((column) => !preferred.includes(column))];
+}
+
+function countRecords(data: BrowserToolRunResult["data"]): number {
+  return Object.values(data).reduce((total, records) => total + records.length, 0);
+}
+
+function collectionLabel(name: string): string {
+  return name === "literature" ? "文献" : name;
+}
+
+function columnLabel(name: string): string {
+  const labels: Record<string, string> = {
+    _query: "检索词",
+    title: "题名",
+    authors: "作者",
+    source: "来源",
+    published_at: "发表时间",
+    citation_count: "被引",
+    download_count: "下载",
+    database: "类型",
+    url: "链接"
+  };
+  return labels[name] || name;
+}
+
+function renderCellValue(value: unknown): React.ReactNode {
+  if (typeof value === "string" && /^https?:\/\//i.test(value)) {
+    return <a className="result-link" href={value} target="_blank" rel="noreferrer">查看</a>;
+  }
+  return formatCellValue(value);
 }
 
 function formatCellValue(value: unknown): string {
