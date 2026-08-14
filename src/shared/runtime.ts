@@ -1,4 +1,11 @@
-import type { PopupState, RuntimeMessage, TrailInteractionSettings, TrailSession } from "./types";
+import type {
+  BrowserToolDefinition,
+  BrowserToolRunResult,
+  PopupState,
+  RuntimeMessage,
+  TrailInteractionSettings,
+  TrailSession
+} from "./types";
 
 type RuntimeResponseMap = {
   GET_POPUP_STATE: PopupState;
@@ -14,6 +21,8 @@ type RuntimeResponseMap = {
   RECORD_SELECTION: { recorded: boolean; eventId?: string; reason?: string };
   RECORD_LINK_CLICK: { recorded: boolean; eventId?: string; reason?: string };
   DELETE_EVENT: { deleted: boolean };
+  VALIDATE_BROWSER_TOOL_YAML: BrowserToolDefinition;
+  RUN_BROWSER_TOOL: BrowserToolRunResult;
   OPEN_SESSION: undefined;
   DELETE_SESSION: undefined;
 };

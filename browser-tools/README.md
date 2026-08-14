@@ -1,0 +1,34 @@
+# Trail Browser Tools
+
+Browser Tool 是一份受限 YAML 工作流。它复用用户当前 Chrome 页面和登录状态，通过声明式动作填写、点击、等待并提取 DOM 数据。
+
+## 支持的动作
+
+- `wait_for`: 等待元素出现。
+- `fill`: 填写普通输入框、文本域或 `contenteditable`；密码框始终禁止。
+- `select`: 选择原生 `<select>` 的值。
+- `click`: 点击元素，可同时等待另一块内容变化。
+- `wait`: 短暂等待。
+- `wait_for_change`: 等待先前观察过的元素内容变化。
+- `extract`: 从一组 DOM 元素提取结构化字段。
+- `repeat`: 有上限地重复一组动作。
+- `pause_for_user`: 在登录、验证码等节点停止并把原因返回给调用方。
+
+字段只允许读取文本、链接、`content` 和 `datetime`。转换只允许使用 `trim`、`normalize_whitespace`、`parse_year`、`parse_number` 和 `split_authors`。YAML 不能执行 JavaScript。
+
+## 调用链路
+
+扩展页面先发送 `VALIDATE_BROWSER_TOOL_YAML` 校验配置，再由明确的用户操作发送：
+
+```ts
+const result = await sendMessage({
+  type: "RUN_BROWSER_TOOL",
+  yaml,
+  parameters: { keyword: "browser automation" },
+  userInitiated: true
+});
+```
+
+后台会再次解析和校验 YAML、检查目标域名，然后才把已验证的定义发送给目标标签页执行。
+
+当前版本的 `pause_for_user` 会结束本次运行并返回 `paused`。可恢复运行、工具管理 UI 和结果持久化留给下一层实现。

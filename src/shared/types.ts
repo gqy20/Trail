@@ -1,3 +1,5 @@
+import type { BrowserToolDefinition, BrowserToolRunResult } from "../browser-tools/contracts";
+
 export type TrailSource = "tab_group" | "window";
 
 export type TrailStatus = "recording" | "completed";
@@ -221,8 +223,18 @@ export type RuntimeMessage =
   | { type: "RECORD_SELECTION"; payload: CopyInteractionPayload }
   | { type: "RECORD_LINK_CLICK"; payload: LinkClickPayload }
   | { type: "DELETE_EVENT"; eventId: string }
+  | { type: "VALIDATE_BROWSER_TOOL_YAML"; yaml: string }
+  | {
+      type: "RUN_BROWSER_TOOL";
+      yaml: string;
+      parameters: Record<string, unknown>;
+      tabId?: number;
+      userInitiated: true;
+    }
   | { type: "OPEN_SESSION"; sessionId: string }
   | { type: "DELETE_SESSION"; sessionId: string };
+
+export type { BrowserToolDefinition, BrowserToolRunResult };
 
 export type PopupState = {
   activeSession?: TrailSession;

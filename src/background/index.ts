@@ -15,6 +15,7 @@ import {
 } from "./recorder";
 import { deleteSession, getInteractionSettings, updateInteractionSettings } from "../shared/storage";
 import type { RuntimeMessage } from "../shared/types";
+import { runBrowserTool, validateBrowserToolYaml } from "./browserTools";
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
   handleMessage(message, sender)
@@ -55,6 +56,10 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return recordLinkClick(message.payload, sender.tab);
     case "DELETE_EVENT":
       return deleteActiveEvent(message.eventId);
+    case "VALIDATE_BROWSER_TOOL_YAML":
+      return validateBrowserToolYaml(message.yaml);
+    case "RUN_BROWSER_TOOL":
+      return runBrowserTool(message);
     case "OPEN_SESSION":
       await chrome.tabs.create({ url: chrome.runtime.getURL(`entries/research.html?sessionId=${message.sessionId}`) });
       return undefined;

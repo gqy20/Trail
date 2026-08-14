@@ -1,0 +1,79 @@
+schema_version: 1
+
+id: example-literature-search
+name: 示例文献搜索
+description: 演示通用浏览器工具的搜索、等待和结果提取结构
+version: 0.1.0
+
+match:
+  domains:
+    - example.com
+  urls:
+    - "/search*"
+
+parameters:
+  keyword:
+    type: string
+    label: 检索关键词
+    required: true
+
+selectors:
+  search_input: "form[role='search'] input[type='search']"
+  search_button: "form[role='search'] button[type='submit']"
+  result_list: "main .results"
+  result_item: "main .results article"
+  next_page: "a[rel='next']"
+
+workflow:
+  - action: wait_for
+    selector: "{{ selectors.search_input }}"
+    timeout_ms: 15000
+
+  - action: fill
+    selector: "{{ selectors.search_input }}"
+    value: "{{ parameters.keyword }}"
+    clear: true
+
+  - action: click
+    selector: "{{ selectors.search_button }}"
+    wait_for_change:
+      selector: "{{ selectors.result_list }}"
+      timeout_ms: 20000
+
+  - action: repeat
+    max: 3
+    steps:
+      - action: extract
+        collection: literature
+        selector: "{{ selectors.result_item }}"
+        fields:
+          title:
+            selector: "h2, h3"
+            attribute: text
+            transforms: [normalize_whitespace]
+          url:
+            selector: "h2 a, h3 a"
+            attribute: href
+          authors:
+            selector: ".authors"
+            attribute: text
+            transforms: [split_authors]
+            optional: true
+          year:
+            selector: "time, .year"
+            attribute: text
+            transforms: [parse_year]
+            optional: true
+
+      - action: click
+        selector: "{{ selectors.next_page }}"
+        optional: true
+        stop_repeat_on_missing: true
+        wait_for_change:
+          selector: "{{ selectors.result_list }}"
+          timeout_ms: 15000
+
+limits:
+  delay_between_actions_ms: 500
+  max_records: 100
+  require_user_activation: true

@@ -13,7 +13,7 @@ export default defineConfig({
         research: resolve(__dirname, "entries/research.html"),
         sessions: resolve(__dirname, "entries/sessions.html"),
         background: resolve(__dirname, "src/background/index.ts"),
-        content: resolve(__dirname, "src/content/interactions.ts")
+        content: resolve(__dirname, "src/content/index.ts")
       },
       output: {
         entryFileNames: (chunk) =>
