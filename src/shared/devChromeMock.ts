@@ -271,17 +271,66 @@ const sampleSession: TrailSession = {
 };
 
 const sampleBrowserTool = {
-  id: "cnki-literature-results",
+  id: "example-data-collector",
   yaml: "",
   definition: {
     schema_version: 1,
-    id: "cnki-literature-results",
-    name: "知网文献结果提取",
-    description: "从当前知网检索结果页提取题名、作者、来源和计数信息",
+    id: "example-data-collector",
+    name: "示例数据工具",
+    description: "用于开发预览的通用批量数据采集工具",
     version: "0.1.0",
-    match: { domains: ["kns.cnki.net"], urls: ["*/kns8s/defaultresult/index*"] },
+    match: { domains: ["example.com"], urls: ["*/search*"] },
+    presentation: {
+      title: "数据采集",
+      source_label: "示例搜索",
+      batch_input: {
+        label: "搜索词",
+        placeholder: "每行输入一个搜索词",
+        item_label: "搜索词",
+        count_unit: "个",
+        import_formats: ["txt", "csv"],
+        csv_headers: ["搜索词", "keyword", "query"]
+      },
+      actions: {
+        run: "开始搜索",
+        run_empty: "输入搜索词后开始",
+        running: "正在搜索…",
+        single_run: "只读取当前结果页",
+        single_running: "正在读取当前页…"
+      },
+      results: {
+        title: "本次结果",
+        item_label: "条目",
+        count_unit: "个",
+        empty_title: "还没有搜索结果",
+        empty_description: "完成一次搜索后，结果会显示在这里。"
+      },
+      collections: {
+        results: {
+          label: "搜索结果",
+          item_label: "条目",
+          count_unit: "个",
+          fields: {
+            _query: { label: "搜索词", order: 10 },
+            name: { label: "名称", order: 20, emphasis: "primary" },
+            category: { label: "分类", order: 30 },
+            updated_at: { label: "更新时间", order: 40 },
+            score: { label: "相关度", order: 50 },
+            url: { label: "链接", order: 60, display: "link" }
+          }
+        }
+      }
+    },
     parameters: {
-      max_pages: { type: "number", label: "提取页数", default: 3, min: 1, max: 20, required: true }
+      page_limit: {
+        type: "number",
+        label: "读取页数",
+        default: 3,
+        min: 1,
+        max: 20,
+        required: true,
+        presentation: { placement: "primary", style: "sentence", prefix: "每个搜索词读取", suffix: "页" }
+      }
     },
     workflow: [{ action: "wait", duration_ms: 100 }],
     batch: {
@@ -296,36 +345,32 @@ const sampleBrowserTool = {
 
 const sampleBrowserToolRun = {
   toolId: sampleBrowserTool.id,
-  toolName: "知网文献结果提取 · 批量",
+  toolName: "示例数据工具 · 批量",
   runId: "sample-browser-tool-run",
-  pageUrl: "https://kns.cnki.net/kns8s/defaultresult/index?kw=large+language+model",
-  pageTitle: "知网检索结果",
+  pageUrl: "https://example.com/search?q=interface",
+  pageTitle: "示例搜索结果",
   startedAt: now - 1000 * 70,
   finishedAt: now - 1000 * 10,
   savedAt: now - 1000 * 10,
   status: "completed",
   warnings: [],
   data: {
-    literature: [
+    results: [
       {
-        _query: "大语言模型",
-        title: "大语言模型研究进展与应用综述",
-        authors: ["张明", "李然"],
-        source: "计算机研究与发展",
-        published_at: "2025-06-18",
-        citation_count: 32,
-        download_count: 418,
-        url: "https://kns.cnki.net/sample/1"
+        _query: "界面设计",
+        name: "研究工具界面规范",
+        category: "设计系统",
+        updated_at: "2026-07-18",
+        score: 92,
+        url: "https://example.com/result/1"
       },
       {
-        _query: "知识图谱",
-        title: "知识图谱增强的科研文献检索方法",
-        authors: ["王欣"],
-        source: "情报学报",
-        published_at: "2025-03-02",
-        citation_count: 18,
-        download_count: 267,
-        url: "https://kns.cnki.net/sample/2"
+        _query: "数据采集",
+        name: "批量采集任务示例",
+        category: "自动化",
+        updated_at: "2026-06-27",
+        score: 87,
+        url: "https://example.com/result/2"
       }
     ]
   }
@@ -388,8 +433,8 @@ export function installDevChromeMock() {
             recentRuns: [sampleBrowserToolRun],
             targetTab: {
               id: 88,
-              title: "中国知网：文献检索结果",
-              url: "https://kns.cnki.net/kns8s/defaultresult/index?kw=large+language+model"
+              title: "Example Search：批量结果",
+              url: "https://example.com/search?q=interface"
             },
             matchedToolIds: [sampleBrowserTool.id]
           };

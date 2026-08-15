@@ -1,8 +1,10 @@
 import { parseDocument } from "yaml";
 import type {
+  BrowserToolCollectionPresentation,
   BrowserToolDefinition,
   BrowserToolFieldDefinition,
   BrowserToolParameterDefinition,
+  BrowserToolPresentation,
   BrowserToolStep,
   BrowserToolTransform
 } from "./contracts";
@@ -10,6 +12,7 @@ import { BROWSER_TOOL_LIMITS } from "./limits";
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,79}$/;
 const COLLECTION_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
+const PRESENTATION_FIELD_PATTERN = /^[a-z_][a-z0-9_-]{0,63}$/;
 const TRANSFORMS = new Set<BrowserToolTransform>([
   "trim",
   "normalize_whitespace",
@@ -54,6 +57,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
 
   const limits = root.limits === undefined ? undefined : validateLimits(root.limits);
   const batch = root.batch === undefined ? undefined : validateBatch(root.batch);
+  const presentation = root.presentation === undefined ? undefined : validatePresentation(root.presentation);
 
   return {
     schema_version: 1,
@@ -68,9 +72,97 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     parameters,
     selectors,
     workflow,
+    presentation,
     batch,
     limits
   };
+}
+
+function validatePresentation(value: unknown): BrowserToolPresentation {
+  const source = asRecord(value, "presentation");
+  const batchInput = source.batch_input === undefined ? undefined : asRecord(source.batch_input, "presentation.batch_input");
+  const actions = source.actions === undefined ? undefined : asRecord(source.actions, "presentation.actions");
+  const results = source.results === undefined ? undefined : asRecord(source.results, "presentation.results");
+  const importFormats = batchInput?.import_formats === undefined
+    ? undefined
+    : readStringArray(batchInput.import_formats, "presentation.batch_input.import_formats");
+  importFormats?.forEach((format) => {
+    if (format !== "txt" && format !== "csv") throw new Error(`presentation.batch_input.import_formats 不支持：${format}`);
+  });
+
+  return {
+    title: readOptionalUiText(source.title, "presentation.title"),
+    source_label: readOptionalUiText(source.source_label, "presentation.source_label"),
+    batch_input: batchInput
+      ? {
+          label: readOptionalUiText(batchInput.label, "presentation.batch_input.label"),
+          placeholder: readOptionalUiText(batchInput.placeholder, "presentation.batch_input.placeholder", 500),
+          item_label: readOptionalUiText(batchInput.item_label, "presentation.batch_input.item_label"),
+          count_unit: readOptionalUiText(batchInput.count_unit, "presentation.batch_input.count_unit", 12),
+          import_formats: importFormats as Array<"txt" | "csv"> | undefined,
+          csv_headers: batchInput.csv_headers === undefined
+            ? undefined
+            : readStringArray(batchInput.csv_headers, "presentation.batch_input.csv_headers").map((header, index) =>
+                validateUiText(header, `presentation.batch_input.csv_headers[${index}]`)
+              )
+        }
+      : undefined,
+    actions: actions
+      ? {
+          run: readOptionalUiText(actions.run, "presentation.actions.run"),
+          run_empty: readOptionalUiText(actions.run_empty, "presentation.actions.run_empty"),
+          running: readOptionalUiText(actions.running, "presentation.actions.running"),
+          single_run: readOptionalUiText(actions.single_run, "presentation.actions.single_run"),
+          single_running: readOptionalUiText(actions.single_running, "presentation.actions.single_running")
+        }
+      : undefined,
+    results: results
+      ? {
+          title: readOptionalUiText(results.title, "presentation.results.title"),
+          item_label: readOptionalUiText(results.item_label, "presentation.results.item_label"),
+          count_unit: readOptionalUiText(results.count_unit, "presentation.results.count_unit", 12),
+          empty_title: readOptionalUiText(results.empty_title, "presentation.results.empty_title"),
+          empty_description: readOptionalUiText(results.empty_description, "presentation.results.empty_description", 300)
+        }
+      : undefined,
+    collections: source.collections === undefined ? undefined : validateCollectionPresentations(source.collections)
+  };
+}
+
+function validateCollectionPresentations(value: unknown): Record<string, BrowserToolCollectionPresentation> {
+  const source = asRecord(value, "presentation.collections");
+  const collections: Record<string, BrowserToolCollectionPresentation> = {};
+  for (const [collectionName, rawCollection] of Object.entries(source)) {
+    if (!COLLECTION_PATTERN.test(collectionName)) throw new Error(`presentation.collections.${collectionName} 名称无效。`);
+    const collection = asRecord(rawCollection, `presentation.collections.${collectionName}`);
+    const fieldsSource = collection.fields === undefined
+      ? undefined
+      : asRecord(collection.fields, `presentation.collections.${collectionName}.fields`);
+    const fields: NonNullable<BrowserToolCollectionPresentation["fields"]> = {};
+    for (const [fieldName, rawField] of Object.entries(fieldsSource || {})) {
+      if (!PRESENTATION_FIELD_PATTERN.test(fieldName)) throw new Error(`presentation.collections.${collectionName}.fields.${fieldName} 名称无效。`);
+      const field = asRecord(rawField, `presentation.collections.${collectionName}.fields.${fieldName}`);
+      const display = field.display === undefined ? undefined : readString(field.display, `presentation.collections.${collectionName}.fields.${fieldName}.display`);
+      if (display !== undefined && display !== "text" && display !== "link") throw new Error(`presentation.collections.${collectionName}.fields.${fieldName}.display 无效。`);
+      const emphasis = field.emphasis === undefined ? undefined : readString(field.emphasis, `presentation.collections.${collectionName}.fields.${fieldName}.emphasis`);
+      if (emphasis !== undefined && emphasis !== "primary" && emphasis !== "secondary") throw new Error(`presentation.collections.${collectionName}.fields.${fieldName}.emphasis 无效。`);
+      const order = readOptionalNumber(field.order, `presentation.collections.${collectionName}.fields.${fieldName}.order`);
+      if (order !== undefined && (!Number.isInteger(order) || order < 0 || order > 10_000)) throw new Error(`presentation.collections.${collectionName}.fields.${fieldName}.order 无效。`);
+      fields[fieldName] = {
+        label: readOptionalUiText(field.label, `presentation.collections.${collectionName}.fields.${fieldName}.label`),
+        order,
+        display: display as "text" | "link" | undefined,
+        emphasis: emphasis as "primary" | "secondary" | undefined
+      };
+    }
+    collections[collectionName] = {
+      label: readOptionalUiText(collection.label, `presentation.collections.${collectionName}.label`),
+      item_label: readOptionalUiText(collection.item_label, `presentation.collections.${collectionName}.item_label`),
+      count_unit: readOptionalUiText(collection.count_unit, `presentation.collections.${collectionName}.count_unit`, 12),
+      fields: fieldsSource ? fields : undefined
+    };
+  }
+  return collections;
 }
 
 function validateBatch(value: unknown): BrowserToolDefinition["batch"] {
@@ -112,10 +204,27 @@ function validateParameters(value: unknown): Record<string, BrowserToolParameter
       required: readOptionalBoolean(definition.required, `parameters.${name}.required`),
       default: validateParameterDefault(definition.default, type, name),
       min: readOptionalNumber(definition.min, `parameters.${name}.min`),
-      max: readOptionalNumber(definition.max, `parameters.${name}.max`)
+      max: readOptionalNumber(definition.max, `parameters.${name}.max`),
+      presentation: definition.presentation === undefined
+        ? undefined
+        : validateParameterPresentation(definition.presentation, name)
     };
   }
   return result;
+}
+
+function validateParameterPresentation(value: unknown, name: string): BrowserToolParameterDefinition["presentation"] {
+  const source = asRecord(value, `parameters.${name}.presentation`);
+  const placement = source.placement === undefined ? undefined : readString(source.placement, `parameters.${name}.presentation.placement`);
+  if (placement !== undefined && placement !== "primary" && placement !== "advanced") throw new Error(`parameters.${name}.presentation.placement 无效。`);
+  const style = source.style === undefined ? undefined : readString(source.style, `parameters.${name}.presentation.style`);
+  if (style !== undefined && style !== "field" && style !== "sentence") throw new Error(`parameters.${name}.presentation.style 无效。`);
+  return {
+    placement: placement as "primary" | "advanced" | undefined,
+    style: style as "field" | "sentence" | undefined,
+    prefix: readOptionalUiText(source.prefix, `parameters.${name}.presentation.prefix`),
+    suffix: readOptionalUiText(source.suffix, `parameters.${name}.presentation.suffix`)
+  };
 }
 
 function validateParameterDefault(
@@ -291,6 +400,15 @@ function readString(value: unknown, path: string, allowEmpty = false): string {
 
 function readOptionalString(value: unknown, path: string): string | undefined {
   return value === undefined ? undefined : readString(value, path);
+}
+
+function readOptionalUiText(value: unknown, path: string, maxLength = 120): string | undefined {
+  return value === undefined ? undefined : validateUiText(readString(value, path), path, maxLength);
+}
+
+function validateUiText(value: string, path: string, maxLength = 120): string {
+  if (value.length > maxLength) throw new Error(`${path} 不能超过 ${maxLength} 个字符。`);
+  return value;
 }
 
 function readStringArray(value: unknown, path: string): string[] {

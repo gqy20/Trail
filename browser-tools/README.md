@@ -31,7 +31,58 @@ batch:
   delay_between_keywords_ms: 1200
 ```
 
-侧边栏随后会显示批量检索区，可粘贴每行一个的检索词，或导入 TXT/CSV。CSV 会优先读取 `检索词`、`关键词`、`keyword`、`query` 或 `search_term` 列。运行时依次导航目标标签页、复用原工作流提取，并给每条记录增加 `_query` 来源列；默认在完成后自动下载汇总 CSV。遇到登录、验证码或提取失败会停止后续检索并保留已完成结果。
+侧边栏随后会显示批量输入区。运行时依次导航目标标签页、复用原工作流提取，并给每条记录增加 `_query` 来源列；默认在完成后自动下载汇总 CSV。遇到登录、验证码或提取失败会停止后续检索并保留已完成结果。
+
+## 展示契约
+
+工具可以用可选的 `presentation` 段声明工作区标题、来源名称、输入文案、动作名称和结果字段。核心侧边栏只读取这些通用声明，不识别具体平台、集合或字段语义：
+
+```yml
+presentation:
+  title: 数据采集
+  source_label: Example Search
+  batch_input:
+    label: 搜索词
+    placeholder: 每行输入一个搜索词
+    item_label: 搜索词
+    count_unit: 个
+    import_formats: [txt, csv]
+    csv_headers: [搜索词, keyword, query]
+  actions:
+    run: 开始搜索
+    run_empty: 输入搜索词后开始
+    running: 正在搜索…
+    single_run: 只读取当前结果页
+  results:
+    title: 本次结果
+    item_label: 条目
+    count_unit: 个
+  collections:
+    results:
+      label: 搜索结果
+      item_label: 条目
+      count_unit: 个
+      fields:
+        name: { label: 名称, order: 10, emphasis: primary }
+        url: { label: 链接, order: 20, display: link }
+```
+
+参数可使用自己的展示声明决定放置位置和渲染方式：
+
+```yml
+parameters:
+  page_limit:
+    type: number
+    label: 读取页数
+    default: 3
+    presentation:
+      placement: primary
+      style: sentence
+      prefix: 每个搜索词读取
+      suffix: 页
+```
+
+未声明 `presentation` 时，运行时使用“数据采集”“批量输入”“记录”等中性默认文案。平台专有名称、字段中文名、字段顺序和链接展示方式应留在各自的工具 YAML 中。
 
 ## 调用链路
 
@@ -48,6 +99,6 @@ const result = await sendMessage({
 
 后台会再次解析和校验 YAML、检查目标域名，然后才把已验证的定义发送给目标标签页执行。
 
-popup 中的扳手入口会在当前网页旁打开 Browser Tools Side Panel；旧版浏览器会回退到独立管理页。它支持导入或覆盖 YAML、根据目标 URL 显示匹配状态、动态填写参数、批量导入检索词、运行工具、表格化查看最近结果，以及导出带 UTF-8 BOM 的 CSV 或 JSON。
+popup 中的扳手入口会在当前网页旁打开 Browser Tools Side Panel；旧版浏览器会回退到独立管理页。它支持导入或覆盖 YAML、根据目标 URL 显示匹配状态、按工具展示契约动态渲染输入与参数、运行工具、表格化查看最近结果，以及导出带 UTF-8 BOM 的 CSV 或 JSON。
 
-当前版本的 `pause_for_user` 会结束本次运行并返回 `paused`，尚不能从中断步骤原地恢复。保存历史会限制运行数量、集合记录数量和长文本长度，完整数据导出将在文献数据集层实现。
+当前版本的 `pause_for_user` 会结束本次运行并返回 `paused`，尚不能从中断步骤原地恢复。保存历史会限制运行数量、集合记录数量和长文本长度；本次运行返回的完整结果仍可直接导出。

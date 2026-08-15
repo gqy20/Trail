@@ -5,6 +5,46 @@ name: 知网文献结果提取
 description: 从当前知网检索结果页逐页提取题名、作者、来源、日期、文献类型和计数信息
 version: 0.1.0
 
+presentation:
+  title: 文献采集
+  source_label: 中国知网
+  batch_input:
+    label: 检索词
+    placeholder: |-
+      每行输入一个检索词
+      例如：大语言模型
+    item_label: 检索词
+    count_unit: 个
+    import_formats: [txt, csv]
+    csv_headers: [检索词, 关键词, keyword, keywords, query, search_term, search term]
+  actions:
+    run: 开始采集
+    run_empty: 输入检索词后开始
+    running: 正在检索…
+    single_run: 只提取当前结果页
+    single_running: 正在提取当前页…
+  results:
+    title: 本次采集
+    item_label: 文献
+    count_unit: 篇
+    empty_title: 还没有文献结果
+    empty_description: 输入检索词并完成一次采集后，结果会显示在这里。
+  collections:
+    literature:
+      label: 文献
+      item_label: 文献
+      count_unit: 篇
+      fields:
+        _query: { label: 检索词, order: 10 }
+        title: { label: 题名, order: 20, emphasis: primary }
+        authors: { label: 作者, order: 30 }
+        source: { label: 来源, order: 40 }
+        published_at: { label: 发表时间, order: 50 }
+        citation_count: { label: 被引, order: 60 }
+        download_count: { label: 下载, order: 70 }
+        database: { label: 类型, order: 80 }
+        url: { label: 链接, order: 90, display: link }
+
 match:
   domains:
     - kns.cnki.net
@@ -20,6 +60,11 @@ parameters:
     default: 3
     min: 1
     max: 20
+    presentation:
+      placement: primary
+      style: sentence
+      prefix: 每个检索词提取
+      suffix: 页
 
 selectors:
   result_rows: "table.result-table-list tbody tr"

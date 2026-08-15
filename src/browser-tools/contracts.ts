@@ -7,6 +7,54 @@ export type BrowserToolParameterDefinition = {
   default?: string | number | boolean;
   min?: number;
   max?: number;
+  presentation?: {
+    placement?: "primary" | "advanced";
+    style?: "field" | "sentence";
+    prefix?: string;
+    suffix?: string;
+  };
+};
+
+export type BrowserToolFieldPresentation = {
+  label?: string;
+  order?: number;
+  display?: "text" | "link";
+  emphasis?: "primary" | "secondary";
+};
+
+export type BrowserToolCollectionPresentation = {
+  label?: string;
+  item_label?: string;
+  count_unit?: string;
+  fields?: Record<string, BrowserToolFieldPresentation>;
+};
+
+export type BrowserToolPresentation = {
+  title?: string;
+  source_label?: string;
+  batch_input?: {
+    label?: string;
+    placeholder?: string;
+    item_label?: string;
+    count_unit?: string;
+    import_formats?: Array<"txt" | "csv">;
+    csv_headers?: string[];
+  };
+  actions?: {
+    run?: string;
+    run_empty?: string;
+    running?: string;
+    single_run?: string;
+    single_running?: string;
+  };
+  results?: {
+    title?: string;
+    item_label?: string;
+    count_unit?: string;
+    empty_title?: string;
+    empty_description?: string;
+  };
+  collections?: Record<string, BrowserToolCollectionPresentation>;
 };
 
 export type BrowserToolFieldDefinition = {
@@ -110,6 +158,7 @@ export type BrowserToolDefinition = {
   parameters?: Record<string, BrowserToolParameterDefinition>;
   selectors?: Record<string, string>;
   workflow: BrowserToolStep[];
+  presentation?: BrowserToolPresentation;
   batch?: {
     navigation: {
       type: "query_parameter";

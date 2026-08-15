@@ -5,6 +5,36 @@ name: 示例文献搜索
 description: 演示通用浏览器工具的搜索、等待和结果提取结构
 version: 0.1.0
 
+presentation:
+  title: 示例数据采集
+  source_label: Example Search
+  batch_input:
+    label: 搜索词
+    placeholder: 每行输入一个搜索词
+    item_label: 搜索词
+    count_unit: 个
+    import_formats: [txt, csv]
+    csv_headers: [搜索词, keyword, query]
+  actions:
+    run: 开始搜索
+    run_empty: 输入搜索词后开始
+    running: 正在搜索…
+  results:
+    title: 本次结果
+    item_label: 条目
+    count_unit: 个
+  collections:
+    literature:
+      label: 搜索结果
+      item_label: 条目
+      count_unit: 个
+      fields:
+        _query: { label: 搜索词, order: 10 }
+        title: { label: 标题, order: 20, emphasis: primary }
+        authors: { label: 作者, order: 30 }
+        year: { label: 年份, order: 40 }
+        url: { label: 链接, order: 50, display: link }
+
 match:
   domains:
     - example.com
