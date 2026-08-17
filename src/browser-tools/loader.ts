@@ -456,11 +456,14 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
           };
         }
         if (Object.keys(fields).length === 0) throw new Error(`${path}.fields 不能为空。`);
+        const dedupeBy = readOptionalString(step.dedupe_by, `${path}.dedupe_by`);
+        if (dedupeBy && !(dedupeBy in fields)) throw new Error(`${path}.dedupe_by 必须引用已声明字段。`);
         return {
           action,
           collection,
           selector: validatedSelector(step.selector, `${path}.selector`),
-          fields
+          fields,
+          dedupe_by: dedupeBy
         };
       }
       case "repeat": {
@@ -476,6 +479,10 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
         if (stopAfterUnchanged !== undefined && (!Number.isInteger(stopAfterUnchanged) || stopAfterUnchanged < 1 || stopAfterUnchanged > 10)) {
           throw new Error(`${path}.stop_after_unchanged 必须是 1-10 的整数。`);
         }
+        const stopAfterRecords = readOptionalNumber(step.stop_after_records, `${path}.stop_after_records`);
+        if (stopAfterRecords !== undefined && (!Number.isInteger(stopAfterRecords) || stopAfterRecords < 1 || stopAfterRecords > BROWSER_TOOL_LIMITS.maxRecords)) {
+          throw new Error(`${path}.stop_after_records 必须是 1-${BROWSER_TOOL_LIMITS.maxRecords} 的整数。`);
+        }
         const progressScope = progress ? readString(progress.scope, `${path}.progress.scope`) : undefined;
         if (progressScope && !COLLECTION_PATTERN.test(progressScope)) throw new Error(`${path}.progress.scope 无效。`);
         return {
@@ -487,6 +494,7 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
               ? undefined
               : validateSteps(asArray(step.between, `${path}.between`), depth + 1, countStep),
           stop_after_unchanged: stopAfterUnchanged,
+          stop_after_records: stopAfterRecords,
           progress: progress
             ? {
                 scope: progressScope!,

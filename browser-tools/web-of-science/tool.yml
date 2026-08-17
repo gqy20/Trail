@@ -3,7 +3,7 @@ schema_version: 1
 id: web-of-science-core-collection
 name: Web of Science Core Collection 文献提取
 description: 在 Web of Science Core Collection 新版检索界面中批量检索并提取结果卡片元数据
-version: 0.3.1
+version: 0.4.0
 
 presentation:
   title: WoS 文献采集
@@ -119,6 +119,7 @@ workflow:
       - action: repeat
         max: 24
         stop_after_unchanged: 3
+        stop_after_records: 50
         progress:
           scope: load
           label: 正在加载当前页
@@ -127,6 +128,7 @@ workflow:
           - action: extract
             collection: literature
             selector: "{{ selectors.result_records }}"
+            dedupe_by: url
             fields:
               title:
                 selector: "[data-ta='summary-record-title-link']"
@@ -188,8 +190,10 @@ workflow:
         between:
           - action: scroll
             delta_y: 900
-          - action: wait
-            duration_ms: 450
+          - action: wait_for_change
+            selector: "{{ selectors.result_records }}"
+            timeout_ms: 700
+            optional: true
     between:
       - action: click
         selector: "{{ selectors.next_page }}"
@@ -200,8 +204,6 @@ workflow:
           timeout_ms: 30000
       - action: scroll
         position: top
-      - action: wait
-        duration_ms: 700
 
 batch:
   navigation:
@@ -212,6 +214,6 @@ batch:
   delay_between_keywords_ms: 2000
 
 limits:
-  delay_between_actions_ms: 100
+  delay_between_actions_ms: 0
   max_records: 500
   require_user_activation: true

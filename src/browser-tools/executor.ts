@@ -20,6 +20,7 @@ type ExecutionContext = {
   warnings: string[];
   fingerprints: Map<string, string>;
   recordFingerprints: Map<string, Set<string>>;
+  recordIdentities: Map<string, Set<string>>;
   maxRecords: number;
   progressId?: string;
 };
@@ -38,6 +39,7 @@ export async function executeBrowserTool(
     warnings: [],
     fingerprints: new Map(),
     recordFingerprints: new Map(),
+    recordIdentities: new Map(),
     maxRecords: Math.min(definition.limits?.max_records || 500, BROWSER_TOOL_LIMITS.maxRecords),
     progressId
   };
@@ -177,6 +179,7 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
       if (!Number.isInteger(requestedMax) || requestedMax < 1) throw new Error("repeat.max 运行时参数必须是正整数。");
       const max = Math.min(requestedMax, BROWSER_TOOL_LIMITS.maxRepeat);
       let unchangedIterations = 0;
+      const repeatStartRecordCount = totalRecordCount(context.data);
       for (let index = 0; index < max; index += 1) {
         if (step.progress && context.progressId) {
           void chrome.runtime.sendMessage({
@@ -199,6 +202,7 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
           unchangedIterations = totalRecordCount(context.data) === recordsBefore ? unchangedIterations + 1 : 0;
           if (unchangedIterations >= step.stop_after_unchanged) break;
         }
+        if (step.stop_after_records && totalRecordCount(context.data) - repeatStartRecordCount >= step.stop_after_records) break;
         if (index < max - 1 && step.between?.length) {
           const betweenSignal = await executeSteps(step.between, context, true);
           if (betweenSignal === "pause") return betweenSignal;
@@ -221,6 +225,8 @@ function extractCollection(step: BrowserToolExtractStep, context: ExecutionConte
   const collection = (context.data[step.collection] ||= []);
   const seen = context.recordFingerprints.get(step.collection) || new Set<string>();
   context.recordFingerprints.set(step.collection, seen);
+  const seenIdentities = context.recordIdentities.get(step.collection) || new Set<string>();
+  context.recordIdentities.set(step.collection, seenIdentities);
   context.fingerprints.set(selector, fingerprint(selector));
 
   for (const root of roots) {
@@ -230,8 +236,14 @@ function extractCollection(step: BrowserToolExtractStep, context: ExecutionConte
     }
 
     const record: Record<string, unknown> = {};
+    let identity: unknown;
+    if (step.dedupe_by) {
+      identity = extractField(root, step.fields[step.dedupe_by], context);
+      const identityKey = JSON.stringify(identity);
+      if (identity !== undefined && seenIdentities.has(identityKey)) continue;
+    }
     for (const [name, field] of Object.entries(step.fields)) {
-      const value = extractField(root, field, context);
+      const value = name === step.dedupe_by ? identity : extractField(root, field, context);
       if (value === undefined && !field.optional) context.warnings.push(`记录字段缺失：${step.collection}.${name}`);
       if (value !== undefined) record[name] = value;
     }
@@ -239,6 +251,7 @@ function extractCollection(step: BrowserToolExtractStep, context: ExecutionConte
       const recordFingerprint = JSON.stringify(record);
       if (!seen.has(recordFingerprint)) {
         seen.add(recordFingerprint);
+        if (step.dedupe_by && identity !== undefined) seenIdentities.add(JSON.stringify(identity));
         collection.push(record);
       }
     }

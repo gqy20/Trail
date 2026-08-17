@@ -157,6 +157,7 @@ export type BrowserToolExtractStep = {
   collection: string;
   selector: string;
   fields: Record<string, BrowserToolFieldDefinition>;
+  dedupe_by?: string;
 };
 
 export type BrowserToolRepeatStep = {
@@ -165,6 +166,7 @@ export type BrowserToolRepeatStep = {
   steps: BrowserToolStep[];
   between?: BrowserToolStep[];
   stop_after_unchanged?: number;
+  stop_after_records?: number;
   progress?: {
     scope: string;
     label: string;

@@ -1,5 +1,5 @@
 schema_version: 1
-version: 7
+version: 8
 
 # enabled 默认为 true。新增工具时只需把 YAML 放在 browser-tools 下，并在这里登记。
 tools:
