@@ -85,14 +85,14 @@ batch:
 
 ```yml
 - action: repeat
-  max: 12
-  stop_after_unchanged: 2
+  max: 24
+  stop_after_unchanged: 3
   steps: []
   between:
     - action: scroll
-      delta_y: 2500
+      delta_y: 900
     - action: wait
-      duration_ms: 550
+      duration_ms: 450
 ```
 
 侧边栏随后会显示批量输入区。运行时依次导航目标标签页、复用原工作流提取，并给每条记录增加 `_query` 来源列；默认在完成后自动下载汇总 CSV。遇到登录、验证码或提取失败会停止后续检索并保留已完成结果。
