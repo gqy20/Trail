@@ -12,6 +12,7 @@ import type {
   BrowserToolDefinition,
   BrowserToolDownloadDefinition,
   BrowserToolDownloadRunResult,
+  BrowserToolExecutionProgress,
   BrowserToolFieldPresentation,
   BrowserToolParameterDefinition,
   BrowserToolPresentation,
@@ -38,6 +39,7 @@ function BrowserToolsApp() {
   const [activeView, setActiveView] = useState<"collect" | "results" | "history" | "settings">("collect");
   const [error, setError] = useState("");
   const [catalogNotice, setCatalogNotice] = useState("");
+  const [executionProgress, setExecutionProgress] = useState<Record<string, BrowserToolExecutionProgress>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keywordFileInputRef = useRef<HTMLInputElement>(null);
   const targetTabId = useMemo(() => readTargetTabId(), []);
@@ -52,6 +54,15 @@ function BrowserToolsApp() {
     chrome.tabs.onActivated.addListener(handleTabChange);
     return () => chrome.tabs.onActivated.removeListener(handleTabChange);
   }, [targetTabId]);
+
+  useEffect(() => {
+    const listener = (message: unknown) => {
+      if (!isExecutionProgress(message) || message.toolId !== selectedId) return;
+      setExecutionProgress((current) => message.scope === "keyword" ? { keyword: message } : { ...current, [message.scope]: message });
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, [selectedId]);
 
   const selectedTool = state?.tools.find((tool) => tool.id === selectedId);
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
@@ -172,6 +183,7 @@ function BrowserToolsApp() {
     if (!selectedTool?.definition.batch || !state?.targetTab || batchKeywords.length === 0 || composerIncomplete || batchTooLarge) return;
     setBusy(true);
     setBusyAction("batch");
+    setExecutionProgress({});
     setError("");
     setLastResult(undefined);
     try {
@@ -192,6 +204,7 @@ function BrowserToolsApp() {
     } finally {
       setBusy(false);
       setBusyAction(undefined);
+      setExecutionProgress({});
     }
   }
 
@@ -333,6 +346,10 @@ function BrowserToolsApp() {
                   </section>
                 ) : null}
 
+                {busyAction === "batch" && Object.keys(executionProgress).length > 0 ? (
+                  <ExecutionProgressPanel progress={executionProgress} />
+                ) : null}
+
                 {selectedTool.definition.batch ? (
                   <button
                     className="button primary full collect-button"
@@ -459,6 +476,33 @@ function BrowserToolsApp() {
       </div>
     </main>
   );
+}
+
+function ExecutionProgressPanel({ progress }: { progress: Record<string, BrowserToolExecutionProgress> }) {
+  const ordered = ["keyword", "page", "load"].flatMap((scope) => progress[scope] ? [progress[scope]] : []);
+  const recordCount = Math.max(0, ...ordered.map((item) => item.recordCount));
+  return (
+    <section className="execution-progress" aria-live="polite">
+      <div className="execution-progress-heading">
+        <span className="progress-spinner" aria-hidden="true" />
+        <strong>正在采集</strong>
+        <span>{recordCount} 条记录</span>
+      </div>
+      <div className="execution-progress-steps">
+        {ordered.map((item) => (
+          <div key={item.scope}>
+            <span>{item.label}</span>
+            <strong>{item.current} / {item.total}{item.itemLabel ? ` ${item.itemLabel}` : ""}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="execution-progress-bar"><span /></div>
+    </section>
+  );
+}
+
+function isExecutionProgress(value: unknown): value is BrowserToolExecutionProgress {
+  return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "BROWSER_TOOL_PROGRESS_UPDATE");
 }
 
 function ParameterForm({

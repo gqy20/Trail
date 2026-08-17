@@ -1,5 +1,6 @@
 import type {
   BrowserToolDefinition,
+  BrowserToolExecutionProgressEvent,
   BrowserToolExtractStep,
   BrowserToolFieldDefinition,
   BrowserToolRunResult,
@@ -20,11 +21,13 @@ type ExecutionContext = {
   fingerprints: Map<string, string>;
   recordFingerprints: Map<string, Set<string>>;
   maxRecords: number;
+  progressId?: string;
 };
 
 export async function executeBrowserTool(
   definition: BrowserToolDefinition,
-  suppliedParameters: Record<string, unknown>
+  suppliedParameters: Record<string, unknown>,
+  progressId?: string
 ): Promise<BrowserToolRunResult> {
   const startedAt = Date.now();
   const runId = `browser_tool_${createBrowserToolRunId()}`;
@@ -35,7 +38,8 @@ export async function executeBrowserTool(
     warnings: [],
     fingerprints: new Map(),
     recordFingerprints: new Map(),
-    maxRecords: Math.min(definition.limits?.max_records || 500, BROWSER_TOOL_LIMITS.maxRecords)
+    maxRecords: Math.min(definition.limits?.max_records || 500, BROWSER_TOOL_LIMITS.maxRecords),
+    progressId
   };
 
   try {
@@ -173,6 +177,19 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
       if (!Number.isInteger(requestedMax) || requestedMax < 1) throw new Error("repeat.max 运行时参数必须是正整数。");
       const max = Math.min(requestedMax, BROWSER_TOOL_LIMITS.maxRepeat);
       for (let index = 0; index < max; index += 1) {
+        if (step.progress && context.progressId) {
+          void chrome.runtime.sendMessage({
+            type: "BROWSER_TOOL_EXECUTION_PROGRESS",
+            progressId: context.progressId,
+            toolId: context.definition.id,
+            scope: step.progress.scope,
+            label: step.progress.label,
+            itemLabel: step.progress.item_label,
+            current: index + 1,
+            total: max,
+            recordCount: totalRecordCount(context.data)
+          } satisfies BrowserToolExecutionProgressEvent).catch(() => undefined);
+        }
         const signal = await executeSteps(step.steps, context, true);
         if (signal === "pause") return signal;
         if (signal === "stop_repeat") break;

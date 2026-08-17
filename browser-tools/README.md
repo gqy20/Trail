@@ -67,6 +67,20 @@ batch:
 
 `fixed_url` 仍会经过工具域名和 URL 匹配校验；工作流负责填写 `{{ parameters.keyword }}`、提交检索并提取结果。
 
+`repeat` 可以声明可选的实时进度元数据。运行时会把当前循环、总循环数和已发现记录数发送到侧边栏：
+
+```yml
+- action: repeat
+  max: "{{ parameters.max_pages }}"
+  progress:
+    scope: page
+    label: 正在处理页面
+    item_label: 页
+  steps: []
+```
+
+同一工作流可使用不同 `scope`（例如 `page`、`load`）同时展示分页与虚拟滚动进度。
+
 侧边栏随后会显示批量输入区。运行时依次导航目标标签页、复用原工作流提取，并给每条记录增加 `_query` 来源列；默认在完成后自动下载汇总 CSV。遇到登录、验证码或提取失败会停止后续检索并保留已完成结果。
 
 ## 展示契约

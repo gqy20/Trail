@@ -471,6 +471,9 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
         if (typeof max === "string" && !/\{\{\s*parameters\.[a-zA-Z0-9_-]+\s*\}\}|\$\{parameters\.[a-zA-Z0-9_-]+\}/.test(max)) {
           throw new Error(`${path}.max 字符串必须引用 parameters 中的数字参数。`);
         }
+        const progress = step.progress === undefined ? undefined : asRecord(step.progress, `${path}.progress`);
+        const progressScope = progress ? readString(progress.scope, `${path}.progress.scope`) : undefined;
+        if (progressScope && !COLLECTION_PATTERN.test(progressScope)) throw new Error(`${path}.progress.scope 无效。`);
         return {
           action,
           max,
@@ -478,7 +481,14 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
           between:
             step.between === undefined
               ? undefined
-              : validateSteps(asArray(step.between, `${path}.between`), depth + 1, countStep)
+              : validateSteps(asArray(step.between, `${path}.between`), depth + 1, countStep),
+          progress: progress
+            ? {
+                scope: progressScope!,
+                label: validateUiText(readString(progress.label, `${path}.progress.label`), `${path}.progress.label`),
+                item_label: readOptionalUiText(progress.item_label, `${path}.progress.item_label`)
+              }
+            : undefined
         };
       }
       case "pause_for_user":

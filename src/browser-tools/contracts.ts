@@ -164,6 +164,11 @@ export type BrowserToolRepeatStep = {
   max: number | string;
   steps: BrowserToolStep[];
   between?: BrowserToolStep[];
+  progress?: {
+    scope: string;
+    label: string;
+    item_label?: string;
+  };
 };
 
 export type BrowserToolPauseStep = {
@@ -312,4 +317,21 @@ export type ExecuteBrowserToolMessage = {
   type: "EXECUTE_BROWSER_TOOL";
   definition: BrowserToolDefinition;
   parameters: Record<string, unknown>;
+  progressId?: string;
+};
+
+export type BrowserToolExecutionProgress = {
+  type: "BROWSER_TOOL_PROGRESS_UPDATE";
+  progressId: string;
+  toolId: string;
+  scope: string;
+  label: string;
+  itemLabel?: string;
+  current: number;
+  total: number;
+  recordCount: number;
+};
+
+export type BrowserToolExecutionProgressEvent = Omit<BrowserToolExecutionProgress, "type"> & {
+  type: "BROWSER_TOOL_EXECUTION_PROGRESS";
 };

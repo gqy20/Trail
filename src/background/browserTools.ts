@@ -1,5 +1,6 @@
 import type {
   BrowserToolManagerState,
+  BrowserToolExecutionProgress,
   BrowserToolRunResult,
   ExecuteBrowserToolMessage,
   StoredBrowserTool
@@ -95,6 +96,7 @@ export async function runStoredBrowserToolBatch(input: {
   if (!matchesBrowserTool(definition, tab.url)) throw new Error(`工具 ${definition.id} 不适用于当前页面。`);
 
   const startedAt = Date.now();
+  const progressId = `browser_tool_progress_${createBackgroundRunId()}`;
   const data: BrowserToolRunResult["data"] = {};
   const warnings: string[] = [];
   let completedKeywords = 0;
@@ -104,6 +106,17 @@ export async function runStoredBrowserToolBatch(input: {
 
   for (const [index, keyword] of keywords.entries()) {
     try {
+      emitProgress({
+        type: "BROWSER_TOOL_PROGRESS_UPDATE",
+        progressId,
+        toolId: definition.id,
+        scope: "keyword",
+        label: "正在处理检索式",
+        itemLabel: "条",
+        current: index + 1,
+        total: keywords.length,
+        recordCount: Object.values(data).reduce((total, records) => total + records.length, 0)
+      });
       const currentTab = await chrome.tabs.get(tab.id);
       if (!currentTab.url) throw new Error("目标标签页没有有效 URL。");
       const navigation = definition.batch.navigation;
@@ -116,7 +129,7 @@ export async function runStoredBrowserToolBatch(input: {
         : input.parameters;
       await navigateTab(tab.id, nextUrl);
       const readyTab = await chrome.tabs.get(tab.id);
-      const result = await executeBrowserToolOnTab(definition, runParameters, readyTab);
+      const result = await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId);
       lastPageUrl = result.pageUrl;
       lastPageTitle = result.pageTitle;
 
@@ -181,7 +194,8 @@ export async function runBrowserTool(input: {
 async function executeBrowserToolOnTab(
   definition: ReturnType<typeof parseBrowserToolYaml>,
   parameters: Record<string, unknown>,
-  tab: chrome.tabs.Tab
+  tab: chrome.tabs.Tab,
+  progressId?: string
 ): Promise<BrowserToolRunResult> {
   if (tab.id === undefined || !tab.url) throw new Error("目标标签页不可用。");
   if (!/^https?:/i.test(tab.url)) throw new Error("Browser Tool 只能在普通 HTTP(S) 页面运行。");
@@ -190,11 +204,16 @@ async function executeBrowserToolOnTab(
   const message: ExecuteBrowserToolMessage = {
     type: "EXECUTE_BROWSER_TOOL",
     definition,
-    parameters
+    parameters,
+    progressId
   };
   const response = await sendToolMessageWithRetry(tab.id, message);
   if (response && "error" in response && !("status" in response)) throw new Error(response.error);
   return response as BrowserToolRunResult;
+}
+
+function emitProgress(progress: BrowserToolExecutionProgress): void {
+  void chrome.runtime.sendMessage(progress).catch(() => undefined);
 }
 
 async function persistRunResult(result: BrowserToolRunResult, toolName: string): Promise<BrowserToolRunResult> {

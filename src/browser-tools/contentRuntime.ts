@@ -32,7 +32,7 @@ export function installBrowserToolContentRuntime(): void {
 
     if (!isExecuteBrowserToolMessage(message)) return undefined;
 
-    executeBrowserTool(message.definition, message.parameters)
+    executeBrowserTool(message.definition, message.parameters, message.progressId)
       .then(sendResponse)
       .catch((error: unknown) => {
         const messageText = error instanceof Error ? error.message : "Browser Tool 执行失败。";

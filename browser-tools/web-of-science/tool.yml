@@ -3,7 +3,7 @@ schema_version: 1
 id: web-of-science-core-collection
 name: Web of Science Core Collection 文献提取
 description: 在 Web of Science Core Collection 新版检索界面中批量检索并提取结果卡片元数据
-version: 0.1.0
+version: 0.2.0
 
 presentation:
   title: WoS 文献采集
@@ -107,6 +107,10 @@ workflow:
     timeout_ms: 45000
   - action: repeat
     max: "{{ parameters.max_pages }}"
+    progress:
+      scope: page
+      label: 正在处理页面
+      item_label: 页
     steps:
       - action: scroll
         position: top
@@ -114,6 +118,10 @@ workflow:
         duration_ms: 500
       - action: repeat
         max: 35
+        progress:
+          scope: load
+          label: 正在加载当前页
+          item_label: 次
         steps:
           - action: extract
             collection: literature

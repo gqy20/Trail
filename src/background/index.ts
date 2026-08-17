@@ -15,6 +15,7 @@ import {
 } from "./recorder";
 import { deleteSession, getInteractionSettings, updateInteractionSettings } from "../shared/storage";
 import type { RuntimeMessage } from "../shared/types";
+import type { BrowserToolExecutionProgress, BrowserToolExecutionProgressEvent } from "../browser-tools/contracts";
 import {
   getBrowserToolManagerState,
   importBundledBrowserTools,
@@ -27,7 +28,12 @@ import {
 } from "./browserTools";
 import { downloadBrowserToolItems } from "./browserToolDownloads";
 
-chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecutionProgress | BrowserToolExecutionProgressEvent, sender, sendResponse) => {
+  if (message.type === "BROWSER_TOOL_EXECUTION_PROGRESS") {
+    void chrome.runtime.sendMessage({ ...message, type: "BROWSER_TOOL_PROGRESS_UPDATE" } satisfies BrowserToolExecutionProgress).catch(() => undefined);
+    return false;
+  }
+  if (message.type === "BROWSER_TOOL_PROGRESS_UPDATE") return false;
   handleMessage(message, sender)
     .then(sendResponse)
     .catch((error: unknown) => {

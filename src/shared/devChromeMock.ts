@@ -404,6 +404,7 @@ export function installDevChromeMock() {
     "trail.sessions": [sampleSession],
     "trail.interactionSettings": DEFAULT_INTERACTION_SETTINGS
   };
+  const runtimeListeners: Array<(message: unknown) => void> = [];
 
   const extensionRoot = window.location.origin;
 
@@ -482,12 +483,34 @@ export function installDevChromeMock() {
         }
 
         if (message.type === "RUN_STORED_BROWSER_TOOL" || message.type === "RUN_BROWSER_TOOL_BATCH") {
+          if (message.type === "RUN_BROWSER_TOOL_BATCH") {
+            for (const progress of [
+              { scope: "keyword", label: "正在处理检索式", current: 1, total: 2, recordCount: 0 },
+              { scope: "page", label: "正在处理页面", current: 2, total: 3, recordCount: 22 },
+              { scope: "load", label: "正在加载当前页", current: 18, total: 35, recordCount: 37 }
+            ]) {
+              runtimeListeners.forEach((listener) => listener({
+                type: "BROWSER_TOOL_PROGRESS_UPDATE",
+                progressId: "dev-progress",
+                toolId: sampleBrowserTool.id,
+                itemLabel: progress.scope === "keyword" ? "条" : progress.scope === "page" ? "页" : "次",
+                ...progress
+              }));
+              await new Promise((resolve) => window.setTimeout(resolve, 1_200));
+            }
+          }
           return sampleBrowserToolRun;
         }
 
         return sampleSession;
       },
-      onMessage: { addListener: () => undefined }
+      onMessage: {
+        addListener: (listener: (message: unknown) => void) => runtimeListeners.push(listener),
+        removeListener: (listener: (message: unknown) => void) => {
+          const index = runtimeListeners.indexOf(listener);
+          if (index >= 0) runtimeListeners.splice(index, 1);
+        }
+      }
     },
     tabs: {
       query: async () => sampleTabs,
