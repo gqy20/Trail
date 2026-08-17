@@ -472,6 +472,10 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
           throw new Error(`${path}.max 字符串必须引用 parameters 中的数字参数。`);
         }
         const progress = step.progress === undefined ? undefined : asRecord(step.progress, `${path}.progress`);
+        const stopAfterUnchanged = readOptionalNumber(step.stop_after_unchanged, `${path}.stop_after_unchanged`);
+        if (stopAfterUnchanged !== undefined && (!Number.isInteger(stopAfterUnchanged) || stopAfterUnchanged < 1 || stopAfterUnchanged > 10)) {
+          throw new Error(`${path}.stop_after_unchanged 必须是 1-10 的整数。`);
+        }
         const progressScope = progress ? readString(progress.scope, `${path}.progress.scope`) : undefined;
         if (progressScope && !COLLECTION_PATTERN.test(progressScope)) throw new Error(`${path}.progress.scope 无效。`);
         return {
@@ -482,6 +486,7 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
             step.between === undefined
               ? undefined
               : validateSteps(asArray(step.between, `${path}.between`), depth + 1, countStep),
+          stop_after_unchanged: stopAfterUnchanged,
           progress: progress
             ? {
                 scope: progressScope!,

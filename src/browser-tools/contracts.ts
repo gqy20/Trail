@@ -164,6 +164,7 @@ export type BrowserToolRepeatStep = {
   max: number | string;
   steps: BrowserToolStep[];
   between?: BrowserToolStep[];
+  stop_after_unchanged?: number;
   progress?: {
     scope: string;
     label: string;

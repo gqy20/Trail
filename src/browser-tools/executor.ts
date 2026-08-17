@@ -176,6 +176,7 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
       const requestedMax = typeof step.max === "number" ? step.max : Number(resolve(step.max, context));
       if (!Number.isInteger(requestedMax) || requestedMax < 1) throw new Error("repeat.max 运行时参数必须是正整数。");
       const max = Math.min(requestedMax, BROWSER_TOOL_LIMITS.maxRepeat);
+      let unchangedIterations = 0;
       for (let index = 0; index < max; index += 1) {
         if (step.progress && context.progressId) {
           void chrome.runtime.sendMessage({
@@ -190,9 +191,14 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
             recordCount: totalRecordCount(context.data)
           } satisfies BrowserToolExecutionProgressEvent).catch(() => undefined);
         }
+        const recordsBefore = totalRecordCount(context.data);
         const signal = await executeSteps(step.steps, context, true);
         if (signal === "pause") return signal;
         if (signal === "stop_repeat") break;
+        if (step.stop_after_unchanged) {
+          unchangedIterations = totalRecordCount(context.data) === recordsBefore ? unchangedIterations + 1 : 0;
+          if (unchangedIterations >= step.stop_after_unchanged) break;
+        }
         if (index < max - 1 && step.between?.length) {
           const betweenSignal = await executeSteps(step.between, context, true);
           if (betweenSignal === "pause") return betweenSignal;

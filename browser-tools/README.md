@@ -81,6 +81,20 @@ batch:
 
 同一工作流可使用不同 `scope`（例如 `page`、`load`）同时展示分页与虚拟滚动进度。
 
+虚拟滚动可以用 `stop_after_unchanged` 自适应提前结束。连续指定次数没有新增记录时停止当前 `repeat`，避免已经滚到底部后继续空等：
+
+```yml
+- action: repeat
+  max: 12
+  stop_after_unchanged: 2
+  steps: []
+  between:
+    - action: scroll
+      delta_y: 2500
+    - action: wait
+      duration_ms: 550
+```
+
 侧边栏随后会显示批量输入区。运行时依次导航目标标签页、复用原工作流提取，并给每条记录增加 `_query` 来源列；默认在完成后自动下载汇总 CSV。遇到登录、验证码或提取失败会停止后续检索并保留已完成结果。
 
 ## 展示契约
