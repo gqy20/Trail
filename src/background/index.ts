@@ -17,6 +17,7 @@ import { deleteSession, getInteractionSettings, updateInteractionSettings } from
 import type { RuntimeMessage } from "../shared/types";
 import {
   getBrowserToolManagerState,
+  importBundledBrowserTools,
   importBrowserTool,
   removeBrowserTool,
   runBrowserTool,
@@ -72,6 +73,8 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return getBrowserToolManagerState(message.tabId);
     case "IMPORT_BROWSER_TOOL":
       return importBrowserTool(message.yaml);
+    case "IMPORT_BUNDLED_BROWSER_TOOLS":
+      return importBundledBrowserTools();
     case "DELETE_BROWSER_TOOL":
       return removeBrowserTool(message.toolId);
     case "RUN_STORED_BROWSER_TOOL":
@@ -86,6 +89,12 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return undefined;
   }
 }
+
+chrome.runtime.onInstalled.addListener(() => {
+  void importBundledBrowserTools().catch((error: unknown) => {
+    console.error("Trail 无法初始化内置 Browser Tools。", error);
+  });
+});
 
 chrome.tabs.onCreated.addListener((tab) => {
   if (tab.id !== undefined) void recordTabEvent("created", tab.id, tab);

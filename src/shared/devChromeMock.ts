@@ -440,6 +440,10 @@ export function installDevChromeMock() {
           };
         }
 
+        if (message.type === "IMPORT_BUNDLED_BROWSER_TOOLS") {
+          return { installed: 0, updated: 0, preserved: 1, disabled: 1 };
+        }
+
         if (message.type === "RUN_STORED_BROWSER_TOOL" || message.type === "RUN_BROWSER_TOOL_BATCH") {
           return sampleBrowserToolRun;
         }

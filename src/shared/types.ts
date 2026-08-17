@@ -238,6 +238,7 @@ export type RuntimeMessage =
     }
   | { type: "GET_BROWSER_TOOL_STATE"; tabId?: number }
   | { type: "IMPORT_BROWSER_TOOL"; yaml: string }
+  | { type: "IMPORT_BUNDLED_BROWSER_TOOLS" }
   | { type: "DELETE_BROWSER_TOOL"; toolId: string }
   | {
       type: "RUN_STORED_BROWSER_TOOL";

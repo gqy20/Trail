@@ -8,6 +8,7 @@ import type {
   TrailSession
 } from "./types";
 import type { StoredBrowserTool } from "../browser-tools/contracts";
+import type { BundledBrowserToolImportResult } from "../browser-tools/bundled";
 
 type RuntimeResponseMap = {
   GET_POPUP_STATE: PopupState;
@@ -27,6 +28,7 @@ type RuntimeResponseMap = {
   RUN_BROWSER_TOOL: BrowserToolRunResult;
   GET_BROWSER_TOOL_STATE: BrowserToolManagerState;
   IMPORT_BROWSER_TOOL: StoredBrowserTool;
+  IMPORT_BUNDLED_BROWSER_TOOLS: BundledBrowserToolImportResult;
   DELETE_BROWSER_TOOL: undefined;
   RUN_STORED_BROWSER_TOOL: BrowserToolRunResult;
   RUN_BROWSER_TOOL_BATCH: BrowserToolRunResult;

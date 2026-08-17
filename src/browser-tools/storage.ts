@@ -22,6 +22,10 @@ export async function saveStoredBrowserTool(tool: StoredBrowserTool): Promise<vo
   await chrome.storage.local.set({ [TOOLS_KEY]: next });
 }
 
+export async function replaceStoredBrowserTools(tools: StoredBrowserTool[]): Promise<void> {
+  await chrome.storage.local.set({ [TOOLS_KEY]: tools.slice(0, MAX_TOOLS) });
+}
+
 export async function deleteStoredBrowserTool(toolId: string): Promise<void> {
   const tools = await getStoredBrowserTools();
   await chrome.storage.local.set({ [TOOLS_KEY]: tools.filter((tool) => tool.id !== toolId) });

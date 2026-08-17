@@ -470,6 +470,39 @@ textarea:focus-visible {
   gap: 3px;
 }
 
+.bundled-tools-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 11px;
+  border: 1px solid var(--trail-border-soft);
+  border-radius: 10px;
+  background: var(--trail-surface-muted);
+}
+
+.bundled-tools-row > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bundled-tools-row small {
+  color: var(--trail-muted);
+  font-size: var(--tool-font-xs);
+  line-height: 1.45;
+}
+
+.compact-button {
+  min-height: 30px;
+  padding: 5px 9px;
+  flex: 0 0 auto;
+}
+
+.catalog-notice {
+  margin: -2px 2px 0;
+}
+
 .tool-list-item {
   display: flex;
   align-items: center;

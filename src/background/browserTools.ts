@@ -4,6 +4,7 @@ import type {
   ExecuteBrowserToolMessage,
   StoredBrowserTool
 } from "../browser-tools/contracts";
+import { importBundledBrowserTools } from "../browser-tools/bundled";
 import { parseBrowserToolYaml } from "../browser-tools/loader";
 import { matchesBrowserTool } from "../browser-tools/matcher";
 import {
@@ -28,11 +29,14 @@ export async function importBrowserTool(yaml: string): Promise<StoredBrowserTool
     yaml,
     definition,
     importedAt: current?.importedAt || now,
-    updatedAt: now
+    updatedAt: now,
+    source: { type: "user" }
   };
   await saveStoredBrowserTool(tool);
   return tool;
 }
+
+export { importBundledBrowserTools };
 
 export async function removeBrowserTool(toolId: string): Promise<void> {
   await deleteStoredBrowserTool(toolId);

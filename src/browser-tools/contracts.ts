@@ -195,6 +195,10 @@ export type StoredBrowserTool = {
   definition: BrowserToolDefinition;
   importedAt: number;
   updatedAt: number;
+  source?: {
+    type: "bundled" | "user";
+    catalogVersion?: number;
+  };
 };
 
 export type BrowserToolRunRecord = BrowserToolRunResult & {

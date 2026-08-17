@@ -32,6 +32,7 @@ function BrowserToolsApp() {
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
   const [activeView, setActiveView] = useState<"collect" | "results" | "history" | "settings">("collect");
   const [error, setError] = useState("");
+  const [catalogNotice, setCatalogNotice] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keywordFileInputRef = useRef<HTMLInputElement>(null);
   const targetTabId = useMemo(() => readTargetTabId(), []);
@@ -102,6 +103,21 @@ function BrowserToolsApp() {
       const imported = await sendMessage({ type: "IMPORT_BROWSER_TOOL", yaml: yamlDraft });
       setYamlDraft("");
       await refresh(imported.id);
+    } catch (err) {
+      setError(toErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncBundledTools() {
+    setBusy(true);
+    setError("");
+    setCatalogNotice("");
+    try {
+      const result = await sendMessage({ type: "IMPORT_BUNDLED_BROWSER_TOOLS" });
+      setCatalogNotice(formatBundledImportResult(result));
+      await refresh();
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
@@ -346,13 +362,23 @@ function BrowserToolsApp() {
 
             <section className="settings-section stack">
               <div className="section-heading"><strong>工具</strong><span className="muted text-small">{state?.tools.length || 0} 个</span></div>
+              <div className="bundled-tools-row">
+                <span>
+                  <strong>内置工具库</strong>
+                  <small>由 browser-tools/catalog.yml 统一管理</small>
+                </span>
+                <button className="button secondary compact-button" disabled={busy} onClick={() => void syncBundledTools()}>
+                  <RefreshCw size={14} /> 同步
+                </button>
+              </div>
+              {catalogNotice ? <p className="muted text-small catalog-notice">{catalogNotice}</p> : null}
               <div className="tool-list">
                 {(state?.tools || []).map((tool) => {
                   const matched = state?.matchedToolIds.includes(tool.id);
                   return (
                     <div className={selectedId === tool.id ? "tool-settings-row active" : "tool-settings-row"} key={tool.id}>
                       <button className="tool-select-button" onClick={() => setSelectedId(tool.id)}>
-                        <span><strong>{tool.definition.name}</strong><small>v{tool.definition.version}</small></span>
+                        <span><strong>{tool.definition.name}</strong><small>v{tool.definition.version} · {tool.source?.type === "bundled" ? "内置" : "自定义"}</small></span>
                         <span className={matched ? "tool-state available" : "tool-state"}>{matched ? "当前可用" : "其他页面"}</span>
                       </button>
                       <button className="icon-button danger" aria-label={`删除${tool.definition.name}`} onClick={() => void deleteTool(tool)}><Trash2 size={15} /></button>
@@ -804,6 +830,15 @@ function getRunTitle(result: BrowserToolRunResult, tools: StoredBrowserTool[]): 
 
 function formatCount(count: number, unit: string, label: string): string {
   return `${count} ${unit}${label}`;
+}
+
+function formatBundledImportResult(result: { installed: number; updated: number; preserved: number; disabled: number }): string {
+  const changes = [
+    result.installed ? `新增 ${result.installed}` : "",
+    result.updated ? `更新 ${result.updated}` : "",
+    result.preserved ? `保留 ${result.preserved}` : ""
+  ].filter(Boolean);
+  return changes.length > 0 ? `同步完成：${changes.join("，")}。` : "内置工具已经是最新版本。";
 }
 
 function getImportAccept(formats: Array<"txt" | "csv">): string {

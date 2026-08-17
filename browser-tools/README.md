@@ -2,6 +2,23 @@
 
 Browser Tool 是一份受限 YAML 工作流。它复用用户当前 Chrome 页面和登录状态，通过声明式动作填写、点击、等待并提取 DOM 数据。
 
+## 内置工具清单
+
+插件内置工具由 [`catalog.yml`](./catalog.yml) 统一管理。新增工具时，把 YAML 放在 `browser-tools/` 的任意子目录，再在清单中登记相对路径：
+
+```yml
+schema_version: 1
+version: 1
+tools:
+  - path: cnki/tool.yml
+  - path: examples/literature-search.example.yml
+    enabled: false
+```
+
+`enabled` 默认为 `true`。构建会自动收集目录内的 YAML，因此不需要再修改 TypeScript 导入列表。插件首次安装或升级时会一次性同步启用的工具；设置页也提供“内置工具库 → 同步”按钮。
+
+同步只自动更新仍标记为“内置”的工具。用户通过编辑器手动导入的同 ID 工具会转为“自定义”来源，后续升级不会覆盖；清单中的停用项也不会删除用户现有数据。清单内容发生变化时应递增 `version`。
+
 ## 支持的动作
 
 - `wait_for`: 等待元素出现。
