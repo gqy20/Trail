@@ -10,6 +10,8 @@ import type {
   BrowserToolManagerState,
   BrowserToolCollectionPresentation,
   BrowserToolDefinition,
+  BrowserToolDownloadDefinition,
+  BrowserToolDownloadRunResult,
   BrowserToolFieldPresentation,
   BrowserToolParameterDefinition,
   BrowserToolPresentation,
@@ -656,6 +658,14 @@ function RunResult({ result, definition }: { result: BrowserToolRunResult; defin
           <RunExportActions result={result} />
         </div>
       </div>
+      {definition?.downloads?.map((downloadDefinition) => (
+        <DownloadPanel
+          toolId={definition.id}
+          definition={downloadDefinition}
+          records={result.data[downloadDefinition.collection] || []}
+          key={downloadDefinition.id}
+        />
+      ))}
       <RunCollections data={result.data} presentation={definition?.presentation} />
       {result.warnings.length > 0 ? (
         <details className="run-warnings">
@@ -666,6 +676,122 @@ function RunResult({ result, definition }: { result: BrowserToolRunResult; defin
       {result.error ? <p className="error-text">{result.error}</p> : null}
     </section>
   );
+}
+
+function DownloadPanel({
+  toolId,
+  definition,
+  records
+}: {
+  toolId: string;
+  definition: BrowserToolDownloadDefinition;
+  records: Array<Record<string, unknown>>;
+}) {
+  const candidates = useMemo(() => records.flatMap((record, index) => {
+    const rawUrl = record[definition.detail_url_field];
+    if (typeof rawUrl !== "string" || !/^https?:\/\//i.test(rawUrl)) return [];
+    const rawTitle = definition.title_field ? record[definition.title_field] : undefined;
+    return [{ title: typeof rawTitle === "string" && rawTitle.trim() ? rawTitle.trim() : `记录 ${index + 1}`, detailUrl: rawUrl }];
+  }), [records, definition.detail_url_field, definition.title_field]);
+  const formatEntries = Object.entries(definition.formats);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [format, setFormat] = useState(() => formatEntries[0]?.[0] || "");
+  const [busy, setBusy] = useState(false);
+  const [downloadResult, setDownloadResult] = useState<BrowserToolDownloadRunResult>();
+  const [downloadError, setDownloadError] = useState("");
+  const maxItems = definition.max_items || 20;
+  const selectedItems = candidates.filter((item) => selected.has(item.detailUrl));
+
+  function toggleItem(detailUrl: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      next.has(detailUrl) ? next.delete(detailUrl) : next.add(detailUrl);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((current) => current.size > 0 ? new Set() : new Set(candidates.slice(0, maxItems).map((item) => item.detailUrl)));
+  }
+
+  async function startDownload() {
+    if (!format || selectedItems.length === 0) return;
+    setBusy(true);
+    setDownloadError("");
+    setDownloadResult(undefined);
+    try {
+      const response = await sendMessage({
+        type: "DOWNLOAD_BROWSER_TOOL_ITEMS",
+        toolId,
+        downloadDefinitionId: definition.id,
+        format,
+        items: selectedItems,
+        userInitiated: true
+      });
+      setDownloadResult(response);
+    } catch (error) {
+      setDownloadError(toErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  return (
+    <section className="download-panel">
+      <div className="download-panel-heading">
+        <div><strong>{definition.label}</strong><span>{candidates.length} 条可解析记录</span></div>
+        <button className="text-button" disabled={busy} onClick={toggleAll}>{selected.size > 0 ? "取消选择" : `选择前 ${Math.min(candidates.length, maxItems)} 条`}</button>
+      </div>
+      <div className="download-candidate-list">
+        {candidates.slice(0, 20).map((item) => (
+          <label key={item.detailUrl}>
+            <input type="checkbox" checked={selected.has(item.detailUrl)} disabled={busy} onChange={() => toggleItem(item.detailUrl)} />
+            <span title={item.title}>{item.title}</span>
+          </label>
+        ))}
+      </div>
+      <div className="download-actions">
+        <select className="input" value={format} disabled={busy} onChange={(event) => setFormat(event.target.value)}>
+          {formatEntries.map(([id, item]) => <option value={id} key={id}>{item.label}</option>)}
+        </select>
+        <button className="button primary" disabled={busy || selectedItems.length === 0 || selectedItems.length > maxItems} onClick={() => void startDownload()}>
+          <Download size={15} /> {busy ? "正在下载…" : `下载选中的 ${selectedItems.length} 条`}
+        </button>
+      </div>
+      {selectedItems.length > maxItems ? <p className="error-text text-small">一次最多下载 {maxItems} 条。</p> : null}
+      {downloadResult ? <DownloadResultSummary result={downloadResult} /> : null}
+      {downloadError ? <p className="error-text text-small">{downloadError}</p> : null}
+    </section>
+  );
+}
+
+function DownloadResultSummary({ result }: { result: BrowserToolDownloadRunResult }) {
+  const completed = result.items.filter((item) => item.status === "completed").length;
+  return (
+    <div className={`download-summary download-${result.status}`}>
+      <strong>{result.status === "paused" ? "下载已暂停" : `已完成 ${completed}/${result.items.length}`}</strong>
+      {result.status === "paused" ? <span>已打开需要处理的页面。完成安全验证后，可重新选择未完成项继续。</span> : null}
+      <ul>
+        {result.items.filter((item) => item.status !== "pending").map((item) => (
+          <li key={item.detailUrl}>
+            <span>{downloadItemStatusLabel(item.status)}</span>
+            <span title={item.error || item.filename}>{item.title}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function downloadItemStatusLabel(status: BrowserToolDownloadRunResult["items"][number]["status"]): string {
+  switch (status) {
+    case "pending": return "等待";
+    case "completed": return "完成";
+    case "failed": return "失败";
+    case "unavailable": return "无资源";
+    case "needs_user": return "需处理";
+  }
 }
 
 function RunCollections({

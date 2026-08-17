@@ -280,6 +280,15 @@ const sampleBrowserTool = {
     description: "用于开发预览的通用批量数据采集工具",
     version: "0.1.0",
     match: { domains: ["example.com"], urls: ["*/search*"] },
+    downloads: [{
+      id: "fulltext",
+      label: "全文下载",
+      collection: "results",
+      detail_url_field: "url",
+      title_field: "name",
+      formats: { pdf: { label: "PDF", selector: ".download-pdf", extension: "pdf" } },
+      max_items: 20
+    }],
     presentation: {
       title: "数据采集",
       source_label: "示例搜索",
@@ -401,7 +410,13 @@ export function installDevChromeMock() {
   globalThis.chrome = {
     runtime: {
       getURL: (path: string) => `${extensionRoot}/${path}`,
-      sendMessage: async (message: { type: string; settings?: Partial<TrailInteractionSettings>; eventId?: string }) => {
+      sendMessage: async (message: {
+        type: string;
+        settings?: Partial<TrailInteractionSettings>;
+        eventId?: string;
+        format?: string;
+        items?: Array<{ title: string; detailUrl: string }>;
+      }) => {
         if (message.type === "GET_POPUP_STATE") {
           const isActivePreview = new URLSearchParams(window.location.search).get("active") === "1";
 
@@ -451,6 +466,19 @@ export function installDevChromeMock() {
 
         if (message.type === "IMPORT_BUNDLED_BROWSER_TOOLS") {
           return { installed: 0, updated: 0, preserved: 1, disabled: 1 };
+        }
+
+        if (message.type === "DOWNLOAD_BROWSER_TOOL_ITEMS") {
+          const items = message.items || [];
+          return {
+            toolId: sampleBrowserTool.id,
+            downloadDefinitionId: "fulltext",
+            format: message.format || "pdf",
+            status: "completed",
+            startedAt: Date.now() - 1000,
+            finishedAt: Date.now(),
+            items: items.map((item, index) => ({ ...item, format: message.format || "pdf", status: "completed", downloadId: index + 1, filename: `${item.title}.pdf` }))
+          };
         }
 
         if (message.type === "RUN_STORED_BROWSER_TOOL" || message.type === "RUN_BROWSER_TOOL_BATCH") {

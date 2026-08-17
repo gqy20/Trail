@@ -2,6 +2,7 @@ import { parseDocument } from "yaml";
 import type {
   BrowserToolCollectionPresentation,
   BrowserToolDefinition,
+  BrowserToolDownloadDefinition,
   BrowserToolFieldDefinition,
   BrowserToolParameterDefinition,
   BrowserToolPresentation,
@@ -58,6 +59,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
   const limits = root.limits === undefined ? undefined : validateLimits(root.limits);
   const batch = root.batch === undefined ? undefined : validateBatch(root.batch);
   const presentation = root.presentation === undefined ? undefined : validatePresentation(root.presentation);
+  const downloads = root.downloads === undefined ? undefined : validateDownloads(root.downloads);
 
   return {
     schema_version: 1,
@@ -73,9 +75,78 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     selectors,
     workflow,
     presentation,
+    downloads,
     batch,
     limits
   };
+}
+
+function validateDownloads(value: unknown): BrowserToolDownloadDefinition[] {
+  const entries = asArray(value, "downloads");
+  if (entries.length === 0 || entries.length > 10) throw new Error("downloads 需要包含 1-10 个下载定义。");
+  const ids = new Set<string>();
+  return entries.map((raw, index) => {
+    const path = `downloads[${index}]`;
+    const source = asRecord(raw, path);
+    const id = readString(source.id, `${path}.id`);
+    if (!COLLECTION_PATTERN.test(id) || ids.has(id)) throw new Error(`${path}.id 无效或重复。`);
+    ids.add(id);
+    const collection = readString(source.collection, `${path}.collection`);
+    if (!COLLECTION_PATTERN.test(collection)) throw new Error(`${path}.collection 无效。`);
+    const detailUrlField = readString(source.detail_url_field, `${path}.detail_url_field`);
+    if (!PRESENTATION_FIELD_PATTERN.test(detailUrlField)) throw new Error(`${path}.detail_url_field 无效。`);
+    const titleField = readOptionalString(source.title_field, `${path}.title_field`);
+    if (titleField && !PRESENTATION_FIELD_PATTERN.test(titleField)) throw new Error(`${path}.title_field 无效。`);
+
+    const rawFormats = asRecord(source.formats, `${path}.formats`);
+    const formats: BrowserToolDownloadDefinition["formats"] = {};
+    const formatEntries = Object.entries(rawFormats);
+    if (formatEntries.length === 0 || formatEntries.length > 8) throw new Error(`${path}.formats 需要包含 1-8 个格式。`);
+    for (const [formatId, rawFormat] of formatEntries) {
+      if (!COLLECTION_PATTERN.test(formatId)) throw new Error(`${path}.formats.${formatId} 名称无效。`);
+      const format = asRecord(rawFormat, `${path}.formats.${formatId}`);
+      const selector = readString(format.selector, `${path}.formats.${formatId}.selector`);
+      validateSelector(selector);
+      const extension = readOptionalString(format.extension, `${path}.formats.${formatId}.extension`);
+      if (extension && !/^[a-z0-9]{1,10}$/i.test(extension)) throw new Error(`${path}.formats.${formatId}.extension 无效。`);
+      formats[formatId] = {
+        label: validateUiText(readString(format.label, `${path}.formats.${formatId}.label`), `${path}.formats.${formatId}.label`),
+        selector,
+        extension
+      };
+    }
+
+    const blockers = source.blockers === undefined ? undefined : asArray(source.blockers, `${path}.blockers`).map((rawBlocker, blockerIndex) => {
+      const blockerPath = `${path}.blockers[${blockerIndex}]`;
+      const blocker = asRecord(rawBlocker, blockerPath);
+      const selector = readString(blocker.selector, `${blockerPath}.selector`);
+      validateSelector(selector);
+      const status = readString(blocker.status, `${blockerPath}.status`);
+      if (status !== "verification" && status !== "login" && status !== "permission") throw new Error(`${blockerPath}.status 无效。`);
+      return {
+        selector,
+        status,
+        message: validateUiText(readString(blocker.message, `${blockerPath}.message`), `${blockerPath}.message`, 200)
+      } as NonNullable<BrowserToolDownloadDefinition["blockers"]>[number];
+    });
+    const maxItems = readOptionalNumber(source.max_items, `${path}.max_items`);
+    if (maxItems !== undefined && (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 50)) throw new Error(`${path}.max_items 必须是 1-50 的整数。`);
+    const delay = readOptionalNumber(source.delay_ms, `${path}.delay_ms`);
+    if (delay !== undefined && (delay < 0 || delay > 10_000)) throw new Error(`${path}.delay_ms 超出范围。`);
+
+    return {
+      id,
+      label: validateUiText(readString(source.label, `${path}.label`), `${path}.label`),
+      collection,
+      detail_url_field: detailUrlField,
+      title_field: titleField,
+      formats,
+      blockers,
+      allowed_domains: source.allowed_domains === undefined ? undefined : readStringArray(source.allowed_domains, `${path}.allowed_domains`),
+      max_items: maxItems,
+      delay_ms: delay
+    };
+  });
 }
 
 function validatePresentation(value: unknown): BrowserToolPresentation {

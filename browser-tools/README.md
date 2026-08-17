@@ -111,6 +111,37 @@ parameters:
 
 `batch_input.composer` 启用侧边栏的组合输入模式。每个条件组可以放置多行词项，运行时按组生成笛卡尔组合，例如两组分别有 2、3 个词项时会得到 6 条检索式。界面会在运行前预览生成结果，并继续遵守工具 `batch.max_keywords` 的批量上限。`operators` 只负责连接各组词项，具体支持哪些检索运算符应由目标平台的工具 YAML 声明。
 
+## 全文下载
+
+工具可以声明从某个结果集合进入详情页并下载资源。核心只负责队列、域名校验、详情页解析、点击和 Chrome 下载状态；平台专有的字段和选择器仍保留在 YAML：
+
+```yml
+downloads:
+  - id: fulltext
+    label: 全文下载
+    collection: literature
+    detail_url_field: url
+    title_field: title
+    formats:
+      pdf:
+        label: PDF
+        selector: ".btn-dlpdf a"
+        extension: pdf
+      caj:
+        label: CAJ
+        selector: ".btn-dlcaj a:not(.chapterDown)"
+        extension: caj
+    blockers:
+      - selector: "#captcha"
+        status: verification
+        message: 页面需要完成安全验证，下载队列已暂停。
+    allowed_domains: [bar.example.com]
+    max_items: 20
+    delay_ms: 1200
+```
+
+下载必须由用户主动启动，按单工作标签页串行执行。资源 URL 在详情页即时提取，不写入运行历史；遇到可见的验证码、登录或权限阻断器时会激活工作标签页并暂停。当前版本完成安全验证后需要在结果页重新选择未完成项启动，尚未实现原队列原地恢复。
+
 ## 调用链路
 
 扩展页面先发送 `VALIDATE_BROWSER_TOOL_YAML` 校验配置，再由明确的用户操作发送：

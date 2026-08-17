@@ -1,5 +1,6 @@
 import type {
   BrowserToolDefinition,
+  BrowserToolDownloadRunResult,
   BrowserToolManagerState,
   BrowserToolRunResult,
   PopupState,
@@ -29,6 +30,7 @@ type RuntimeResponseMap = {
   GET_BROWSER_TOOL_STATE: BrowserToolManagerState;
   IMPORT_BROWSER_TOOL: StoredBrowserTool;
   IMPORT_BUNDLED_BROWSER_TOOLS: BundledBrowserToolImportResult;
+  DOWNLOAD_BROWSER_TOOL_ITEMS: BrowserToolDownloadRunResult;
   DELETE_BROWSER_TOOL: undefined;
   RUN_STORED_BROWSER_TOOL: BrowserToolRunResult;
   RUN_BROWSER_TOOL_BATCH: BrowserToolRunResult;

@@ -25,6 +25,7 @@ import {
   runStoredBrowserTool,
   validateBrowserToolYaml
 } from "./browserTools";
+import { downloadBrowserToolItems } from "./browserToolDownloads";
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
   handleMessage(message, sender)
@@ -75,6 +76,8 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return importBrowserTool(message.yaml);
     case "IMPORT_BUNDLED_BROWSER_TOOLS":
       return importBundledBrowserTools();
+    case "DOWNLOAD_BROWSER_TOOL_ITEMS":
+      return downloadBrowserToolItems(message);
     case "DELETE_BROWSER_TOOL":
       return removeBrowserTool(message.toolId);
     case "RUN_STORED_BROWSER_TOOL":

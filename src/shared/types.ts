@@ -1,5 +1,7 @@
 import type {
   BrowserToolDefinition,
+  BrowserToolDownloadItemInput,
+  BrowserToolDownloadRunResult,
   BrowserToolManagerState,
   BrowserToolRunResult,
   StoredBrowserTool
@@ -239,6 +241,14 @@ export type RuntimeMessage =
   | { type: "GET_BROWSER_TOOL_STATE"; tabId?: number }
   | { type: "IMPORT_BROWSER_TOOL"; yaml: string }
   | { type: "IMPORT_BUNDLED_BROWSER_TOOLS" }
+  | {
+      type: "DOWNLOAD_BROWSER_TOOL_ITEMS";
+      toolId: string;
+      downloadDefinitionId: string;
+      format: string;
+      items: BrowserToolDownloadItemInput[];
+      userInitiated: true;
+    }
   | { type: "DELETE_BROWSER_TOOL"; toolId: string }
   | {
       type: "RUN_STORED_BROWSER_TOOL";
@@ -258,7 +268,7 @@ export type RuntimeMessage =
   | { type: "OPEN_SESSION"; sessionId: string }
   | { type: "DELETE_SESSION"; sessionId: string };
 
-export type { BrowserToolDefinition, BrowserToolManagerState, BrowserToolRunResult, StoredBrowserTool };
+export type { BrowserToolDefinition, BrowserToolDownloadRunResult, BrowserToolManagerState, BrowserToolRunResult, StoredBrowserTool };
 
 export type PopupState = {
   activeSession?: TrailSession;

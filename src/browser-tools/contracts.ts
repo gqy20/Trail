@@ -66,6 +66,27 @@ export type BrowserToolPresentation = {
   collections?: Record<string, BrowserToolCollectionPresentation>;
 };
 
+export type BrowserToolDownloadDefinition = {
+  id: string;
+  label: string;
+  collection: string;
+  detail_url_field: string;
+  title_field?: string;
+  formats: Record<string, {
+    label: string;
+    selector: string;
+    extension?: string;
+  }>;
+  blockers?: Array<{
+    selector: string;
+    status: "verification" | "login" | "permission";
+    message: string;
+  }>;
+  allowed_domains?: string[];
+  max_items?: number;
+  delay_ms?: number;
+};
+
 export type BrowserToolFieldDefinition = {
   selector?: string;
   attribute?: "text" | "href" | "content" | "datetime";
@@ -168,6 +189,7 @@ export type BrowserToolDefinition = {
   selectors?: Record<string, string>;
   workflow: BrowserToolStep[];
   presentation?: BrowserToolPresentation;
+  downloads?: BrowserToolDownloadDefinition[];
   batch?: {
     navigation: {
       type: "query_parameter";
@@ -181,6 +203,45 @@ export type BrowserToolDefinition = {
     max_records?: number;
     require_user_activation?: boolean;
   };
+};
+
+export type BrowserToolDownloadItemInput = {
+  title: string;
+  detailUrl: string;
+};
+
+export type BrowserToolDownloadItemResult = BrowserToolDownloadItemInput & {
+  status: "pending" | "completed" | "failed" | "unavailable" | "needs_user";
+  format: string;
+  downloadId?: number;
+  filename?: string;
+  error?: string;
+};
+
+export type BrowserToolDownloadRunResult = {
+  toolId: string;
+  downloadDefinitionId: string;
+  format: string;
+  status: "completed" | "partial" | "paused" | "failed";
+  startedAt: number;
+  finishedAt: number;
+  items: BrowserToolDownloadItemResult[];
+  workerTabId?: number;
+};
+
+export type ResolveBrowserToolDownloadMessage = {
+  type: "RESOLVE_BROWSER_TOOL_DOWNLOAD";
+  definition: BrowserToolDownloadDefinition;
+};
+
+export type ClickBrowserToolDownloadMessage = {
+  type: "CLICK_BROWSER_TOOL_DOWNLOAD";
+  selector: string;
+};
+
+export type BrowserToolDownloadResolution = {
+  blocker?: { status: "verification" | "login" | "permission"; message: string };
+  resources: Record<string, string>;
 };
 
 export type BrowserToolRunStatus = "completed" | "partial" | "paused" | "cancelled" | "failed";
