@@ -8,7 +8,7 @@ export type BrowserToolParameterDefinition = {
   min?: number;
   max?: number;
   presentation?: {
-    placement?: "primary" | "advanced";
+    placement?: "primary" | "advanced" | "hidden";
     style?: "field" | "sentence";
     prefix?: string;
     suffix?: string;
@@ -89,7 +89,7 @@ export type BrowserToolDownloadDefinition = {
 
 export type BrowserToolFieldDefinition = {
   selector?: string;
-  attribute?: "text" | "href" | "content" | "datetime";
+  attribute?: "text" | "href" | "content" | "datetime" | "aria_label";
   transforms?: BrowserToolTransform[];
   optional?: boolean;
   multiple?: boolean;
@@ -138,6 +138,13 @@ export type BrowserToolWaitStep = {
   duration_ms: number;
 };
 
+export type BrowserToolScrollStep = {
+  action: "scroll";
+  selector?: string;
+  delta_y?: number;
+  position?: "top" | "bottom";
+};
+
 export type BrowserToolWaitForChangeStep = {
   action: "wait_for_change";
   selector: string;
@@ -164,15 +171,24 @@ export type BrowserToolPauseStep = {
   reason: string;
 };
 
+export type BrowserToolPauseIfPresentStep = {
+  action: "pause_if_present";
+  selector: string;
+  reason: string;
+  timeout_ms?: number;
+};
+
 export type BrowserToolStep =
   | BrowserToolWaitForStep
   | BrowserToolFillStep
   | BrowserToolSelectStep
   | BrowserToolClickStep
   | BrowserToolWaitStep
+  | BrowserToolScrollStep
   | BrowserToolWaitForChangeStep
   | BrowserToolExtractStep
   | BrowserToolRepeatStep
+  | BrowserToolPauseIfPresentStep
   | BrowserToolPauseStep;
 
 export type BrowserToolDefinition = {
@@ -191,10 +207,9 @@ export type BrowserToolDefinition = {
   presentation?: BrowserToolPresentation;
   downloads?: BrowserToolDownloadDefinition[];
   batch?: {
-    navigation: {
-      type: "query_parameter";
-      parameter: string;
-    };
+    navigation:
+      | { type: "query_parameter"; parameter: string }
+      | { type: "fixed_url"; url: string; input_parameter: string };
     max_keywords?: number;
     delay_between_keywords_ms?: number;
   };

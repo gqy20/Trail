@@ -438,7 +438,7 @@ function BrowserToolsApp() {
               </div>
               {selectedTool ? (
                 <ParameterForm
-                  definitions={Object.fromEntries(Object.entries(selectedTool.definition.parameters || {}).filter(([, definition]) => definition.presentation?.placement !== "primary"))}
+                  definitions={Object.fromEntries(Object.entries(selectedTool.definition.parameters || {}).filter(([, definition]) => definition.presentation?.placement !== "primary" && definition.presentation?.placement !== "hidden"))}
                   values={parameters}
                   onChange={(name, value) => setParameters((current) => ({ ...current, [name]: value }))}
                 />

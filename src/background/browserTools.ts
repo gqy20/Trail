@@ -106,10 +106,17 @@ export async function runStoredBrowserToolBatch(input: {
     try {
       const currentTab = await chrome.tabs.get(tab.id);
       if (!currentTab.url) throw new Error("目标标签页没有有效 URL。");
-      const nextUrl = buildBatchUrl(currentTab.url, definition.batch.navigation.parameter, keyword);
+      const navigation = definition.batch.navigation;
+      const nextUrl = navigation.type === "query_parameter"
+        ? buildBatchUrl(currentTab.url, navigation.parameter, keyword)
+        : navigation.url;
+      if (!matchesBrowserTool(definition, nextUrl)) throw new Error(`工具 ${definition.id} 的批量导航地址不在适用范围内。`);
+      const runParameters = navigation.type === "fixed_url"
+        ? { ...input.parameters, [navigation.input_parameter]: keyword }
+        : input.parameters;
       await navigateTab(tab.id, nextUrl);
       const readyTab = await chrome.tabs.get(tab.id);
-      const result = await executeBrowserToolOnTab(definition, input.parameters, readyTab);
+      const result = await executeBrowserToolOnTab(definition, runParameters, readyTab);
       lastPageUrl = result.pageUrl;
       lastPageTitle = result.pageTitle;
 

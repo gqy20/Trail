@@ -58,6 +58,9 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
 
   const limits = root.limits === undefined ? undefined : validateLimits(root.limits);
   const batch = root.batch === undefined ? undefined : validateBatch(root.batch);
+  if (batch?.navigation.type === "fixed_url" && parameters?.[batch.navigation.input_parameter]?.type !== "string") {
+    throw new Error("batch.navigation.input_parameter 必须引用已声明的字符串参数。");
+  }
   const presentation = root.presentation === undefined ? undefined : validatePresentation(root.presentation);
   const downloads = root.downloads === undefined ? undefined : validateDownloads(root.downloads);
 
@@ -270,9 +273,21 @@ function validateCollectionPresentations(value: unknown): Record<string, Browser
 function validateBatch(value: unknown): BrowserToolDefinition["batch"] {
   const batch = asRecord(value, "batch");
   const navigation = asRecord(batch.navigation, "batch.navigation");
-  if (navigation.type !== "query_parameter") throw new Error("batch.navigation.type 目前只支持 query_parameter。");
-  const parameter = readString(navigation.parameter, "batch.navigation.parameter");
-  if (!/^[a-zA-Z0-9_.-]{1,80}$/.test(parameter)) throw new Error("batch.navigation.parameter 无效。");
+  let validatedNavigation: NonNullable<BrowserToolDefinition["batch"]>["navigation"];
+  if (navigation.type === "query_parameter") {
+    const parameter = readString(navigation.parameter, "batch.navigation.parameter");
+    if (!/^[a-zA-Z0-9_.-]{1,80}$/.test(parameter)) throw new Error("batch.navigation.parameter 无效。");
+    validatedNavigation = { type: "query_parameter", parameter };
+  } else if (navigation.type === "fixed_url") {
+    const url = readString(navigation.url, "batch.navigation.url");
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") throw new Error("batch.navigation.url 只支持 HTTP(S)。");
+    const inputParameter = readString(navigation.input_parameter, "batch.navigation.input_parameter");
+    if (!COLLECTION_PATTERN.test(inputParameter)) throw new Error("batch.navigation.input_parameter 无效。");
+    validatedNavigation = { type: "fixed_url", url: parsedUrl.href, input_parameter: inputParameter };
+  } else {
+    throw new Error("batch.navigation.type 只支持 query_parameter 或 fixed_url。");
+  }
 
   const maxKeywords = readOptionalNumber(batch.max_keywords, "batch.max_keywords");
   if (maxKeywords !== undefined && (!Number.isInteger(maxKeywords) || maxKeywords < 1 || maxKeywords > BROWSER_TOOL_LIMITS.maxBatchKeywords)) {
@@ -284,7 +299,7 @@ function validateBatch(value: unknown): BrowserToolDefinition["batch"] {
   }
 
   return {
-    navigation: { type: "query_parameter", parameter },
+    navigation: validatedNavigation,
     max_keywords: maxKeywords,
     delay_between_keywords_ms: delay
   };
@@ -318,7 +333,7 @@ function validateParameters(value: unknown): Record<string, BrowserToolParameter
 function validateParameterPresentation(value: unknown, name: string): BrowserToolParameterDefinition["presentation"] {
   const source = asRecord(value, `parameters.${name}.presentation`);
   const placement = source.placement === undefined ? undefined : readString(source.placement, `parameters.${name}.presentation.placement`);
-  if (placement !== undefined && placement !== "primary" && placement !== "advanced") throw new Error(`parameters.${name}.presentation.placement 无效。`);
+  if (placement !== undefined && placement !== "primary" && placement !== "advanced" && placement !== "hidden") throw new Error(`parameters.${name}.presentation.placement 无效。`);
   const style = source.style === undefined ? undefined : readString(source.style, `parameters.${name}.presentation.style`);
   if (style !== undefined && style !== "field" && style !== "sentence") throw new Error(`parameters.${name}.presentation.style 无效。`);
   return {
@@ -389,12 +404,32 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
         if (duration < 0 || duration > BROWSER_TOOL_LIMITS.maxWaitMs) throw new Error(`${path}.duration_ms 超出范围。`);
         return { action, duration_ms: duration };
       }
+      case "scroll": {
+        const delta = readOptionalNumber(step.delta_y, `${path}.delta_y`);
+        const position = step.position === undefined ? undefined : readString(step.position, `${path}.position`);
+        if ((delta === undefined) === (position === undefined)) throw new Error(`${path} 必须且只能声明 delta_y 或 position。`);
+        if (delta !== undefined && (!Number.isInteger(delta) || Math.abs(delta) > 5_000)) throw new Error(`${path}.delta_y 超出范围。`);
+        if (position !== undefined && position !== "top" && position !== "bottom") throw new Error(`${path}.position 无效。`);
+        return {
+          action,
+          selector: step.selector === undefined ? undefined : validatedSelector(step.selector, `${path}.selector`),
+          delta_y: delta,
+          position: position as "top" | "bottom" | undefined
+        };
+      }
       case "wait_for_change":
         return {
           action,
           selector: validatedSelector(step.selector, `${path}.selector`),
           timeout_ms: validatedTimeout(step.timeout_ms, `${path}.timeout_ms`),
           optional: readOptionalBoolean(step.optional, `${path}.optional`)
+        };
+      case "pause_if_present":
+        return {
+          action,
+          selector: validatedSelector(step.selector, `${path}.selector`),
+          reason: validateUiText(readString(step.reason, `${path}.reason`), `${path}.reason`, 300),
+          timeout_ms: validatedTimeout(step.timeout_ms, `${path}.timeout_ms`)
         };
       case "extract": {
         const collection = readString(step.collection, `${path}.collection`);
@@ -405,7 +440,7 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
           if (!COLLECTION_PATTERN.test(fieldName)) throw new Error(`${path}.fields.${fieldName} 名称无效。`);
           const field = asRecord(rawField, `${path}.fields.${fieldName}`);
           const attribute = field.attribute === undefined ? "text" : readString(field.attribute, `${path}.fields.${fieldName}.attribute`);
-          if (!["text", "href", "content", "datetime"].includes(attribute)) {
+          if (!["text", "href", "content", "datetime", "aria_label"].includes(attribute)) {
             throw new Error(`${path}.fields.${fieldName}.attribute 不在白名单内。`);
           }
           const transforms = field.transforms === undefined ? undefined : readStringArray(field.transforms, `${path}.fields.${fieldName}.transforms`);

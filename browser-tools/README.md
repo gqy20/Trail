@@ -26,10 +26,12 @@ tools:
 - `select`: 选择原生 `<select>` 的值。
 - `click`: 点击元素，可同时等待另一块内容变化。
 - `wait`: 短暂等待。
+- `scroll`: 按固定距离滚动页面或指定容器，也可回到顶部/底部，适用于虚拟滚动结果列表。
 - `wait_for_change`: 等待先前观察过的元素内容变化。
 - `extract`: 从一组 DOM 元素提取结构化字段。
 - `repeat`: 有上限地重复一组动作。
 - `pause_for_user`: 在登录、验证码等节点停止并把原因返回给调用方。
+- `pause_if_present`: 在限定时间内检测到登录或验证码选择器时暂停，否则继续工作流。
 
 字段只允许读取文本、链接、`content` 和 `datetime`。转换只允许使用 `trim`、`normalize_whitespace`、`parse_year`、`parse_number` 和 `split_authors`。YAML 不能执行 JavaScript。
 
@@ -47,6 +49,23 @@ batch:
   max_keywords: 50
   delay_between_keywords_ms: 1200
 ```
+
+对于 Web of Science 这类结果 URL 使用临时会话标识的单页应用，可以让每个批次回到固定检索页，并把当前输入注入一个已声明的隐藏参数：
+
+```yml
+parameters:
+  keyword:
+    type: string
+    required: true
+    presentation: { placement: hidden }
+batch:
+  navigation:
+    type: fixed_url
+    url: https://example.com/basic-search
+    input_parameter: keyword
+```
+
+`fixed_url` 仍会经过工具域名和 URL 匹配校验；工作流负责填写 `{{ parameters.keyword }}`、提交检索并提取结果。
 
 侧边栏随后会显示批量输入区。运行时依次导航目标标签页、复用原工作流提取，并给每条记录增加 `_query` 来源列；默认在完成后自动下载汇总 CSV。遇到登录、验证码或提取失败会停止后续检索并保留已完成结果。
 

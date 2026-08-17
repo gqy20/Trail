@@ -1,9 +1,10 @@
 schema_version: 1
-version: 3
+version: 4
 
 # enabled 默认为 true。新增工具时只需把 YAML 放在 browser-tools 下，并在这里登记。
 tools:
   - path: cnki/tool.yml
+  - path: web-of-science/tool.yml
 
   # 示例仅用于开发和编写新工具，不随插件自动安装。
   - path: examples/literature-search.example.yml

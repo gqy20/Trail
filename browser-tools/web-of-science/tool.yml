@@ -1,0 +1,208 @@
+schema_version: 1
+
+id: web-of-science-core-collection
+name: Web of Science Core Collection 文献提取
+description: 在 Web of Science Core Collection 新版检索界面中批量检索并提取结果卡片元数据
+version: 0.1.0
+
+presentation:
+  title: WoS 文献采集
+  source_label: Web of Science Core Collection
+  batch_input:
+    label: 检索式
+    placeholder: |-
+      每行输入一个 Topic 检索式
+      例如："large language model" AND education
+    item_label: 检索式
+    count_unit: 条
+    import_formats: [txt, csv]
+    csv_headers: [检索式, query, search_query, topic, keyword]
+    composer:
+      enabled: true
+      label: 组合检索
+      group_label: 词组
+      placeholder: 每行输入一个词或短语
+      operators: [AND, OR, NOT]
+      default_operator: AND
+      max_groups: 4
+  actions:
+    run: 开始检索
+    run_empty: 输入检索式后开始
+    running: 正在检索…
+  results:
+    title: WoS 检索结果
+    item_label: 文献
+    count_unit: 篇
+    empty_title: 还没有 WoS 结果
+    empty_description: 输入检索式并完成采集后，结果会显示在这里。
+  collections:
+    literature:
+      label: 文献
+      item_label: 文献
+      count_unit: 篇
+      fields:
+        _query: { label: 检索式, order: 10 }
+        title: { label: 题名, order: 20, emphasis: primary }
+        authors: { label: 作者, order: 30 }
+        source: { label: 来源, order: 40 }
+        published_at: { label: 发表时间, order: 50 }
+        volume: { label: 卷, order: 60 }
+        issue: { label: 期, order: 70 }
+        pages: { label: 页码, order: 80 }
+        citation_count: { label: 被引次数, order: 90 }
+        reference_count: { label: 参考文献数, order: 100 }
+        open_access: { label: 开放获取, order: 110 }
+        url: { label: WoS 记录, order: 120, display: link }
+        full_text_urls: { label: 全文入口, order: 130, display: link }
+
+match:
+  domains:
+    - www.webofscience.com
+  urls:
+    - "*/wos/woscc/basic-search*"
+    - "*/wos/woscc/summary/*"
+
+parameters:
+  keyword:
+    type: string
+    label: 当前检索式
+    required: true
+    presentation:
+      placement: hidden
+  max_pages:
+    type: number
+    label: 提取页数
+    required: true
+    default: 2
+    min: 1
+    max: 10
+    presentation:
+      placement: primary
+      style: sentence
+      prefix: 每个检索式提取
+      suffix: 页
+
+selectors:
+  search_input: "input[data-ta='search-criteria-input']"
+  search_button: "button[data-ta='run-search']"
+  result_records: "[data-test='Summary-publication-record']"
+  first_title: "[data-test='Summary-publication-record'] [data-ta='summary-record-title-link']"
+  next_page: "button[data-ta='next-page-button'][aria-label='Top Next Page']:not([disabled])"
+
+workflow:
+  - action: wait_for
+    selector: "{{ selectors.search_input }}"
+    timeout_ms: 30000
+  - action: fill
+    selector: "{{ selectors.search_input }}"
+    value: "{{ parameters.keyword }}"
+  - action: click
+    selector: "{{ selectors.search_button }}"
+  - action: pause_if_present
+    selector: "iframe[src*='hcaptcha']"
+    reason: Web of Science 要求完成人机验证，请在当前页面处理后重新运行。
+    timeout_ms: 3000
+  - action: wait_for
+    selector: "{{ selectors.result_records }}"
+    timeout_ms: 45000
+  - action: repeat
+    max: "{{ parameters.max_pages }}"
+    steps:
+      - action: scroll
+        position: top
+      - action: wait
+        duration_ms: 500
+      - action: repeat
+        max: 35
+        steps:
+          - action: extract
+            collection: literature
+            selector: "{{ selectors.result_records }}"
+            fields:
+              title:
+                selector: "[data-ta='summary-record-title-link']"
+                attribute: text
+                transforms: [normalize_whitespace]
+              url:
+                selector: "[data-ta='summary-record-title-link']"
+                attribute: href
+              authors:
+                selector: "[data-ta*='DisplayName-author-en-']"
+                attribute: text
+                transforms: [normalize_whitespace]
+                multiple: true
+                optional: true
+              source:
+                selector: "[data-ta='jcr-link-menu'] > span:first-child, [data-ta='Summary-conferenceName']"
+                attribute: text
+                transforms: [normalize_whitespace]
+                optional: true
+              published_at:
+                selector: "[data-ta='summary-record-pubdate']"
+                attribute: text
+                transforms: [normalize_whitespace]
+                optional: true
+              volume:
+                selector: "[data-ta='Summary-vol']"
+                attribute: text
+                transforms: [normalize_whitespace]
+                optional: true
+              issue:
+                selector: "[data-ta='Summary-issue']"
+                attribute: text
+                transforms: [normalize_whitespace]
+                optional: true
+              pages:
+                selector: "[data-ta='Summary-page-no']"
+                attribute: text
+                transforms: [normalize_whitespace]
+                optional: true
+              citation_count:
+                selector: "[data-ta='stat-number-citation-related-count']"
+                attribute: text
+                transforms: [parse_number]
+                optional: true
+              reference_count:
+                selector: "[data-ta='stat-number-references-count']"
+                attribute: text
+                transforms: [parse_number]
+                optional: true
+              open_access:
+                selector: "[aria-label='Open Access']"
+                attribute: aria_label
+                optional: true
+              full_text_urls:
+                selector: "a[data-pendo='open_url_link_summary'], a[data-pendo='GetFTR_link_summary']"
+                attribute: href
+                multiple: true
+                optional: true
+        between:
+          - action: scroll
+            delta_y: 900
+          - action: wait
+            duration_ms: 350
+    between:
+      - action: click
+        selector: "{{ selectors.next_page }}"
+        optional: true
+        stop_repeat_on_missing: true
+        wait_for_change:
+          selector: "{{ selectors.first_title }}"
+          timeout_ms: 30000
+      - action: scroll
+        position: top
+      - action: wait
+        duration_ms: 700
+
+batch:
+  navigation:
+    type: fixed_url
+    url: https://www.webofscience.com/wos/woscc/basic-search
+    input_parameter: keyword
+  max_keywords: 20
+  delay_between_keywords_ms: 2000
+
+limits:
+  delay_between_actions_ms: 100
+  max_records: 500
+  require_user_activation: true

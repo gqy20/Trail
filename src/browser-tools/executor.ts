@@ -18,6 +18,7 @@ type ExecutionContext = {
   data: Record<string, Array<Record<string, unknown>>>;
   warnings: string[];
   fingerprints: Map<string, string>;
+  recordFingerprints: Map<string, Set<string>>;
   maxRecords: number;
 };
 
@@ -33,6 +34,7 @@ export async function executeBrowserTool(
     data: {},
     warnings: [],
     fingerprints: new Map(),
+    recordFingerprints: new Map(),
     maxRecords: Math.min(definition.limits?.max_records || 500, BROWSER_TOOL_LIMITS.maxRecords)
   };
 
@@ -132,6 +134,17 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
     case "wait":
       await sleep(step.duration_ms);
       return "continue";
+    case "scroll": {
+      const target = step.selector ? queryElement(step.selector) : document.scrollingElement;
+      if (!(target instanceof Element)) throw new Error("没有找到可滚动区域。");
+      if (step.position) {
+        const top = step.position === "top" ? 0 : target.scrollHeight;
+        target.scrollTo({ top, behavior: "auto" });
+      } else {
+        target.scrollBy({ top: step.delta_y || 0, behavior: "auto" });
+      }
+      return "continue";
+    }
     case "wait_for_change": {
       const selector = resolve(step.selector, context);
       const previous = context.fingerprints.get(selector) || "";
@@ -145,6 +158,13 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
       }
       context.fingerprints.set(selector, fingerprint(selector));
       return "continue";
+    }
+    case "pause_if_present": {
+      const selector = resolve(step.selector, context);
+      const element = await waitForElement(selector, step.timeout_ms || 1_500);
+      if (!element) return "continue";
+      context.warnings.push(step.reason);
+      return "pause";
     }
     case "extract":
       return extractCollection(step, context) ? "continue" : insideRepeat ? "stop_repeat" : "continue";
@@ -176,6 +196,8 @@ function extractCollection(step: BrowserToolExtractStep, context: ExecutionConte
   if (roots.length === 0) throw new Error(`没有可提取的记录：${selector}`);
 
   const collection = (context.data[step.collection] ||= []);
+  const seen = context.recordFingerprints.get(step.collection) || new Set<string>();
+  context.recordFingerprints.set(step.collection, seen);
   context.fingerprints.set(selector, fingerprint(selector));
 
   for (const root of roots) {
@@ -190,7 +212,13 @@ function extractCollection(step: BrowserToolExtractStep, context: ExecutionConte
       if (value === undefined && !field.optional) context.warnings.push(`记录字段缺失：${step.collection}.${name}`);
       if (value !== undefined) record[name] = value;
     }
-    if (Object.keys(record).length > 0) collection.push(record);
+    if (Object.keys(record).length > 0) {
+      const recordFingerprint = JSON.stringify(record);
+      if (!seen.has(recordFingerprint)) {
+        seen.add(recordFingerprint);
+        collection.push(record);
+      }
+    }
   }
 
   return true;
@@ -226,6 +254,9 @@ function extractElementValue(element: Element, field: BrowserToolFieldDefinition
       break;
     case "datetime":
       value = element.getAttribute("datetime");
+      break;
+    case "aria_label":
+      value = element.getAttribute("aria-label");
       break;
   }
 
