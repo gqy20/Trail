@@ -3,7 +3,7 @@ schema_version: 1
 id: cnki-literature-results
 name: 知网文献结果提取
 description: 从当前知网检索结果页逐页提取题名、作者、来源、日期、文献类型和计数信息
-version: 0.1.0
+version: 0.2.0
 
 presentation:
   title: 文献采集
@@ -17,6 +17,14 @@ presentation:
     count_unit: 个
     import_formats: [txt, csv]
     csv_headers: [检索词, 关键词, keyword, keywords, query, search_term, search term]
+    composer:
+      enabled: true
+      label: 组合检索
+      group_label: 词组
+      placeholder: 每行输入一个词
+      operators: [AND, OR]
+      default_operator: AND
+      max_groups: 4
   actions:
     run: 开始采集
     run_empty: 输入检索词后开始

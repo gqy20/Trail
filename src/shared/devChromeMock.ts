@@ -289,7 +289,16 @@ const sampleBrowserTool = {
         item_label: "搜索词",
         count_unit: "个",
         import_formats: ["txt", "csv"],
-        csv_headers: ["搜索词", "keyword", "query"]
+        csv_headers: ["搜索词", "keyword", "query"],
+        composer: {
+          enabled: true,
+          label: "组合搜索",
+          group_label: "条件组",
+          placeholder: "每行输入一个词",
+          operators: ["AND", "OR"],
+          default_operator: "AND",
+          max_groups: 4
+        }
       },
       actions: {
         run: "开始搜索",

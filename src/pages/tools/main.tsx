@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/noto-sans-sc/wght.css";
-import { Download, ExternalLink, FileJson, FileUp, History, Play, RefreshCw, Settings2, Trash2, Wrench } from "lucide-react";
+import { Download, ExternalLink, FileJson, FileUp, History, Play, Plus, RefreshCw, Settings2, Trash2, Wrench, X } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
@@ -27,6 +27,9 @@ function BrowserToolsApp() {
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [lastResult, setLastResult] = useState<BrowserToolRunResult>();
   const [keywordDraft, setKeywordDraft] = useState("");
+  const [inputMode, setInputMode] = useState<"direct" | "compose">("direct");
+  const [composerGroups, setComposerGroups] = useState<string[]>(["", ""]);
+  const [composerOperator, setComposerOperator] = useState("AND");
   const [autoExportCsv, setAutoExportCsv] = useState(true);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
@@ -51,12 +54,22 @@ function BrowserToolsApp() {
   const selectedTool = state?.tools.find((tool) => tool.id === selectedId);
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
   const toolUi = resolveToolUi(selectedTool?.definition);
-  const batchKeywords = useMemo(
+  const directBatchKeywords = useMemo(
     () => parseBatchInput(keywordDraft, selectedTool?.definition.presentation?.batch_input?.csv_headers),
     [keywordDraft, selectedTool?.updatedAt]
   );
   const batchLimit = selectedTool?.definition.batch?.max_keywords || 25;
-  const batchTooLarge = batchKeywords.length > batchLimit;
+  const composerEnabled = toolUi.input.composer.enabled;
+  const composerDefaultOperator = toolUi.input.composer.defaultOperator;
+  const isComposerMode = composerEnabled && inputMode === "compose";
+  const composedBatch = useMemo(
+    () => composeBatchInput(composerGroups, composerOperator, batchLimit + 1),
+    [composerGroups, composerOperator, batchLimit]
+  );
+  const batchKeywords = isComposerMode ? composedBatch.values : directBatchKeywords;
+  const batchInputCount = isComposerMode ? composedBatch.total : batchKeywords.length;
+  const composerIncomplete = isComposerMode && composedBatch.activeGroupCount < 2;
+  const batchTooLarge = batchInputCount > batchLimit;
   const hasPrimaryParameters = Object.values(selectedTool?.definition.parameters || {}).some(
     (definition) => definition.presentation?.placement === "primary"
   );
@@ -74,7 +87,10 @@ function BrowserToolsApp() {
           .map(([name, definition]) => [name, definition.default])
       )
     );
-  }, [selectedTool?.id]);
+    setInputMode("direct");
+    setComposerGroups(["", ""]);
+    setComposerOperator(composerDefaultOperator);
+  }, [selectedTool?.id, selectedTool?.updatedAt, composerDefaultOperator]);
 
   useEffect(() => {
     document.title = `Trail · ${toolUi.title}`;
@@ -151,7 +167,7 @@ function BrowserToolsApp() {
   }
 
   async function runBatch() {
-    if (!selectedTool?.definition.batch || !state?.targetTab || batchKeywords.length === 0) return;
+    if (!selectedTool?.definition.batch || !state?.targetTab || batchKeywords.length === 0 || composerIncomplete || batchTooLarge) return;
     setBusy(true);
     setBusyAction("batch");
     setError("");
@@ -234,22 +250,53 @@ function BrowserToolsApp() {
                 {selectedTool.definition.batch ? (
                   <section className="keyword-section">
                     <div className="field-heading">
-                      <label htmlFor="batch-keywords">{toolUi.input.label}</label>
+                      <label htmlFor={isComposerMode ? undefined : "batch-keywords"}>{toolUi.input.label}</label>
                       <div className="field-actions">
-                        <button className="text-button" disabled={busy} onClick={() => keywordFileInputRef.current?.click()}>
-                          <FileUp size={14} /> 导入 {toolUi.input.importFormats.map((format) => format.toUpperCase()).join("/")}
-                        </button>
-                        {keywordDraft ? <button className="text-button muted-action" disabled={busy} onClick={() => setKeywordDraft("")}>清空</button> : null}
+                        {!isComposerMode ? (
+                          <button className="text-button" disabled={busy} onClick={() => keywordFileInputRef.current?.click()}>
+                            <FileUp size={14} /> 导入 {toolUi.input.importFormats.map((format) => format.toUpperCase()).join("/")}
+                          </button>
+                        ) : null}
+                        {(!isComposerMode && keywordDraft) || (isComposerMode && composerGroups.some(Boolean)) ? (
+                          <button
+                            className="text-button muted-action"
+                            disabled={busy}
+                            onClick={() => isComposerMode ? setComposerGroups(["", ""]) : setKeywordDraft("")}
+                          >清空</button>
+                        ) : null}
                       </div>
                     </div>
-                    <textarea
-                      id="batch-keywords"
-                      className="input keyword-editor collector-keywords"
-                      value={keywordDraft}
-                      spellCheck={false}
-                      placeholder={toolUi.input.placeholder}
-                      onChange={(event) => setKeywordDraft(event.target.value)}
-                    />
+                    {composerEnabled ? (
+                      <div className="input-mode-switch" role="tablist" aria-label={`${toolUi.input.label}输入方式`}>
+                        <button role="tab" aria-selected={!isComposerMode} className={!isComposerMode ? "active" : ""} onClick={() => setInputMode("direct")}>多条输入</button>
+                        <button role="tab" aria-selected={isComposerMode} className={isComposerMode ? "active" : ""} onClick={() => setInputMode("compose")}>{toolUi.input.composer.label}</button>
+                      </div>
+                    ) : null}
+                    {isComposerMode ? (
+                      <KeywordComposer
+                        groups={composerGroups}
+                        operator={composerOperator}
+                        operators={toolUi.input.composer.operators}
+                        maxGroups={toolUi.input.composer.maxGroups}
+                        groupLabel={toolUi.input.composer.groupLabel}
+                        placeholder={toolUi.input.composer.placeholder}
+                        preview={composedBatch.values}
+                        total={composedBatch.total}
+                        limit={batchLimit}
+                        disabled={busy}
+                        onGroupsChange={setComposerGroups}
+                        onOperatorChange={setComposerOperator}
+                      />
+                    ) : (
+                      <textarea
+                        id="batch-keywords"
+                        className="input keyword-editor collector-keywords"
+                        value={keywordDraft}
+                        spellCheck={false}
+                        placeholder={toolUi.input.placeholder}
+                        onChange={(event) => setKeywordDraft(event.target.value)}
+                      />
+                    )}
                     <input
                       ref={keywordFileInputRef}
                       className="visually-hidden"
@@ -261,8 +308,9 @@ function BrowserToolsApp() {
                       }}
                     />
                     <div className="keyword-summary">
-                      <span className={batchTooLarge ? "error-text" : "muted"}>{formatCount(batchKeywords.length, toolUi.input.countUnit, toolUi.input.itemLabel)} / {batchLimit}</span>
-                      {batchTooLarge ? <span className="error-text">请减少 {batchKeywords.length - batchLimit} 个</span> : null}
+                      <span className={batchTooLarge ? "error-text" : "muted"}>{formatCount(batchInputCount, toolUi.input.countUnit, toolUi.input.itemLabel)} / {batchLimit}</span>
+                      {composerIncomplete ? <span className="error-text">请至少填写两个词组</span> : null}
+                      {batchTooLarge ? <span className="error-text">请减少 {batchInputCount - batchLimit} 个</span> : null}
                     </div>
                   </section>
                 ) : null}
@@ -286,13 +334,13 @@ function BrowserToolsApp() {
                 {selectedTool.definition.batch ? (
                   <button
                     className="button primary full collect-button"
-                    disabled={busy || !isMatched || !state?.targetTab || batchKeywords.length === 0 || batchTooLarge}
+                    disabled={busy || !isMatched || !state?.targetTab || batchKeywords.length === 0 || composerIncomplete || batchTooLarge}
                     onClick={() => void runBatch()}
                   >
                     <Play size={16} /> {busyAction === "batch"
                       ? toolUi.actions.running
-                      : batchKeywords.length
-                        ? `${toolUi.actions.run} ${formatCount(batchKeywords.length, toolUi.input.countUnit, toolUi.input.itemLabel)}`
+                      : batchInputCount
+                        ? `${toolUi.actions.run} ${formatCount(batchInputCount, toolUi.input.countUnit, toolUi.input.itemLabel)}`
                         : toolUi.actions.runEmpty}
                   </button>
                 ) : (
@@ -431,6 +479,90 @@ function ParameterForm({
           <ParameterInput name={name} definition={definition} value={values[name]} onChange={onChange} />
         </label>
       ))}
+    </div>
+  );
+}
+
+function KeywordComposer({
+  groups,
+  operator,
+  operators,
+  maxGroups,
+  groupLabel,
+  placeholder,
+  preview,
+  total,
+  limit,
+  disabled,
+  onGroupsChange,
+  onOperatorChange
+}: {
+  groups: string[];
+  operator: string;
+  operators: string[];
+  maxGroups: number;
+  groupLabel: string;
+  placeholder: string;
+  preview: string[];
+  total: number;
+  limit: number;
+  disabled: boolean;
+  onGroupsChange: (groups: string[]) => void;
+  onOperatorChange: (operator: string) => void;
+}) {
+  function updateGroup(index: number, value: string) {
+    onGroupsChange(groups.map((group, groupIndex) => groupIndex === index ? value : group));
+  }
+
+  function removeGroup(index: number) {
+    onGroupsChange(groups.filter((_, groupIndex) => groupIndex !== index));
+  }
+
+  return (
+    <div id="batch-keywords" className="keyword-composer">
+      <div className="composer-toolbar">
+        <label>
+          <span>连接符</span>
+          <select className="input composer-operator" value={operator} disabled={disabled} onChange={(event) => onOperatorChange(event.target.value)}>
+            {operators.map((item) => <option value={item} key={item}>{item}</option>)}
+          </select>
+        </label>
+        <button className="text-button" disabled={disabled || groups.length >= maxGroups} onClick={() => onGroupsChange([...groups, ""])}>
+          <Plus size={14} /> 添加{groupLabel}
+        </button>
+      </div>
+      <div className="composer-groups">
+        {groups.map((group, index) => (
+          <div className="composer-group" key={index}>
+            <div className="composer-group-heading">
+              <label htmlFor={`composer-group-${index}`}>{groupLabel} {index + 1}</label>
+              {groups.length > 2 ? (
+                <button className="icon-button compact-icon-button" disabled={disabled} aria-label={`删除${groupLabel} ${index + 1}`} onClick={() => removeGroup(index)}>
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+            <textarea
+              id={`composer-group-${index}`}
+              className="input composer-group-input"
+              value={group}
+              disabled={disabled}
+              spellCheck={false}
+              placeholder={placeholder}
+              onChange={(event) => updateGroup(index, event.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+      <div className={total > limit ? "composer-preview over-limit" : "composer-preview"}>
+        <div><strong>组合预览</strong><span>{total > 0 ? `${total} 条` : "等待输入"}</span></div>
+        {preview.length > 0 ? (
+          <ol>
+            {preview.slice(0, 4).map((item, index) => <li key={`${index}-${item}`}><code>{item}</code></li>)}
+          </ol>
+        ) : <p>每个词组一行一个词，系统会生成全部跨组组合。</p>}
+        {total > 4 ? <small>另有 {total - 4} 条未显示</small> : null}
+      </div>
     </div>
   );
 }
@@ -712,6 +844,37 @@ function parseBatchInput(source: string, csvHeaders?: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
 }
 
+function composeBatchInput(groups: string[], operator: string, maxGenerated: number): {
+  values: string[];
+  total: number;
+  activeGroupCount: number;
+} {
+  const termGroups = groups
+    .map((group) => [...new Set(group.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))])
+    .filter((group) => group.length > 0);
+  const total = termGroups.reduce((count, group) => Math.min(Number.MAX_SAFE_INTEGER, count * group.length), termGroups.length ? 1 : 0);
+  if (termGroups.length < 2) return { values: [], total, activeGroupCount: termGroups.length };
+
+  let combinations: string[][] = [[]];
+  for (const group of termGroups) {
+    const next: string[][] = [];
+    for (const combination of combinations) {
+      for (const term of group) {
+        next.push([...combination, term]);
+        if (next.length >= maxGenerated) break;
+      }
+      if (next.length >= maxGenerated) break;
+    }
+    combinations = next;
+  }
+
+  return {
+    values: combinations.map((parts) => parts.join(` ${operator} `)),
+    total,
+    activeGroupCount: termGroups.length
+  };
+}
+
 function parseCsvRow(line: string): string[] {
   const cells: string[] = [];
   let cell = "";
@@ -770,6 +933,15 @@ type ResolvedToolUi = {
     itemLabel: string;
     countUnit: string;
     importFormats: Array<"txt" | "csv">;
+    composer: {
+      enabled: boolean;
+      label: string;
+      groupLabel: string;
+      placeholder: string;
+      operators: string[];
+      defaultOperator: string;
+      maxGroups: number;
+    };
   };
   actions: {
     run: string;
@@ -798,7 +970,16 @@ function resolveToolUi(definition?: BrowserToolDefinition): ResolvedToolUi {
       placeholder: presentation?.batch_input?.placeholder || "每行输入一项",
       itemLabel: presentation?.batch_input?.item_label || "输入项",
       countUnit: presentation?.batch_input?.count_unit || "个",
-      importFormats: presentation?.batch_input?.import_formats || ["txt", "csv"]
+      importFormats: presentation?.batch_input?.import_formats || ["txt", "csv"],
+      composer: {
+        enabled: presentation?.batch_input?.composer?.enabled === true,
+        label: presentation?.batch_input?.composer?.label || "组合生成",
+        groupLabel: presentation?.batch_input?.composer?.group_label || "词组",
+        placeholder: presentation?.batch_input?.composer?.placeholder || "每行输入一个词",
+        operators: presentation?.batch_input?.composer?.operators || ["AND", "OR"],
+        defaultOperator: presentation?.batch_input?.composer?.default_operator || presentation?.batch_input?.composer?.operators?.[0] || "AND",
+        maxGroups: presentation?.batch_input?.composer?.max_groups || 4
+      }
     },
     actions: {
       run: presentation?.actions?.run || "开始运行",

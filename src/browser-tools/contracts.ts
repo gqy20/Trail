@@ -39,6 +39,15 @@ export type BrowserToolPresentation = {
     count_unit?: string;
     import_formats?: Array<"txt" | "csv">;
     csv_headers?: string[];
+    composer?: {
+      enabled?: boolean;
+      label?: string;
+      group_label?: string;
+      placeholder?: string;
+      operators?: string[];
+      default_operator?: string;
+      max_groups?: number;
+    };
   };
   actions?: {
     run?: string;

@@ -65,6 +65,14 @@ presentation:
     count_unit: 个
     import_formats: [txt, csv]
     csv_headers: [搜索词, keyword, query]
+    composer:
+      enabled: true
+      label: 组合搜索
+      group_label: 条件组
+      placeholder: 每行输入一个词
+      operators: [AND, OR]
+      default_operator: AND
+      max_groups: 4
   actions:
     run: 开始搜索
     run_empty: 输入搜索词后开始
@@ -100,6 +108,8 @@ parameters:
 ```
 
 未声明 `presentation` 时，运行时使用“数据采集”“批量输入”“记录”等中性默认文案。平台专有名称、字段中文名、字段顺序和链接展示方式应留在各自的工具 YAML 中。
+
+`batch_input.composer` 启用侧边栏的组合输入模式。每个条件组可以放置多行词项，运行时按组生成笛卡尔组合，例如两组分别有 2、3 个词项时会得到 6 条检索式。界面会在运行前预览生成结果，并继续遵守工具 `batch.max_keywords` 的批量上限。`operators` 只负责连接各组词项，具体支持哪些检索运算符应由目标平台的工具 YAML 声明。
 
 ## 调用链路
 

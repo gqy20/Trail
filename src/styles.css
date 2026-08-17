@@ -230,6 +230,146 @@ textarea:focus-visible {
   line-height: 1.65;
 }
 
+.input-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--trail-border-soft);
+  border-radius: 8px;
+  background: var(--trail-surface-muted);
+}
+
+.input-mode-switch button {
+  min-height: 32px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--trail-muted);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.input-mode-switch button.active {
+  background: var(--trail-surface);
+  color: var(--trail-text);
+  box-shadow: 0 1px 2px rgba(38, 42, 51, 0.08);
+}
+
+.keyword-composer {
+  display: grid;
+  gap: 10px;
+}
+
+.composer-toolbar,
+.composer-group-heading,
+.composer-preview > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.composer-toolbar > label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--trail-muted);
+  font-size: 12px;
+}
+
+.composer-operator {
+  width: auto;
+  min-width: 74px;
+  height: 30px;
+  padding: 3px 24px 3px 8px;
+  font-size: 12px !important;
+}
+
+.composer-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.composer-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--trail-border-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.composer-group-heading label {
+  color: var(--trail-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.compact-icon-button {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+.composer-group-input {
+  min-height: 88px;
+  padding: 8px 9px;
+  resize: vertical;
+  background: var(--trail-surface);
+  font-family: inherit;
+  font-size: 13px !important;
+  line-height: 1.5;
+}
+
+.composer-preview {
+  display: grid;
+  gap: 7px;
+  padding: 10px 11px;
+  border: 1px solid var(--trail-border-soft);
+  border-radius: 8px;
+  background: var(--trail-surface-muted);
+}
+
+.composer-preview.over-limit {
+  border-color: #e3c9a5;
+  background: #fff8ed;
+}
+
+.composer-preview strong,
+.composer-preview span,
+.composer-preview small,
+.composer-preview p {
+  font-size: 11px;
+}
+
+.composer-preview span,
+.composer-preview small,
+.composer-preview p {
+  color: var(--trail-muted);
+}
+
+.composer-preview p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.composer-preview ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.composer-preview code {
+  color: var(--trail-text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .keyword-summary {
   display: flex;
   justify-content: space-between;
@@ -930,6 +1070,10 @@ textarea:focus-visible {
 
   .yaml-editor {
     min-height: 150px;
+  }
+
+  .composer-groups {
+    grid-template-columns: 1fr;
   }
 
   .run-export-actions .button {

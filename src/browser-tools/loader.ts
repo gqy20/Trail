@@ -81,6 +81,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
 function validatePresentation(value: unknown): BrowserToolPresentation {
   const source = asRecord(value, "presentation");
   const batchInput = source.batch_input === undefined ? undefined : asRecord(source.batch_input, "presentation.batch_input");
+  const composer = batchInput?.composer === undefined ? undefined : asRecord(batchInput.composer, "presentation.batch_input.composer");
   const actions = source.actions === undefined ? undefined : asRecord(source.actions, "presentation.actions");
   const results = source.results === undefined ? undefined : asRecord(source.results, "presentation.results");
   const importFormats = batchInput?.import_formats === undefined
@@ -89,6 +90,25 @@ function validatePresentation(value: unknown): BrowserToolPresentation {
   importFormats?.forEach((format) => {
     if (format !== "txt" && format !== "csv") throw new Error(`presentation.batch_input.import_formats 不支持：${format}`);
   });
+  const composerOperators = composer?.operators === undefined
+    ? undefined
+    : readStringArray(composer.operators, "presentation.batch_input.composer.operators").map((operator, index) =>
+        validateUiText(operator, `presentation.batch_input.composer.operators[${index}]`, 16)
+      );
+  if (composerOperators && (composerOperators.length === 0 || composerOperators.length > 8)) {
+    throw new Error("presentation.batch_input.composer.operators 需要包含 1-8 个连接符。");
+  }
+  if (composerOperators && new Set(composerOperators).size !== composerOperators.length) {
+    throw new Error("presentation.batch_input.composer.operators 不能重复。");
+  }
+  const defaultOperator = readOptionalUiText(composer?.default_operator, "presentation.batch_input.composer.default_operator", 16);
+  if (defaultOperator && !(composerOperators || ["AND", "OR"]).includes(defaultOperator)) {
+    throw new Error("presentation.batch_input.composer.default_operator 必须包含在 operators 中。");
+  }
+  const composerMaxGroups = readOptionalNumber(composer?.max_groups, "presentation.batch_input.composer.max_groups");
+  if (composerMaxGroups !== undefined && (!Number.isInteger(composerMaxGroups) || composerMaxGroups < 2 || composerMaxGroups > 6)) {
+    throw new Error("presentation.batch_input.composer.max_groups 必须是 2-6 的整数。");
+  }
 
   return {
     title: readOptionalUiText(source.title, "presentation.title"),
@@ -104,7 +124,18 @@ function validatePresentation(value: unknown): BrowserToolPresentation {
             ? undefined
             : readStringArray(batchInput.csv_headers, "presentation.batch_input.csv_headers").map((header, index) =>
                 validateUiText(header, `presentation.batch_input.csv_headers[${index}]`)
-              )
+              ),
+          composer: composer
+            ? {
+                enabled: readOptionalBoolean(composer.enabled, "presentation.batch_input.composer.enabled"),
+                label: readOptionalUiText(composer.label, "presentation.batch_input.composer.label"),
+                group_label: readOptionalUiText(composer.group_label, "presentation.batch_input.composer.group_label"),
+                placeholder: readOptionalUiText(composer.placeholder, "presentation.batch_input.composer.placeholder", 300),
+                operators: composerOperators,
+                default_operator: defaultOperator,
+                max_groups: composerMaxGroups
+              }
+            : undefined
         }
       : undefined,
     actions: actions
