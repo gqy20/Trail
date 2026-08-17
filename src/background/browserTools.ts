@@ -1,7 +1,10 @@
 import type {
   BrowserToolManagerState,
   BrowserToolExecutionProgress,
+  BrowserToolNativeExportDefinition,
   BrowserToolRunResult,
+  GetBrowserToolNativeExportCountMessage,
+  RunBrowserToolNativeExportBatchMessage,
   ExecuteBrowserToolMessage,
   StoredBrowserTool
 } from "../browser-tools/contracts";
@@ -79,6 +82,7 @@ export async function runStoredBrowserToolBatch(input: {
   parameters: Record<string, unknown>;
   tabId?: number;
   userInitiated?: boolean;
+  nativeExport?: { definitionId: string; maxRecords: number };
 }): Promise<BrowserToolRunResult> {
   const tool = await getStoredBrowserTool(input.toolId);
   if (!tool) throw new Error(`没有找到 Browser Tool：${input.toolId}`);
@@ -99,6 +103,7 @@ export async function runStoredBrowserToolBatch(input: {
   const progressId = `browser_tool_progress_${createBackgroundRunId()}`;
   const data: BrowserToolRunResult["data"] = {};
   const warnings: string[] = [];
+  const nativeExports: NonNullable<BrowserToolRunResult["nativeExports"]> = [];
   let completedKeywords = 0;
   let lastPageUrl = tab.url;
   let lastPageTitle = tab.title || tab.url;
@@ -143,6 +148,13 @@ export async function runStoredBrowserToolBatch(input: {
         warnings.push(`[${keyword}] ${result.error || (result.status === "paused" ? "需要人工处理登录或验证码" : "提取未完整完成")}`);
         break;
       }
+      if (input.nativeExport) {
+        const exportDefinition = definition.native_exports?.find((item) => item.id === input.nativeExport?.definitionId);
+        if (!exportDefinition) throw new Error("工具没有对应的原生导出定义。");
+        const exportSummary = await runNativeExportBatches(tab.id, definition.id, exportDefinition, input.nativeExport.maxRecords, keyword, progressId);
+        nativeExports.push(exportSummary);
+        if (exportSummary.error) warnings.push(`[${keyword}] 原生导出部分完成：${exportSummary.error}`);
+      }
       completedKeywords += 1;
     } catch (error) {
       failed = true;
@@ -168,9 +180,106 @@ export async function runStoredBrowserToolBatch(input: {
     status,
     data,
     warnings,
+    nativeExports: nativeExports.length > 0 ? nativeExports : undefined,
     error: failed ? `已完成 ${completedKeywords}/${keywords.length} 个检索词。` : undefined
   };
   return persistRunResult(result, `${definition.name} · 批量`);
+}
+
+async function runNativeExportBatches(
+  tabId: number,
+  toolId: string,
+  definition: BrowserToolNativeExportDefinition,
+  requestedLimit: number,
+  query: string,
+  progressId: string
+): Promise<NonNullable<BrowserToolRunResult["nativeExports"]>[number]> {
+  const countResponse = await chrome.tabs.sendMessage<GetBrowserToolNativeExportCountMessage, { totalRecords?: number; error?: string }>(tabId, {
+    type: "GET_BROWSER_TOOL_NATIVE_EXPORT_COUNT",
+    definition
+  });
+  if (countResponse?.error) throw new Error(countResponse.error);
+  const totalRecords = Math.max(0, countResponse?.totalRecords || 0);
+  const exportLimit = Math.min(totalRecords, Math.max(1, requestedLimit), definition.max_limit);
+  const files: string[] = [];
+  let exportedRecords = 0;
+  let exportError: string | undefined;
+  const batchCount = Math.ceil(exportLimit / definition.max_batch);
+
+  for (let batchIndex = 0; batchIndex < batchCount; batchIndex += 1) {
+    const from = batchIndex * definition.max_batch + 1;
+    const to = Math.min(exportLimit, from + definition.max_batch - 1);
+    emitProgress({
+      type: "BROWSER_TOOL_PROGRESS_UPDATE",
+      progressId,
+      toolId,
+      scope: "export",
+      label: "正在导出完整记录",
+      itemLabel: "批",
+      current: batchIndex + 1,
+      total: batchCount,
+      recordCount: to
+    });
+    try {
+      const downloadPromise = waitForNativeDownloadStart(definition.extension, 60_000);
+      const response = await chrome.tabs.sendMessage<RunBrowserToolNativeExportBatchMessage, { started?: boolean; error?: string }>(tabId, {
+        type: "RUN_BROWSER_TOOL_NATIVE_EXPORT_BATCH",
+        definition,
+        from,
+        to
+      });
+      if (response?.error) {
+        void downloadPromise.catch(() => undefined);
+        throw new Error(response.error);
+      }
+      const download = await downloadPromise;
+      const completed = await waitForNativeDownloadComplete(download.id, 5 * 60_000);
+      files.push(completed.filename.split(/[\\/]/).pop() || `export-${batchIndex + 1}.${definition.extension}`);
+      exportedRecords = to;
+    } catch (error) {
+      exportError = error instanceof Error ? error.message : "原生导出失败。";
+      break;
+    }
+  }
+  return { query, totalRecords, exportedRecords, files, error: exportError };
+}
+
+function waitForNativeDownloadStart(extension: string, timeoutMs: number): Promise<chrome.downloads.DownloadItem> {
+  return new Promise((resolve, reject) => {
+    const timeout = globalThis.setTimeout(() => finish(undefined, new Error("等待 WoS 导出文件超时。")), timeoutMs);
+    const listener = (item: chrome.downloads.DownloadItem) => {
+      if (item.filename.toLowerCase().endsWith(`.${extension.toLowerCase()}`)) finish(item);
+    };
+    const finish = (item?: chrome.downloads.DownloadItem, error?: Error) => {
+      globalThis.clearTimeout(timeout);
+      chrome.downloads.onCreated.removeListener(listener);
+      error ? reject(error) : resolve(item!);
+    };
+    chrome.downloads.onCreated.addListener(listener);
+  });
+}
+
+function waitForNativeDownloadComplete(id: number, timeoutMs: number): Promise<chrome.downloads.DownloadItem> {
+  return new Promise((resolve, reject) => {
+    const timeout = globalThis.setTimeout(() => finish(undefined, new Error("WoS 导出文件下载超时。")), timeoutMs);
+    const listener = (delta: chrome.downloads.DownloadDelta) => {
+      if (delta.id !== id || !delta.state?.current) return;
+      if (delta.state.current === "complete") void lookup().then((item) => finish(item), (error) => finish(undefined, error));
+      if (delta.state.current === "interrupted") finish(undefined, new Error(delta.error?.current || "WoS 导出下载中断。"));
+    };
+    const lookup = async () => {
+      const [item] = await chrome.downloads.search({ id });
+      if (!item) throw new Error("找不到 WoS 导出下载记录。");
+      return item;
+    };
+    const finish = (item?: chrome.downloads.DownloadItem, error?: Error) => {
+      globalThis.clearTimeout(timeout);
+      chrome.downloads.onChanged.removeListener(listener);
+      error ? reject(error) : resolve(item!);
+    };
+    chrome.downloads.onChanged.addListener(listener);
+    void lookup().then((item) => item.state === "complete" ? finish(item) : undefined).catch(() => undefined);
+  });
 }
 
 export async function runBrowserTool(input: {

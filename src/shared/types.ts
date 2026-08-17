@@ -264,6 +264,7 @@ export type RuntimeMessage =
       parameters: Record<string, unknown>;
       tabId?: number;
       userInitiated: true;
+      nativeExport?: { definitionId: string; maxRecords: number };
     }
   | { type: "OPEN_SESSION"; sessionId: string }
   | { type: "DELETE_SESSION"; sessionId: string };

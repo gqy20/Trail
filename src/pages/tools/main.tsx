@@ -34,6 +34,8 @@ function BrowserToolsApp() {
   const [composerGroups, setComposerGroups] = useState<string[]>(["", ""]);
   const [composerOperator, setComposerOperator] = useState("AND");
   const [autoExportCsv, setAutoExportCsv] = useState(true);
+  const [nativeExportEnabled, setNativeExportEnabled] = useState(true);
+  const [nativeExportLimit, setNativeExportLimit] = useState(1000);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
   const [activeView, setActiveView] = useState<"collect" | "results" | "history" | "settings">("collect");
@@ -65,6 +67,7 @@ function BrowserToolsApp() {
   }, [selectedId]);
 
   const selectedTool = state?.tools.find((tool) => tool.id === selectedId);
+  const nativeExportDefinition = selectedTool?.definition.native_exports?.[0];
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
   const toolUi = resolveToolUi(selectedTool?.definition);
   const directBatchKeywords = useMemo(
@@ -103,6 +106,9 @@ function BrowserToolsApp() {
     setInputMode("direct");
     setComposerGroups(["", ""]);
     setComposerOperator(composerDefaultOperator);
+    const nativeExport = selectedTool.definition.native_exports?.[0];
+    setNativeExportEnabled(Boolean(nativeExport));
+    setNativeExportLimit(nativeExport?.default_limit || 1000);
   }, [selectedTool?.id, selectedTool?.updatedAt, composerDefaultOperator]);
 
   useEffect(() => {
@@ -193,7 +199,10 @@ function BrowserToolsApp() {
         keywords: batchKeywords,
         parameters,
         tabId: state.targetTab.id,
-        userInitiated: true
+        userInitiated: true,
+        nativeExport: nativeExportEnabled && nativeExportDefinition
+          ? { definitionId: nativeExportDefinition.id, maxRecords: nativeExportLimit }
+          : undefined
       });
       setLastResult(result);
       setActiveView("results");
@@ -338,10 +347,29 @@ function BrowserToolsApp() {
                       onChange={(name, value) => setParameters((current) => ({ ...current, [name]: value }))}
                     />
                     {selectedTool.definition.batch ? (
-                      <label className="batch-export-option">
-                        <input type="checkbox" checked={autoExportCsv} onChange={(event) => setAutoExportCsv(event.target.checked)} />
-                        完成后自动导出 CSV
-                      </label>
+                      <div className="batch-output-options">
+                        <label className="batch-export-option">
+                          <input type="checkbox" checked={autoExportCsv} onChange={(event) => setAutoExportCsv(event.target.checked)} />
+                          自动导出摘要 CSV
+                        </label>
+                        {nativeExportDefinition ? (
+                          <label className="batch-export-option native-export-option">
+                            <input type="checkbox" checked={nativeExportEnabled} onChange={(event) => setNativeExportEnabled(event.target.checked)} />
+                            {nativeExportDefinition.label}
+                            <input
+                              className="native-export-limit"
+                              type="number"
+                              min={1}
+                              max={nativeExportDefinition.max_limit}
+                              value={nativeExportLimit}
+                              disabled={!nativeExportEnabled}
+                              aria-label="每个检索式原生导出上限"
+                              onChange={(event) => setNativeExportLimit(Math.max(1, Math.min(nativeExportDefinition.max_limit, Number(event.target.value) || 1)))}
+                            />
+                            条
+                          </label>
+                        ) : null}
+                      </div>
                     ) : null}
                   </section>
                 ) : null}
@@ -479,7 +507,7 @@ function BrowserToolsApp() {
 }
 
 function ExecutionProgressPanel({ progress }: { progress: Record<string, BrowserToolExecutionProgress> }) {
-  const ordered = ["keyword", "page", "load"].flatMap((scope) => progress[scope] ? [progress[scope]] : []);
+  const ordered = ["keyword", "page", "load", "export"].flatMap((scope) => progress[scope] ? [progress[scope]] : []);
   const recordCount = Math.max(0, ...ordered.map((item) => item.recordCount));
   return (
     <section className="execution-progress" aria-live="polite">
@@ -710,6 +738,18 @@ function RunResult({ result, definition }: { result: BrowserToolRunResult; defin
           key={downloadDefinition.id}
         />
       ))}
+      {result.nativeExports?.length ? (
+        <section className="native-export-summary">
+          <strong>WoS 完整记录已导出</strong>
+          {result.nativeExports.map((item) => (
+            <div key={item.query}>
+              <span>{item.query}</span>
+              <span>{item.exportedRecords}/{item.totalRecords} 条 · {item.files.length} 个文件</span>
+            </div>
+          ))}
+          {result.nativeExports.some((item) => item.error) ? <p className="error-text text-small">部分批次导出失败，请查看运行提示。</p> : null}
+        </section>
+      ) : null}
       <RunCollections data={result.data} presentation={definition?.presentation} />
       {result.warnings.length > 0 ? (
         <details className="run-warnings">

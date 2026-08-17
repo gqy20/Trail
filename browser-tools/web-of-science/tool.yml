@@ -3,7 +3,7 @@ schema_version: 1
 id: web-of-science-core-collection
 name: Web of Science Core Collection 文献提取
 description: 在 Web of Science Core Collection 新版检索界面中批量检索并提取结果卡片元数据
-version: 0.4.0
+version: 0.5.0
 
 presentation:
   title: WoS 文献采集
@@ -73,7 +73,7 @@ parameters:
     type: number
     label: 提取页数
     required: true
-    default: 2
+    default: 1
     min: 1
     max: 10
     presentation:
@@ -212,6 +212,23 @@ batch:
     input_parameter: keyword
   max_keywords: 20
   delay_between_keywords_ms: 2000
+
+native_exports:
+  - id: full_records
+    label: WoS 完整记录
+    result_count_selector: "h1.search-info-title"
+    menu_button_selector: "#export-trigger-btn"
+    menu_item_text: Plain text file
+    range_radio_selector: "input[name='outputMethodType'][value='fromRange']"
+    start_input_selector: "input[name='markFrom']"
+    end_input_selector: "input[name='markTo']"
+    content_button_selector: "button[role='combobox'][aria-label^='Filter by']"
+    content_option_text: Full Record and Cited References
+    submit_button_selector: "#exportOptionButton"
+    max_batch: 1000
+    default_limit: 1000
+    max_limit: 5000
+    extension: txt
 
 limits:
   delay_between_actions_ms: 0

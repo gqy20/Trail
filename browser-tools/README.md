@@ -194,6 +194,31 @@ downloads:
 
 下载必须由用户主动启动，按单工作标签页串行执行。资源 URL 在详情页即时提取，不写入运行历史；遇到可见的验证码、登录或权限阻断器时会激活工作标签页并暂停。当前版本完成安全验证后需要在结果页重新选择未完成项启动，尚未实现原队列原地恢复。
 
+## 平台原生批量导出
+
+对于 WoS 这类提供完整记录范围导出的平台，工具可以声明 `native_exports`。批量检索完成后，运行时读取结果总数、按平台上限拆分范围、操作原生导出表单并跟踪每个下载文件：
+
+```yml
+native_exports:
+  - id: full_records
+    label: WoS 完整记录
+    result_count_selector: "h1.search-info-title"
+    menu_button_selector: "#export-trigger-btn"
+    menu_item_text: Plain text file
+    range_radio_selector: "input[value='fromRange']"
+    start_input_selector: "input[name='markFrom']"
+    end_input_selector: "input[name='markTo']"
+    content_button_selector: "button[aria-label^='Filter by']"
+    content_option_text: Full Record and Cited References
+    submit_button_selector: "#exportOptionButton"
+    max_batch: 1000
+    default_limit: 1000
+    max_limit: 5000
+    extension: txt
+```
+
+侧边栏默认同时生成摘要 CSV 和平台完整记录文件。原生文件由浏览器直接下载，当前版本记录批次和文件名但不读取或合并本地下载内容。
+
 ## 调用链路
 
 扩展页面先发送 `VALIDATE_BROWSER_TOOL_YAML` 校验配置，再由明确的用户操作发送：

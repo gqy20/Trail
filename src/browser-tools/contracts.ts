@@ -87,6 +87,24 @@ export type BrowserToolDownloadDefinition = {
   delay_ms?: number;
 };
 
+export type BrowserToolNativeExportDefinition = {
+  id: string;
+  label: string;
+  result_count_selector: string;
+  menu_button_selector: string;
+  menu_item_text: string;
+  range_radio_selector: string;
+  start_input_selector: string;
+  end_input_selector: string;
+  content_button_selector: string;
+  content_option_text: string;
+  submit_button_selector: string;
+  max_batch: number;
+  default_limit: number;
+  max_limit: number;
+  extension: string;
+};
+
 export type BrowserToolFieldDefinition = {
   selector?: string;
   attribute?: "text" | "href" | "content" | "datetime" | "aria_label";
@@ -214,6 +232,7 @@ export type BrowserToolDefinition = {
   workflow: BrowserToolStep[];
   presentation?: BrowserToolPresentation;
   downloads?: BrowserToolDownloadDefinition[];
+  native_exports?: BrowserToolNativeExportDefinition[];
   batch?: {
     navigation:
       | { type: "query_parameter"; parameter: string }
@@ -280,6 +299,13 @@ export type BrowserToolRunResult = {
   data: Record<string, Array<Record<string, unknown>>>;
   warnings: string[];
   error?: string;
+  nativeExports?: Array<{
+    query: string;
+    totalRecords: number;
+    exportedRecords: number;
+    files: string[];
+    error?: string;
+  }>;
 };
 
 export type StoredBrowserTool = {
@@ -337,4 +363,16 @@ export type BrowserToolExecutionProgress = {
 
 export type BrowserToolExecutionProgressEvent = Omit<BrowserToolExecutionProgress, "type"> & {
   type: "BROWSER_TOOL_EXECUTION_PROGRESS";
+};
+
+export type GetBrowserToolNativeExportCountMessage = {
+  type: "GET_BROWSER_TOOL_NATIVE_EXPORT_COUNT";
+  definition: BrowserToolNativeExportDefinition;
+};
+
+export type RunBrowserToolNativeExportBatchMessage = {
+  type: "RUN_BROWSER_TOOL_NATIVE_EXPORT_BATCH";
+  definition: BrowserToolNativeExportDefinition;
+  from: number;
+  to: number;
 };

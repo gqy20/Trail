@@ -289,6 +289,23 @@ const sampleBrowserTool = {
       formats: { pdf: { label: "PDF", selector: ".download-pdf", extension: "pdf" } },
       max_items: 20
     }],
+    native_exports: [{
+      id: "full_records",
+      label: "完整记录",
+      result_count_selector: "h1",
+      menu_button_selector: "#export",
+      menu_item_text: "Plain text file",
+      range_radio_selector: "input[value='range']",
+      start_input_selector: "input[name='from']",
+      end_input_selector: "input[name='to']",
+      content_button_selector: "#content",
+      content_option_text: "Full Record and Cited References",
+      submit_button_selector: "#submit-export",
+      max_batch: 1000,
+      default_limit: 1000,
+      max_limit: 5000,
+      extension: "txt"
+    }],
     presentation: {
       title: "数据采集",
       source_label: "示例搜索",
@@ -417,6 +434,7 @@ export function installDevChromeMock() {
         eventId?: string;
         format?: string;
         items?: Array<{ title: string; detailUrl: string }>;
+        nativeExport?: { definitionId: string; maxRecords: number };
       }) => {
         if (message.type === "GET_POPUP_STATE") {
           const isActivePreview = new URLSearchParams(window.location.search).get("active") === "1";
@@ -499,7 +517,12 @@ export function installDevChromeMock() {
               await new Promise((resolve) => window.setTimeout(resolve, 1_200));
             }
           }
-          return sampleBrowserToolRun;
+          return message.nativeExport
+            ? {
+                ...sampleBrowserToolRun,
+                nativeExports: [{ query: "测试", totalRecords: 14502, exportedRecords: message.nativeExport.maxRecords, files: ["savedrecs.txt"] }]
+              }
+            : sampleBrowserToolRun;
         }
 
         return sampleSession;

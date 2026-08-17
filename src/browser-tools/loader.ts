@@ -63,6 +63,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
   }
   const presentation = root.presentation === undefined ? undefined : validatePresentation(root.presentation);
   const downloads = root.downloads === undefined ? undefined : validateDownloads(root.downloads);
+  const nativeExports = root.native_exports === undefined ? undefined : validateNativeExports(root.native_exports);
 
   return {
     schema_version: 1,
@@ -79,9 +80,49 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     workflow,
     presentation,
     downloads,
+    native_exports: nativeExports,
     batch,
     limits
   };
+}
+
+function validateNativeExports(value: unknown): NonNullable<BrowserToolDefinition["native_exports"]> {
+  const entries = asArray(value, "native_exports");
+  if (entries.length === 0 || entries.length > 5) throw new Error("native_exports 需要包含 1-5 个定义。");
+  const ids = new Set<string>();
+  return entries.map((raw, index) => {
+    const path = `native_exports[${index}]`;
+    const source = asRecord(raw, path);
+    const id = readString(source.id, `${path}.id`);
+    if (!COLLECTION_PATTERN.test(id) || ids.has(id)) throw new Error(`${path}.id 无效或重复。`);
+    ids.add(id);
+    const readSelector = (name: string) => validatedSelector(source[name], `${path}.${name}`);
+    const maxBatch = readNumber(source.max_batch, `${path}.max_batch`);
+    const defaultLimit = readNumber(source.default_limit, `${path}.default_limit`);
+    const maxLimit = readNumber(source.max_limit, `${path}.max_limit`);
+    if (!Number.isInteger(maxBatch) || maxBatch < 1 || maxBatch > 5_000) throw new Error(`${path}.max_batch 无效。`);
+    if (!Number.isInteger(defaultLimit) || defaultLimit < 1 || defaultLimit > maxLimit) throw new Error(`${path}.default_limit 无效。`);
+    if (!Number.isInteger(maxLimit) || maxLimit < maxBatch || maxLimit > 50_000) throw new Error(`${path}.max_limit 无效。`);
+    const extension = readString(source.extension, `${path}.extension`);
+    if (!/^[a-z0-9]{1,10}$/i.test(extension)) throw new Error(`${path}.extension 无效。`);
+    return {
+      id,
+      label: validateUiText(readString(source.label, `${path}.label`), `${path}.label`),
+      result_count_selector: readSelector("result_count_selector"),
+      menu_button_selector: readSelector("menu_button_selector"),
+      menu_item_text: validateUiText(readString(source.menu_item_text, `${path}.menu_item_text`), `${path}.menu_item_text`),
+      range_radio_selector: readSelector("range_radio_selector"),
+      start_input_selector: readSelector("start_input_selector"),
+      end_input_selector: readSelector("end_input_selector"),
+      content_button_selector: readSelector("content_button_selector"),
+      content_option_text: validateUiText(readString(source.content_option_text, `${path}.content_option_text`), `${path}.content_option_text`),
+      submit_button_selector: readSelector("submit_button_selector"),
+      max_batch: maxBatch,
+      default_limit: defaultLimit,
+      max_limit: maxLimit,
+      extension
+    };
+  });
 }
 
 function validateDownloads(value: unknown): BrowserToolDownloadDefinition[] {

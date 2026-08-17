@@ -831,6 +831,53 @@ textarea:focus-visible {
   accent-color: var(--trail-accent);
 }
 
+.batch-output-options {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.native-export-option {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.native-export-limit {
+  width: 68px !important;
+  height: 28px;
+  padding: 3px 6px;
+  border: 1px solid var(--trail-border);
+  border-radius: 5px;
+  background: var(--trail-surface);
+  color: var(--trail-text);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.native-export-summary {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px solid var(--trail-border-soft);
+  border-radius: 8px;
+  background: var(--trail-surface-muted);
+  font-size: 12px;
+}
+
+.native-export-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--trail-muted);
+}
+
+.native-export-summary > div span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tool-title {
   margin: 0;
   font-size: var(--trail-font-lg);
