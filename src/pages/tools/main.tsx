@@ -6,6 +6,7 @@ import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
 import { formatDateTime } from "../../shared/time";
+import { LiteratureQueueView } from "./LiteratureQueue";
 import type {
   BrowserToolManagerState,
   BrowserToolCollectionPresentation,
@@ -38,7 +39,7 @@ function BrowserToolsApp() {
   const [nativeExportLimit, setNativeExportLimit] = useState(1000);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
-  const [activeView, setActiveView] = useState<"collect" | "results" | "history" | "settings">("collect");
+  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "history" | "settings">("collect");
   const [error, setError] = useState("");
   const [catalogNotice, setCatalogNotice] = useState("");
   const [executionProgress, setExecutionProgress] = useState<Record<string, BrowserToolExecutionProgress>>({});
@@ -251,6 +252,9 @@ function BrowserToolsApp() {
           <nav className="tools-nav" aria-label={`${toolUi.title}导航`}>
             <button className={activeView === "collect" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collect")}>运行</button>
             {lastResult ? <button className={activeView === "results" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("results")}>结果</button> : null}
+            <button className={activeView === "queue" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("queue")}>
+              <Download size={15} /> 队列
+            </button>
             <button className={activeView === "history" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("history")}>
               <History size={15} /> 历史
             </button>
@@ -412,6 +416,8 @@ function BrowserToolsApp() {
             ? <RunResult result={lastResult} definition={lastResultDefinition} />
             : <EmptyResult definition={selectedTool?.definition} onBack={() => setActiveView("collect")} />
         ) : null}
+
+        {activeView === "queue" ? <LiteratureQueueView /> : null}
 
         {activeView === "history" ? (
           <section className="history-view stack">

@@ -27,6 +27,7 @@ import {
   validateBrowserToolYaml
 } from "./browserTools";
 import { downloadBrowserToolItems } from "./browserToolDownloads";
+import { downloadLiteratureQueue, pauseLiteratureDownload, resumeLiteratureDownload } from "./literatureDownloads";
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecutionProgress | BrowserToolExecutionProgressEvent, sender, sendResponse) => {
   if (message.type === "BROWSER_TOOL_EXECUTION_PROGRESS") {
@@ -84,6 +85,12 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return importBundledBrowserTools();
     case "DOWNLOAD_BROWSER_TOOL_ITEMS":
       return downloadBrowserToolItems(message);
+    case "DOWNLOAD_LITERATURE_QUEUE":
+      return downloadLiteratureQueue(message);
+    case "PAUSE_LITERATURE_DOWNLOAD":
+      return pauseLiteratureDownload();
+    case "RESUME_LITERATURE_DOWNLOAD":
+      return resumeLiteratureDownload();
     case "DELETE_BROWSER_TOOL":
       return removeBrowserTool(message.toolId);
     case "RUN_STORED_BROWSER_TOOL":

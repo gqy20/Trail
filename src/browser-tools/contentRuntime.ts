@@ -7,10 +7,34 @@ import type {
   RunBrowserToolNativeExportBatchMessage,
   ResolveBrowserToolDownloadMessage
 } from "./contracts";
+import type {
+  LiteratureResourceResolution,
+  ResolveLiteratureResourceMessage,
+  TriggerLiteratureDownloadMessage
+} from "../literature-queue/types";
 import { executeBrowserTool } from "./executor";
 
 export function installBrowserToolContentRuntime(): void {
   chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+    if (isResolveLiteratureResourceMessage(message)) {
+      try {
+        sendResponse(resolveLiteratureResource());
+      } catch (error) {
+        sendResponse({ blocker: error instanceof Error ? error.message : "无法解析全文入口。" } satisfies LiteratureResourceResolution);
+      }
+      return undefined;
+    }
+
+    if (isTriggerLiteratureDownloadMessage(message)) {
+      try {
+        triggerLiteratureDownload(message);
+        sendResponse({ triggered: true });
+      } catch (error) {
+        sendResponse({ error: error instanceof Error ? error.message : "无法启动 PDF 下载。" });
+      }
+      return undefined;
+    }
+
     if (isNativeExportCountMessage(message)) {
       try {
         const text = document.querySelector(message.definition.result_count_selector)?.textContent || "";
@@ -60,6 +84,95 @@ export function installBrowserToolContentRuntime(): void {
 
     return true;
   });
+}
+
+function resolveLiteratureResource(): LiteratureResourceResolution {
+  const blocker = findLiteratureBlocker();
+  if (blocker) return { blocker };
+  if (document.contentType.toLowerCase().includes("application/pdf") || /\.pdf(?:$|[?#])/i.test(location.href)) {
+    return { resourceUrl: location.href, action: "download" };
+  }
+
+  const host = location.hostname.toLowerCase();
+  if (host.endsWith("journals.ashs.org")) {
+    const viewer = document.querySelector<HTMLIFrameElement>("iframe[title='PDF Viewer'][src*='pdfUrl=']");
+    if (viewer?.src) {
+      const viewerUrl = new URL(viewer.src, location.href);
+      const pdfPath = viewerUrl.searchParams.get("pdfUrl");
+      if (pdfPath) return { resourceUrl: new URL(pdfPath, location.href).href, action: "download" };
+    }
+  }
+
+  if (host.endsWith("onlinelibrary.wiley.com")) {
+    const direct = findHttpUrl("a[href*='/doi/pdfdirect/']");
+    if (direct) return { resourceUrl: direct, action: "download" };
+    const reader = findHttpUrl("a[href*='/doi/epdf/']");
+    if (reader) return { resourceUrl: reader, action: "navigate" };
+  }
+
+  if (host.endsWith("agronomy-journal.org") || host.endsWith("edpsciences.org")) {
+    const edpPdf = findHttpUrl("a[href*='/articles/'][href*='/pdf/'][href$='.pdf']");
+    if (edpPdf) return { resourceUrl: edpPdf, action: "download" };
+  }
+
+  const selectors = [
+    "meta[name='citation_pdf_url']",
+    "meta[name='wkhealth_pdf_url']",
+    "meta[property='og:pdf']",
+    "link[type='application/pdf']",
+    "embed[type='application/pdf']",
+    "iframe[src*='.pdf']",
+    "a[type='application/pdf']",
+    "a[href$='.pdf']",
+    "a[href*='.pdf?']",
+    "a[href*='/pdfdirect/']",
+    "a[href*='/pdf/']",
+    "a[href*='downloadPdf']",
+    "a[href*='downloadpdf']"
+  ];
+  for (const selector of selectors) {
+    for (const element of document.querySelectorAll(selector)) {
+      const rawUrl = element.getAttribute("content") || element.getAttribute("href") || element.getAttribute("src");
+      if (!rawUrl) continue;
+      const url = new URL(rawUrl, location.href);
+      if (url.protocol === "http:" || url.protocol === "https:") return { resourceUrl: url.href, action: "download" };
+    }
+  }
+  return {};
+}
+
+function triggerLiteratureDownload(message: TriggerLiteratureDownloadMessage): void {
+  const url = new URL(message.resourceUrl, location.href);
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("只允许下载 HTTP(S) PDF。");
+  const anchor = document.createElement("a");
+  anchor.href = url.href;
+  anchor.download = message.filename;
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  anchor.click();
+  window.setTimeout(() => anchor.remove(), 1_000);
+}
+
+function findHttpUrl(selector: string): string | undefined {
+  const element = document.querySelector(selector);
+  const rawUrl = element?.getAttribute("href") || element?.getAttribute("src");
+  if (!rawUrl) return undefined;
+  const url = new URL(rawUrl, location.href);
+  return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+}
+
+function findLiteratureBlocker(): string | undefined {
+  const selectors = [
+    "iframe[src*='captcha']",
+    "iframe[src*='hcaptcha']",
+    "iframe[src*='recaptcha']",
+    "#tCaptchaDyMainWrap",
+    "[class*='captcha']",
+    "[id*='captcha']"
+  ];
+  const blocker = selectors.flatMap((selector) => [...document.querySelectorAll(selector)]).find((element) => element instanceof HTMLElement && isVisible(element));
+  if (blocker) return "页面需要安全验证，请打开该文献页面完成验证后重试。";
+  return undefined;
 }
 
 async function runNativeExportBatch(message: RunBrowserToolNativeExportBatchMessage): Promise<void> {
@@ -158,4 +271,12 @@ function isNativeExportCountMessage(value: unknown): value is GetBrowserToolNati
 
 function isNativeExportBatchMessage(value: unknown): value is RunBrowserToolNativeExportBatchMessage {
   return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "RUN_BROWSER_TOOL_NATIVE_EXPORT_BATCH");
+}
+
+function isResolveLiteratureResourceMessage(value: unknown): value is ResolveLiteratureResourceMessage {
+  return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "RESOLVE_LITERATURE_RESOURCE");
+}
+
+function isTriggerLiteratureDownloadMessage(value: unknown): value is TriggerLiteratureDownloadMessage {
+  return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "TRIGGER_LITERATURE_DOWNLOAD");
 }

@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import type { StoredBrowserTool } from "../browser-tools/contracts";
 import type { BundledBrowserToolImportResult } from "../browser-tools/bundled";
+import type { LiteratureDownloadRunResult } from "../literature-queue/types";
 
 type RuntimeResponseMap = {
   GET_POPUP_STATE: PopupState;
@@ -31,6 +32,9 @@ type RuntimeResponseMap = {
   IMPORT_BROWSER_TOOL: StoredBrowserTool;
   IMPORT_BUNDLED_BROWSER_TOOLS: BundledBrowserToolImportResult;
   DOWNLOAD_BROWSER_TOOL_ITEMS: BrowserToolDownloadRunResult;
+  DOWNLOAD_LITERATURE_QUEUE: LiteratureDownloadRunResult;
+  PAUSE_LITERATURE_DOWNLOAD: { paused: boolean };
+  RESUME_LITERATURE_DOWNLOAD: { paused: boolean };
   DELETE_BROWSER_TOOL: undefined;
   RUN_STORED_BROWSER_TOOL: BrowserToolRunResult;
   RUN_BROWSER_TOOL_BATCH: BrowserToolRunResult;

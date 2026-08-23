@@ -422,6 +422,8 @@ export function installDevChromeMock() {
     "trail.interactionSettings": DEFAULT_INTERACTION_SETTINGS
   };
   const runtimeListeners: Array<(message: unknown) => void> = [];
+  let mockLiteraturePaused = false;
+  let mockLiteratureProgress: Record<string, unknown> | undefined;
 
   const extensionRoot = window.location.origin;
 
@@ -433,7 +435,8 @@ export function installDevChromeMock() {
         settings?: Partial<TrailInteractionSettings>;
         eventId?: string;
         format?: string;
-        items?: Array<{ title: string; detailUrl: string }>;
+        items?: Array<{ id?: string; title: string; detailUrl?: string; doi?: string; pdfUrl?: string; downloadUrl?: string }>;
+        concurrency?: number;
         nativeExport?: { definitionId: string; maxRecords: number };
       }) => {
         if (message.type === "GET_POPUP_STATE") {
@@ -498,6 +501,49 @@ export function installDevChromeMock() {
             finishedAt: Date.now(),
             items: items.map((item, index) => ({ ...item, format: message.format || "pdf", status: "completed", downloadId: index + 1, filename: `${item.title}.pdf` }))
           };
+        }
+
+        if (message.type === "DOWNLOAD_LITERATURE_QUEUE") {
+          const items = message.items || [];
+          mockLiteraturePaused = false;
+          for (let index = 0; index < items.length; index += 1) {
+            while (mockLiteraturePaused) await new Promise((resolve) => window.setTimeout(resolve, 100));
+            mockLiteratureProgress = {
+              type: "LITERATURE_DOWNLOAD_PROGRESS",
+              state: "running",
+              completed: index,
+              total: items.length,
+              active: Math.min(message.concurrency || 2, items.length - index),
+              succeeded: Math.floor(index * 0.75),
+              needsUser: index - Math.floor(index * 0.75),
+              failed: 0,
+              concurrency: message.concurrency || 2,
+              currentTitle: items[index].title
+            };
+            runtimeListeners.forEach((listener) => listener(mockLiteratureProgress));
+            await new Promise((resolve) => window.setTimeout(resolve, 450));
+          }
+          return {
+            startedAt: Date.now() - 1000,
+            finishedAt: Date.now(),
+            items: items.map((item, index) => ({
+              id: item.id,
+              status: index % 4 === 0 ? "needs_user" : "completed",
+              filename: index % 4 === 0 ? undefined : `Trail-Literature/${item.title}.pdf`,
+              error: index % 4 === 0 ? "开发预览：需要人工确认全文入口。" : undefined
+            }))
+          };
+        }
+
+        if (message.type === "PAUSE_LITERATURE_DOWNLOAD") {
+          mockLiteraturePaused = true;
+          if (mockLiteratureProgress) runtimeListeners.forEach((listener) => listener({ ...mockLiteratureProgress, state: "paused" }));
+          return { paused: true };
+        }
+        if (message.type === "RESUME_LITERATURE_DOWNLOAD") {
+          mockLiteraturePaused = false;
+          if (mockLiteratureProgress) runtimeListeners.forEach((listener) => listener({ ...mockLiteratureProgress, state: "running" }));
+          return { paused: false };
         }
 
         if (message.type === "RUN_STORED_BROWSER_TOOL" || message.type === "RUN_BROWSER_TOOL_BATCH") {

@@ -6,6 +6,7 @@ import type {
   BrowserToolRunResult,
   StoredBrowserTool
 } from "../browser-tools/contracts";
+import type { LiteratureDownloadItemInput } from "../literature-queue/types";
 
 export type TrailSource = "tab_group" | "window";
 
@@ -249,6 +250,14 @@ export type RuntimeMessage =
       items: BrowserToolDownloadItemInput[];
       userInitiated: true;
     }
+  | {
+      type: "DOWNLOAD_LITERATURE_QUEUE";
+      items: LiteratureDownloadItemInput[];
+      concurrency: number;
+      userInitiated: true;
+    }
+  | { type: "PAUSE_LITERATURE_DOWNLOAD" }
+  | { type: "RESUME_LITERATURE_DOWNLOAD" }
   | { type: "DELETE_BROWSER_TOOL"; toolId: string }
   | {
       type: "RUN_STORED_BROWSER_TOOL";
