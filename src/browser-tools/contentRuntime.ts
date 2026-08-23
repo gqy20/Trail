@@ -26,13 +26,10 @@ export function installBrowserToolContentRuntime(): void {
     }
 
     if (isTriggerLiteratureDownloadMessage(message)) {
-      try {
-        triggerLiteratureDownload(message);
-        sendResponse({ triggered: true });
-      } catch (error) {
-        sendResponse({ error: error instanceof Error ? error.message : "无法启动 PDF 下载。" });
-      }
-      return undefined;
+      triggerLiteratureDownload(message)
+        .then(() => sendResponse({ triggered: true }))
+        .catch((error: unknown) => sendResponse({ error: error instanceof Error ? error.message : "无法启动 PDF 下载。" }));
+      return true;
     }
 
     if (isNativeExportCountMessage(message)) {
@@ -141,16 +138,31 @@ function resolveLiteratureResource(): LiteratureResourceResolution {
   return {};
 }
 
-function triggerLiteratureDownload(message: TriggerLiteratureDownloadMessage): void {
+async function triggerLiteratureDownload(message: TriggerLiteratureDownloadMessage): Promise<void> {
   const url = new URL(message.resourceUrl, location.href);
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("只允许下载 HTTP(S) PDF。");
+  const response = await fetch(url.href, {
+    credentials: "include",
+    headers: { Accept: "application/pdf,application/octet-stream;q=0.9,*/*;q=0.1" },
+    redirect: "follow"
+  });
+  if (!response.ok) throw new Error(`全文服务器返回 HTTP ${response.status}。`);
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("html") || contentType.startsWith("text/")) {
+    throw new Error(`全文入口返回 ${contentType || "网页内容"}，不是 PDF。`);
+  }
+  const blob = await response.blob();
+  const signature = new TextDecoder("latin1").decode(await blob.slice(0, 1_024).arrayBuffer());
+  if (!signature.includes("%PDF-")) throw new Error("全文响应缺少 PDF 文件头。");
+  const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  anchor.href = url.href;
+  anchor.href = objectUrl;
   anchor.download = message.filename;
   anchor.style.display = "none";
   document.body.append(anchor);
   anchor.click();
   window.setTimeout(() => anchor.remove(), 1_000);
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
 function findHttpUrl(selector: string): string | undefined {
@@ -162,6 +174,10 @@ function findHttpUrl(selector: string): string | undefined {
 }
 
 function findLiteratureBlocker(): string | undefined {
+  const pageSignal = `${document.title} ${(document.body?.innerText || "").slice(0, 1_500)}`.toLowerCase();
+  if (/just a moment|please wait|请稍候|verify you are human|checking your browser|security verification/.test(pageSignal)) {
+    return "页面正在进行安全验证，请手动完成后重试。";
+  }
   const selectors = [
     "iframe[src*='captcha']",
     "iframe[src*='hcaptcha']",

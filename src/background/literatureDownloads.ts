@@ -22,7 +22,11 @@ type RunControl = {
   failed: number;
   currentTitle?: string;
   resumeWaiters: Array<() => void>;
+  resolverTabs: Set<number>;
+  downloadIds: Set<number>;
 };
+
+class PauseInterruption extends Error {}
 
 let activeRun: RunControl | undefined;
 
@@ -49,7 +53,9 @@ export async function downloadLiteratureQueue(input: {
     succeeded: 0,
     needsUser: 0,
     failed: 0,
-    resumeWaiters: []
+    resumeWaiters: [],
+    resolverTabs: new Set(),
+    downloadIds: new Set()
   };
   activeRun = control;
   let nextIndex = 0;
@@ -61,17 +67,24 @@ export async function downloadLiteratureQueue(input: {
       const index = nextIndex;
       nextIndex += 1;
       const item = items[index];
-      control.active += 1;
-      control.currentTitle = item.title;
-      emitProgress(control);
-      let result: LiteratureDownloadItemResult;
-      try {
-        result = await processItem(item);
-      } catch (error) {
-        result = { id: item.id, status: "failed", error: error instanceof Error ? error.message : "下载失败。" };
+      let result: LiteratureDownloadItemResult | undefined;
+      while (!result) {
+        await waitUntilResumed(control);
+        control.active += 1;
+        control.currentTitle = item.title;
+        emitProgress(control);
+        try {
+          result = await processItem(item, control);
+        } catch (error) {
+          if (!(error instanceof PauseInterruption) && !control.paused) {
+            result = { id: item.id, status: "failed", error: error instanceof Error ? error.message : "下载失败。" };
+          }
+        } finally {
+          control.active -= 1;
+          emitProgress(control);
+        }
       }
       results[index] = result;
-      control.active -= 1;
       control.completed += 1;
       if (result.status === "completed") control.succeeded += 1;
       else if (result.status === "needs_user" || result.status === "needs_search") control.needsUser += 1;
@@ -90,10 +103,17 @@ export async function downloadLiteratureQueue(input: {
   }
 }
 
-export function pauseLiteratureDownload(): { paused: boolean } {
+export async function pauseLiteratureDownload(): Promise<{ paused: boolean }> {
   if (!activeRun) return { paused: false };
-  activeRun.paused = true;
-  emitProgress(activeRun);
+  const control = activeRun;
+  control.paused = true;
+  emitProgress(control);
+  const tabs = [...control.resolverTabs];
+  const downloads = [...control.downloadIds];
+  await Promise.all([
+    ...tabs.map((tabId) => chrome.tabs.remove(tabId).catch(() => undefined)),
+    ...downloads.map((downloadId) => chrome.downloads.cancel(downloadId).catch(() => undefined))
+  ]);
   return { paused: true };
 }
 
@@ -105,7 +125,8 @@ export function resumeLiteratureDownload(): { paused: boolean } {
   return { paused: false };
 }
 
-async function processItem(item: LiteratureDownloadItemInput): Promise<LiteratureDownloadItemResult> {
+async function processItem(item: LiteratureDownloadItemInput, control: RunControl): Promise<LiteratureDownloadItemResult> {
+  ensureRunning(control);
   const candidates = [...new Set([
     item.downloadUrl,
     item.pdfUrl,
@@ -119,7 +140,9 @@ async function processItem(item: LiteratureDownloadItemInput): Promise<Literatur
   let lastResolverUrl: string | undefined;
   for (const candidate of candidates) {
     try {
-      const result = await resolveAndDownload(candidate, item.title);
+      ensureRunning(control);
+      const result = await resolveAndDownload(candidate, item.title, control);
+      ensureRunning(control);
       lastResolverUrl = result.resolverUrl;
       if (result.blocker) {
         return { id: item.id, status: "needs_user", error: result.blocker, resolverUrl: result.resolverUrl };
@@ -140,6 +163,7 @@ async function processItem(item: LiteratureDownloadItemInput): Promise<Literatur
         resolverUrl: result.resolverUrl
       };
     } catch (error) {
+      if (control.paused || error instanceof PauseInterruption) throw new PauseInterruption();
       errors.push(`${hostLabel(candidate)}：${error instanceof Error ? error.message : "下载失败"}`);
     }
   }
@@ -152,7 +176,7 @@ async function processItem(item: LiteratureDownloadItemInput): Promise<Literatur
   };
 }
 
-async function resolveAndDownload(rawUrl: string, title: string): Promise<{
+async function resolveAndDownload(rawUrl: string, title: string, control: RunControl): Promise<{
   download?: chrome.downloads.DownloadItem;
   resourceUrl?: string;
   resolverUrl?: string;
@@ -161,9 +185,13 @@ async function resolveAndDownload(rawUrl: string, title: string): Promise<{
   const initialUrl = assertHttpUrl(rawUrl);
   const tab = await chrome.tabs.create({ url: initialUrl, active: false });
   if (tab.id === undefined) throw new Error("无法创建解析标签页。");
+  control.resolverTabs.add(tab.id);
+  const navigationTargets = new Set<string>();
   try {
     for (let hop = 0; hop < 4; hop += 1) {
+      ensureRunning(control);
       await waitForTabComplete(tab.id);
+      ensureRunning(control);
       const currentTab = await chrome.tabs.get(tab.id);
       const currentUrl = currentTab.url ? assertHttpUrl(currentTab.url) : initialUrl;
       let resolution: LiteratureResourceResolution;
@@ -171,27 +199,32 @@ async function resolveAndDownload(rawUrl: string, title: string): Promise<{
         resolution = await sendResolveMessage(tab.id);
       } catch (error) {
         if (!looksLikePdfUrl(currentUrl)) throw error;
-        const download = await startAndWaitForDownload(currentUrl, title);
+        const download = await startAndWaitForDownload(currentUrl, title, control);
         return { download, resourceUrl: currentUrl, resolverUrl: currentUrl };
       }
       if (resolution.blocker) return { blocker: resolution.blocker, resolverUrl: currentUrl };
       if (!resolution.resourceUrl) return { resolverUrl: currentUrl };
       const resourceUrl = assertHttpUrl(resolution.resourceUrl);
       if (resolution.action === "navigate") {
+        if (navigationTargets.has(resourceUrl)) {
+          return { blocker: "PDF 阅读器反复跳回摘要页，当前账号可能没有全文权限。", resolverUrl: currentUrl };
+        }
+        navigationTargets.add(resourceUrl);
         await navigateTab(tab.id, resourceUrl);
         continue;
       }
 
-      const download = await triggerDownloadFromPage(tab.id, resourceUrl, title);
+      const download = await triggerDownloadFromPage(tab.id, resourceUrl, title, control);
       return { download, resourceUrl, resolverUrl: currentUrl };
     }
     return { resolverUrl: (await chrome.tabs.get(tab.id)).url };
   } finally {
+    control.resolverTabs.delete(tab.id);
     await chrome.tabs.remove(tab.id).catch(() => undefined);
   }
 }
 
-async function triggerDownloadFromPage(tabId: number, resourceUrl: string, title: string): Promise<chrome.downloads.DownloadItem> {
+async function triggerDownloadFromPage(tabId: number, resourceUrl: string, title: string, control: RunControl): Promise<chrome.downloads.DownloadItem> {
   const filename = `${safeFilename(title)}.pdf`;
   const startedDownload = waitForDownloadStart(resourceUrl, filename, 25_000);
   try {
@@ -206,7 +239,12 @@ async function triggerDownloadFromPage(tabId: number, resourceUrl: string, title
     throw error;
   }
   const created = await startedDownload;
-  return waitForDownloadComplete(created.id, 10 * 60_000);
+  control.downloadIds.add(created.id);
+  try {
+    return await waitForDownloadComplete(created.id, 10 * 60_000);
+  } finally {
+    control.downloadIds.delete(created.id);
+  }
 }
 
 async function sendResolveMessage(tabId: number): Promise<LiteratureResourceResolution> {
@@ -226,14 +264,19 @@ async function sendContentMessage<T>(tabId: number, message: ResolveLiteratureRe
   throw lastError instanceof Error ? lastError : new Error("无法读取全文页面。");
 }
 
-async function startAndWaitForDownload(resourceUrl: string, title: string): Promise<chrome.downloads.DownloadItem> {
+async function startAndWaitForDownload(resourceUrl: string, title: string, control: RunControl): Promise<chrome.downloads.DownloadItem> {
   const downloadId = await chrome.downloads.download({
     url: assertHttpUrl(resourceUrl),
     filename: `Trail-Literature/${safeFilename(title)}.pdf`,
     conflictAction: "uniquify",
     saveAs: false
   });
-  return waitForDownloadComplete(downloadId, 10 * 60_000);
+  control.downloadIds.add(downloadId);
+  try {
+    return await waitForDownloadComplete(downloadId, 10 * 60_000);
+  } finally {
+    control.downloadIds.delete(downloadId);
+  }
 }
 
 function waitForDownloadStart(resourceUrl: string, filename: string, timeoutMs: number): Promise<chrome.downloads.DownloadItem> {
@@ -242,10 +285,10 @@ function waitForDownloadStart(resourceUrl: string, filename: string, timeoutMs: 
     const timeout = globalThis.setTimeout(() => finish(undefined, new Error("页面点击后没有检测到文件下载。")), timeoutMs);
     const listener = (item: chrome.downloads.DownloadItem) => {
       const urls = [item.url, item.finalUrl].filter(Boolean) as string[];
-      if (urls.some((url) => safeHostname(url) === expectedHost)) finish(item);
+      if (urls.some((url) => safeHostname(url) === expectedHost) || matchesBlobFilename(item, filename)) finish(item);
     };
     const filenameListener = (item: chrome.downloads.DownloadItem, suggest: (suggestion?: chrome.downloads.FilenameSuggestion) => void) => {
-      if (!matchesDownloadResource(item, resourceUrl)) return;
+      if (!matchesDownloadResource(item, resourceUrl, filename)) return;
       suggest({ filename: `Trail-Literature/${filename}`, conflictAction: "uniquify" });
     };
     const finish = (item?: chrome.downloads.DownloadItem, error?: Error) => {
@@ -388,16 +431,22 @@ function buildFallbackSearchUrl(title: string, doi?: string): string {
   return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
 }
 
-function matchesDownloadResource(item: chrome.downloads.DownloadItem, resourceUrl: string): boolean {
+function matchesDownloadResource(item: chrome.downloads.DownloadItem, resourceUrl: string, filename: string): boolean {
   try {
     const expected = new URL(resourceUrl);
     return [item.url, item.finalUrl].filter(Boolean).some((rawUrl) => {
       const actual = new URL(rawUrl!);
       return actual.hostname === expected.hostname && actual.pathname === expected.pathname;
-    });
+    }) || matchesBlobFilename(item, filename);
   } catch {
     return false;
   }
+}
+
+function matchesBlobFilename(item: chrome.downloads.DownloadItem, filename: string): boolean {
+  if (![item.url, item.finalUrl].some((url) => url?.startsWith("blob:"))) return false;
+  const actualName = item.filename.split(/[\\/]/).pop()?.toLowerCase() || "";
+  return actualName === filename.toLowerCase() || actualName.startsWith(filename.replace(/\.pdf$/i, "").toLowerCase());
 }
 
 function emitProgress(control: RunControl): void {
@@ -422,6 +471,10 @@ function waitUntilResumed(control: RunControl): Promise<void> {
 
 function releaseResumeWaiters(control: RunControl): void {
   for (const resolve of control.resumeWaiters.splice(0)) resolve();
+}
+
+function ensureRunning(control: RunControl): void {
+  if (control.paused) throw new PauseInterruption();
 }
 
 function sleep(duration: number): Promise<void> {

@@ -118,10 +118,15 @@ export function LiteratureQueueView() {
   async function togglePause() {
     if (!busy || !progress) return;
     setError("");
+    const targetState = progress.state === "paused" ? "running" : "paused";
+    setProgress((current) => current ? { ...current, state: targetState } : current);
     try {
-      if (progress.state === "paused") await sendMessage({ type: "RESUME_LITERATURE_DOWNLOAD" });
-      else await sendMessage({ type: "PAUSE_LITERATURE_DOWNLOAD" });
+      const response = progress.state === "paused"
+        ? await sendMessage({ type: "RESUME_LITERATURE_DOWNLOAD" })
+        : await sendMessage({ type: "PAUSE_LITERATURE_DOWNLOAD" });
+      setProgress((current) => current ? { ...current, state: response.paused ? "paused" : "running" } : current);
     } catch (err) {
+      setProgress((current) => current ? { ...current, state: progress.state } : current);
       setError(toErrorMessage(err));
     }
   }
