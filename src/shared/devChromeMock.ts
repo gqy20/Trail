@@ -489,7 +489,7 @@ export function installDevChromeMock() {
         if (message.type === "GET_CHECKIN_STATE") return { items: [] };
 
         if (message.type === "IMPORT_BUNDLED_BROWSER_TOOLS") {
-          return { installed: 0, updated: 0, preserved: 1, disabled: 1 };
+          return { installed: 0, updated: 0, preserved: 1, unchanged: 1, customPreserved: 0, disabled: 1 };
         }
 
         if (message.type === "DOWNLOAD_BROWSER_TOOL_ITEMS") {

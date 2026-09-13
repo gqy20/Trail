@@ -339,6 +339,7 @@ export type BrowserToolBatchProgress = {
 };
 
 export type BrowserToolManagerState = {
+  bundledVersions?: Record<string, string>;
   tools: StoredBrowserTool[];
   recentRuns: BrowserToolRunRecord[];
   targetTab?: {

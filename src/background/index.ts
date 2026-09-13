@@ -29,6 +29,7 @@ import {
 import { downloadBrowserToolItems } from "./browserToolDownloads";
 import { downloadLiteratureQueue, pauseLiteratureDownload, resumeLiteratureDownload } from "./literatureDownloads";
 import { configureCheckin, getCheckinState, openCheckinPage, registerCheckins, runCheckin } from "./checkins";
+import { restoreBundledBrowserTool } from "../browser-tools/bundled";
 
 registerCheckins();
 
@@ -49,11 +50,12 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecu
 });
 
 async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
-  if (["GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE"].includes(message.type)) {
+  if (["RESTORE_BUNDLED_BROWSER_TOOL", "GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE"].includes(message.type)) {
     const extensionUrl = chrome.runtime.getURL("");
-    if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(extensionUrl)) throw new Error("签到操作只能从 Trail 界面发起。");
+    if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(extensionUrl)) throw new Error("此操作只能从 Trail 界面发起。");
   }
   switch (message.type) {
+    case "RESTORE_BUNDLED_BROWSER_TOOL": return restoreBundledBrowserTool(message.toolId);
     case "GET_CHECKIN_STATE": return getCheckinState();
     case "CONFIGURE_CHECKIN": return configureCheckin(message.toolId, message.enabled, message.time);
     case "RUN_CHECKIN": return runCheckin(message.toolId);

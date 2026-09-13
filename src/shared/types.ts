@@ -218,6 +218,7 @@ export type TrailInteractionSettings = {
 };
 
 export type RuntimeMessage =
+  | { type: "RESTORE_BUNDLED_BROWSER_TOOL"; toolId: string }
   | { type: "GET_CHECKIN_STATE" }
   | { type: "CONFIGURE_CHECKIN"; toolId: string; enabled: boolean; time: string }
   | { type: "RUN_CHECKIN"; toolId: string }

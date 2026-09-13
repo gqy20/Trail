@@ -13,6 +13,7 @@ import type { BundledBrowserToolImportResult } from "../browser-tools/bundled";
 import type { LiteratureDownloadRunResult } from "../literature-queue/types";
 
 type RuntimeResponseMap = {
+  RESTORE_BUNDLED_BROWSER_TOOL: undefined;
   GET_CHECKIN_STATE: import("../checkin/types").CheckinState;
   CONFIGURE_CHECKIN: import("../checkin/types").CheckinState;
   RUN_CHECKIN: import("../checkin/types").CheckinState;

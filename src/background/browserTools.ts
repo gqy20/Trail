@@ -8,7 +8,7 @@ import type {
   ExecuteBrowserToolMessage,
   StoredBrowserTool
 } from "../browser-tools/contracts";
-import { importBundledBrowserTools } from "../browser-tools/bundled";
+import { importBundledBrowserTools, getBundledToolVersions } from "../browser-tools/bundled";
 import { parseBrowserToolYaml } from "../browser-tools/loader";
 import { matchesBrowserTool } from "../browser-tools/matcher";
 import {
@@ -56,6 +56,7 @@ export async function getBrowserToolManagerState(tabId?: number): Promise<Browse
 
   return {
     tools,
+    bundledVersions: getBundledToolVersions(),
     recentRuns,
     targetTab:
       targetTab?.id !== undefined && pageUrl

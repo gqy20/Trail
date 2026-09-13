@@ -124,7 +124,13 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-发布前需要同步以下版本号：
+产品发布版本以 `package.json` 为唯一来源，扩展清单、锁文件、设置页和发布包保持一致。更新版本使用：
+
+```bash
+npm version minor --no-git-tag-version
+```
+
+该命令更新 package/锁文件，并自动同步扩展清单；随后补充对应的更新日志。每次构建都会检查以下版本号，防止代码更新而扩展版本不变：
 
 - `package.json`
 - `public/manifest.json`
@@ -132,10 +138,14 @@ git push origin v0.1.0
 
 Release 产物：
 
-- `trail_v0.1.0_chrome.zip`
+- `trail_v0.2.0_chrome.zip`（文件名跟随产品版本）
 - `checksums.txt`
 
 zip 内部直接包含 `manifest.json`、`entries/`、JS、assets 和 icons，可用于 Chrome Web Store 上传或手动分发。
+
+网站 YAML 中的 `version` 是独立的**规则修订号**，不是扩展版本；只有该网站规则改变时才递增。`schema_version` 标识配置格式，catalog 的整数 `version` 标识目录修订，都不作为产品版本展示。
+
+设置页会显示随当前 Trail 发布的内置版本，以及自定义工具对应的可用内置规则。同步不会覆盖自定义修改；点击“使用内置版”会先另存自定义备份，再切换到内置规则。
 
 ## 提交规范
 

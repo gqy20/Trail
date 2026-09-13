@@ -1,11 +1,14 @@
 {
   "name": "trail",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Trail Chrome extension for recording research sessions from tab groups.",
   "private": true,
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build && vite build --config vite.content.config.ts",
+    "build": "npm run version:check && tsc --noEmit && vite build && vite build --config vite.content.config.ts",
+    "version:check": "node scripts/version.mjs check",
+    "version:sync": "node scripts/version.mjs sync",
+    "version": "npm run version:sync",
     "check": "npm run build",
     "test:checkin": "npm run build && playwright test",
     "install-hooks": "node scripts/install-hooks.mjs",

@@ -19,6 +19,8 @@ type BrowserToolCatalog = {
 };
 
 export type BundledBrowserToolImportResult = {
+  unchanged: number;
+  customPreserved: number;
   installed: number;
   updated: number;
   preserved: number;
@@ -31,7 +33,7 @@ export async function importBundledBrowserTools(): Promise<BundledBrowserToolImp
   const currentById = new Map(currentTools.map((tool) => [tool.id, tool]));
   const nextBundled: StoredBrowserTool[] = [];
   const bundledIds = new Set<string>();
-  const result: BundledBrowserToolImportResult = { installed: 0, updated: 0, preserved: 0, disabled: 0 };
+  const result: BundledBrowserToolImportResult = { installed: 0, updated: 0, preserved: 0, disabled: 0, unchanged: 0, customPreserved: 0 };
   const now = Date.now();
 
   for (const entry of catalog.tools) {
@@ -51,18 +53,21 @@ export async function importBundledBrowserTools(): Promise<BundledBrowserToolImp
     if (current && !current.source && current.yaml === yaml) {
       nextBundled.push({ ...current, source: { type: "bundled", catalogVersion: catalog.version } });
       result.preserved += 1;
+      result.unchanged += 1;
       continue;
     }
 
     if (current && current.source?.type !== "bundled") {
       nextBundled.push(current);
       result.preserved += 1;
+      result.customPreserved += 1;
       continue;
     }
 
-    if (current?.yaml === yaml && current.source?.catalogVersion === catalog.version) {
-      nextBundled.push(current);
+    if (current?.yaml === yaml) {
+      nextBundled.push({ ...current, source: { type: "bundled", catalogVersion: catalog.version } });
       result.preserved += 1;
+      result.unchanged += 1;
       continue;
     }
 
@@ -79,6 +84,39 @@ export async function importBundledBrowserTools(): Promise<BundledBrowserToolImp
 
   await replaceStoredBrowserTools([...nextBundled, ...currentById.values()]);
   return result;
+}
+
+export function getBundledToolVersions(): Record<string, string> {
+  return Object.fromEntries(readCatalog().tools.filter((entry) => entry.enabled).map((entry) => {
+    const definition = parseBrowserToolYaml(readBundledYaml(entry.path));
+    return [definition.id, definition.version];
+  }));
+}
+
+export async function restoreBundledBrowserTool(toolId: string): Promise<void> {
+  const catalog = readCatalog();
+  const entry = catalog.tools.filter((entry) => entry.enabled).map((entry) => {
+    const yaml = readBundledYaml(entry.path);
+    return { yaml, definition: parseBrowserToolYaml(yaml) };
+  }).find((entry) => entry.definition.id === toolId);
+  if (!entry) throw new Error("没有对应的内置工具。");
+  const tools = await getStoredBrowserTools();
+  const current = tools.find((tool) => tool.id === toolId);
+  if (!current && tools.length >= 50) throw new Error("工具已达数量上限，无法添加内置工具。");
+  const now = Date.now();
+  if (current && current.source?.type !== "bundled") {
+    if (tools.length >= 50) throw new Error("工具已达数量上限，无法保存自定义备份。");
+    const document = parseDocument(current.yaml);
+    const backupId = `${toolId.slice(0, 40)}.backup-${crypto.randomUUID().slice(0, 8)}`;
+    document.set("id", backupId);
+    document.set("name", `${current.definition.name}（自定义备份）`);
+    const yaml = document.toString();
+    tools.push({ ...current, id: backupId, yaml, definition: parseBrowserToolYaml(yaml), updatedAt: now, source: { type: "user" } });
+  }
+  await replaceStoredBrowserTools([
+    { id: toolId, ...entry, importedAt: current?.importedAt || now, updatedAt: now, source: { type: "bundled", catalogVersion: catalog.version } },
+    ...tools.filter((tool) => tool.id !== toolId)
+  ]);
 }
 
 function readCatalog(): BrowserToolCatalog {

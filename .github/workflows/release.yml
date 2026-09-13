@@ -93,7 +93,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          artifact_base="${EXTENSION_NAME}_${VERSION}_chrome"
+          package_version="$(node -p "require('./package.json').version")"
+          artifact_base="${EXTENSION_NAME}_v${package_version}_chrome"
           mkdir -p release
 
           test -f dist/manifest.json

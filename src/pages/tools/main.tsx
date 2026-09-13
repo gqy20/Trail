@@ -8,6 +8,7 @@ import { sendMessage } from "../../shared/runtime";
 import { formatDateTime } from "../../shared/time";
 import { LiteratureQueueView } from "./LiteratureQueue";
 import { CheckinsView } from "./Checkins";
+import { TRAIL_VERSION } from "../../shared/version";
 import type {
   BrowserToolManagerState,
   BrowserToolCollectionPresentation,
@@ -187,6 +188,17 @@ function BrowserToolsApp() {
       setBusy(false);
       setBusyAction(undefined);
     }
+  }
+
+  async function restoreBundled(toolId: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await sendMessage({ type: "RESTORE_BUNDLED_BROWSER_TOOL", toolId });
+      await refresh(toolId);
+      setCatalogNotice("已切换到内置版本，原自定义规则已另存为备份。");
+    } catch (err) { setError(toErrorMessage(err)); }
+    finally { setBusy(false); }
   }
 
   async function runBatch() {
@@ -448,7 +460,7 @@ function BrowserToolsApp() {
         {activeView === "settings" ? (
           <section className="settings-view stack">
             <div className="view-heading header-row">
-              <div><h2>设置</h2><span className="muted">工具和高级参数</span></div>
+              <div><h2>设置</h2><span className="muted">Trail v{TRAIL_VERSION}</span></div>
               <button className="icon-button" title="刷新页面状态" aria-label="刷新页面状态" disabled={busy} onClick={() => void refresh(selectedId)}><RefreshCw size={16} /></button>
             </div>
 
@@ -470,8 +482,8 @@ function BrowserToolsApp() {
               <div className="section-heading"><strong>工具</strong><span className="muted text-small">{state?.tools.length || 0} 个</span></div>
               <div className="bundled-tools-row">
                 <span>
-                  <strong>内置工具库</strong>
-                  <small>由 browser-tools/catalog.yml 统一管理</small>
+                  <strong>内置工具库 · Trail v{TRAIL_VERSION}</strong>
+                  <small>随扩展统一发布；自定义规则不会被同步覆盖</small>
                 </span>
                 <button className="button secondary compact-button" disabled={busy} onClick={() => void syncBundledTools()}>
                   <RefreshCw size={14} /> 同步
@@ -481,13 +493,20 @@ function BrowserToolsApp() {
               <div className="tool-list">
                 {(state?.tools || []).map((tool) => {
                   const matched = state?.matchedToolIds.includes(tool.id);
+                  const bundled = tool.source?.type === "bundled";
+                  const availableVersion = state?.bundledVersions?.[tool.id];
                   return (
                     <div className={selectedId === tool.id ? "tool-settings-row active" : "tool-settings-row"} key={tool.id}>
                       <button className="tool-select-button" onClick={() => { if (tool.definition.checkin) setActiveView("checkins"); else setSelectedId(tool.id); }}>
-                        <span><strong>{tool.definition.name}</strong><small>v{tool.definition.version} · {tool.source?.type === "bundled" ? "内置" : "自定义"}</small></span>
+                        <span><strong>{tool.definition.name}</strong><small>{bundled ? `内置 · 随 Trail v${TRAIL_VERSION} 发布` : `自定义规则 v${tool.definition.version}`}</small>
+                          <small>{bundled ? `规则修订 v${tool.definition.version}` : availableVersion ? `内置规则 v${availableVersion} 可用 · 当前使用自定义版` : "独立维护"}</small>
+                        </span>
                         <span className={matched ? "tool-state available" : "tool-state"}>{matched ? "当前可用" : "其他页面"}</span>
                       </button>
-                      <button className="icon-button danger" aria-label={`删除${tool.definition.name}`} onClick={() => void deleteTool(tool)}><Trash2 size={15} /></button>
+                      <div className="tool-settings-actions">
+                        {!bundled && availableVersion ? <button className="button secondary compact-button" disabled={busy} title="保留自定义备份并恢复内置规则" onClick={() => void restoreBundled(tool.id)}>使用内置版</button> : null}
+                        <button className="icon-button danger" aria-label={`删除${tool.definition.name}`} onClick={() => void deleteTool(tool)}><Trash2 size={15} /></button>
+                      </div>
                     </div>
                   );
                 })}
@@ -1234,11 +1253,12 @@ function formatCount(count: number, unit: string, label: string): string {
   return `${count} ${unit}${label}`;
 }
 
-function formatBundledImportResult(result: { installed: number; updated: number; preserved: number; disabled: number }): string {
+function formatBundledImportResult(result: { installed: number; updated: number; preserved: number; disabled: number; unchanged?: number; customPreserved?: number }): string {
   const changes = [
     result.installed ? `新增 ${result.installed}` : "",
     result.updated ? `更新 ${result.updated}` : "",
-    result.preserved ? `保留 ${result.preserved}` : ""
+    result.unchanged ? `已是最新 ${result.unchanged}` : "",
+    result.customPreserved ? `保留自定义 ${result.customPreserved}（未覆盖）` : ""
   ].filter(Boolean);
   return changes.length > 0 ? `同步完成：${changes.join("，")}。` : "内置工具已经是最新版本。";
 }
