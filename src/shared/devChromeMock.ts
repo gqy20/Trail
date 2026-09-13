@@ -486,6 +486,8 @@ export function installDevChromeMock() {
           };
         }
 
+        if (message.type === "GET_CHECKIN_STATE") return { items: [] };
+
         if (message.type === "IMPORT_BUNDLED_BROWSER_TOOLS") {
           return { installed: 0, updated: 0, preserved: 1, disabled: 1 };
         }
@@ -608,6 +610,7 @@ export function installDevChromeMock() {
       onUpdated: { addListener: () => undefined }
     },
     storage: {
+      onChanged: { addListener: () => undefined, removeListener: () => undefined },
       local: {
         get: async (key: string) => ({ [key]: storage[key] }),
         set: async (items: Record<string, unknown>) => {

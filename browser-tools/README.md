@@ -237,3 +237,13 @@ const result = await sendMessage({
 popup 中的扳手入口会在当前网页旁打开 Browser Tools Side Panel；旧版浏览器会回退到独立管理页。它支持导入或覆盖 YAML、根据目标 URL 显示匹配状态、按工具展示契约动态渲染输入与参数、运行工具、表格化查看最近结果，以及导出带 UTF-8 BOM 的 CSV 或 JSON。
 
 当前版本的 `pause_for_user` 会结束本次运行并返回 `paused`，尚不能从中断步骤原地恢复。保存历史会限制运行数量、集合记录数量和长文本长度；本次运行返回的完整结果仍可直接导出。
+
+## 签到工具与条件流程
+
+声明 `checkin: { entry_url: "https://example.com/checkin", timezone: "Asia/Shanghai" }` 的工具会出现在签到页。入口必须匹配 `match`；后台只运行用户明确开启的规则版本，不通过伪造 `userInitiated` 启动定时任务。
+
+`if` 支持 `condition: { selector, visible?, text? }`，`then` / `else` 是普通步骤数组；`text` 使用包含匹配，`visible` 检查布局及 CSS 可见性。`wait_for` 也支持 `visible` / `text`，避免隐藏按钮或错误弹窗被当成成功。
+
+签到流程必须以 `finish: outcome` 明确结束，动作写法为 `{ action: finish, outcome: success, message: 签到成功 }`，重复签到使用 `already_done`。`finish` 会退出整个流程（包括嵌套循环）。只执行完步骤却没有业务结果时，签到工具返回失败；普通采集工具保持原有行为。
+
+已实测规则位于 `ablesci/tool.yml`、`glados/tool.yml`、`glados/rocks.yml`。GLaDOS 刷新后仍显示可点击按钮，因此以服务端返回的按钮文案确认结果。科研通在已登录的签到区中移除或隐藏按钮表示当天已签到。

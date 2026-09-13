@@ -7,6 +7,7 @@ import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
 import { formatDateTime } from "../../shared/time";
 import { LiteratureQueueView } from "./LiteratureQueue";
+import { CheckinsView } from "./Checkins";
 import type {
   BrowserToolManagerState,
   BrowserToolCollectionPresentation,
@@ -39,7 +40,7 @@ function BrowserToolsApp() {
   const [nativeExportLimit, setNativeExportLimit] = useState(1000);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
-  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "history" | "settings">("collect");
+  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "history" | "settings" | "checkins">("collect");
   const [error, setError] = useState("");
   const [catalogNotice, setCatalogNotice] = useState("");
   const [executionProgress, setExecutionProgress] = useState<Record<string, BrowserToolExecutionProgress>>({});
@@ -71,6 +72,7 @@ function BrowserToolsApp() {
   const nativeExportDefinition = selectedTool?.definition.native_exports?.[0];
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
   const toolUi = resolveToolUi(selectedTool?.definition);
+  const pageTitle = activeView === "checkins" ? "每日签到" : toolUi.title;
   const directBatchKeywords = useMemo(
     () => parseBatchInput(keywordDraft, selectedTool?.definition.presentation?.batch_input?.csv_headers),
     [keywordDraft, selectedTool?.updatedAt]
@@ -113,8 +115,8 @@ function BrowserToolsApp() {
   }, [selectedTool?.id, selectedTool?.updatedAt, composerDefaultOperator]);
 
   useEffect(() => {
-    document.title = `Trail · ${toolUi.title}`;
-  }, [toolUi.title]);
+    document.title = `Trail · ${pageTitle}`;
+  }, [pageTitle]);
 
   async function refresh(preferredId?: string) {
     setError("");
@@ -124,7 +126,8 @@ function BrowserToolsApp() {
       setSelectedId((current) => {
         if (preferredId && next.tools.some((tool) => tool.id === preferredId)) return preferredId;
         if (current && next.tools.some((tool) => tool.id === current)) return current;
-        return next.matchedToolIds[0] || next.tools[0]?.id || "";
+        const collectionTools = next.tools.filter((tool) => !tool.definition.checkin);
+        return collectionTools.find((tool) => next.matchedToolIds.includes(tool.id))?.id || collectionTools[0]?.id || "";
       });
     } catch (err) {
       setError(toErrorMessage(err));
@@ -247,9 +250,10 @@ function BrowserToolsApp() {
         <header className="header-row tools-header">
           <div className="brand">
             <BrandMark />
-            <h1 className="page-title">{toolUi.title}</h1>
+            <h1 className="page-title">{pageTitle}</h1>
           </div>
           <nav className="tools-nav" aria-label={`${toolUi.title}导航`}>
+            <button className={activeView === "checkins" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("checkins")}>签到</button>
             <button className={activeView === "collect" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collect")}>运行</button>
             {lastResult ? <button className={activeView === "results" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("results")}>结果</button> : null}
             <button className={activeView === "queue" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("queue")}>
@@ -418,6 +422,7 @@ function BrowserToolsApp() {
         ) : null}
 
         {activeView === "queue" ? <LiteratureQueueView /> : null}
+        {activeView === "checkins" ? <CheckinsView /> : null}
 
         {activeView === "history" ? (
           <section className="history-view stack">
@@ -478,7 +483,7 @@ function BrowserToolsApp() {
                   const matched = state?.matchedToolIds.includes(tool.id);
                   return (
                     <div className={selectedId === tool.id ? "tool-settings-row active" : "tool-settings-row"} key={tool.id}>
-                      <button className="tool-select-button" onClick={() => setSelectedId(tool.id)}>
+                      <button className="tool-select-button" onClick={() => { if (tool.definition.checkin) setActiveView("checkins"); else setSelectedId(tool.id); }}>
                         <span><strong>{tool.definition.name}</strong><small>v{tool.definition.version} · {tool.source?.type === "bundled" ? "内置" : "自定义"}</small></span>
                         <span className={matched ? "tool-state available" : "tool-state"}>{matched ? "当前可用" : "其他页面"}</span>
                       </button>

@@ -125,6 +125,8 @@ export type BrowserToolWaitForStep = {
   selector: string;
   timeout_ms?: number;
   optional?: boolean;
+  visible?: boolean;
+  text?: string;
 };
 
 export type BrowserToolFillStep = {
@@ -205,6 +207,8 @@ export type BrowserToolPauseIfPresentStep = {
 };
 
 export type BrowserToolStep =
+  | { action: "if"; condition: { selector: string; visible?: boolean; text?: string }; then: BrowserToolStep[]; else?: BrowserToolStep[] }
+  | { action: "finish"; outcome: "success" | "already_done"; message: string }
   | BrowserToolWaitForStep
   | BrowserToolFillStep
   | BrowserToolSelectStep
@@ -218,6 +222,7 @@ export type BrowserToolStep =
   | BrowserToolPauseStep;
 
 export type BrowserToolDefinition = {
+  checkin?: { entry_url: string; timezone: string };
   schema_version: 1;
   id: string;
   name: string;
@@ -289,6 +294,8 @@ export type BrowserToolDownloadResolution = {
 export type BrowserToolRunStatus = "completed" | "partial" | "paused" | "cancelled" | "failed";
 
 export type BrowserToolRunResult = {
+  outcome?: "success" | "already_done";
+  message?: string;
   toolId: string;
   runId: string;
   pageUrl: string;

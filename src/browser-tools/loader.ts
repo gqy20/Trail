@@ -10,6 +10,7 @@ import type {
   BrowserToolTransform
 } from "./contracts";
 import { BROWSER_TOOL_LIMITS } from "./limits";
+import { matchesBrowserTool } from "./matcher";
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,79}$/;
 const COLLECTION_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
@@ -64,9 +65,23 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
   const presentation = root.presentation === undefined ? undefined : validatePresentation(root.presentation);
   const downloads = root.downloads === undefined ? undefined : validateDownloads(root.downloads);
   const nativeExports = root.native_exports === undefined ? undefined : validateNativeExports(root.native_exports);
+  let checkin: BrowserToolDefinition["checkin"];
+  if (root.checkin !== undefined) {
+    const source = asRecord(root.checkin, "checkin");
+    const entryUrl = readString(source.entry_url, "checkin.entry_url");
+    const url = new URL(entryUrl);
+    if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new Error("签到入口必须是无凭证的 HTTPS URL。");
+    const timezone = readString(source.timezone, "checkin.timezone");
+    new Intl.DateTimeFormat("en", { timeZone: timezone }).format();
+    if (!matchesBrowserTool({ match: { domains, urls: match.urls as string[] | undefined } } as BrowserToolDefinition, entryUrl)) {
+      throw new Error("签到入口必须匹配工具的域名和 URL。");
+    }
+    checkin = { entry_url: entryUrl, timezone };
+  }
 
   return {
     schema_version: 1,
+    checkin,
     id,
     name: readString(root.name, "name"),
     description: readOptionalString(root.description, "description"),
@@ -408,6 +423,8 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
       case "wait_for":
         return {
           action,
+          visible: readOptionalBoolean(step.visible, `${path}.visible`),
+          text: readOptionalUiText(step.text, `${path}.text`, 300),
           selector: validatedSelector(step.selector, `${path}.selector`),
           timeout_ms: validatedTimeout(step.timeout_ms, `${path}.timeout_ms`),
           optional: readOptionalBoolean(step.optional, `${path}.optional`)
@@ -547,6 +564,24 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
       }
       case "pause_for_user":
         return { action, reason: readString(step.reason, `${path}.reason`) };
+      case "if": {
+        const condition = asRecord(step.condition, `${path}.condition`);
+        return {
+          action,
+          condition: {
+            selector: validatedSelector(condition.selector, `${path}.condition.selector`),
+            visible: readOptionalBoolean(condition.visible, `${path}.condition.visible`),
+            text: readOptionalUiText(condition.text, `${path}.condition.text`, 300)
+          },
+          then: validateSteps(asArray(step.then, `${path}.then`), depth + 1, countStep),
+          else: step.else === undefined ? undefined : validateSteps(asArray(step.else, `${path}.else`), depth + 1, countStep)
+        };
+      }
+      case "finish": {
+        const outcome = readString(step.outcome, `${path}.outcome`);
+        if (outcome !== "success" && outcome !== "already_done") throw new Error("finish.outcome 无效。");
+        return { action, outcome, message: validateUiText(readString(step.message, `${path}.message`), `${path}.message`, 300) };
+      }
       default:
         throw new Error(`${path}.action 不支持：${action}`);
     }

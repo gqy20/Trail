@@ -5,3 +5,5 @@ artifacts/
 *.log
 *.tsbuildinfo
 PROFILE
+test-results/
+playwright-report/

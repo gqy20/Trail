@@ -13,6 +13,10 @@ import type { BundledBrowserToolImportResult } from "../browser-tools/bundled";
 import type { LiteratureDownloadRunResult } from "../literature-queue/types";
 
 type RuntimeResponseMap = {
+  GET_CHECKIN_STATE: import("../checkin/types").CheckinState;
+  CONFIGURE_CHECKIN: import("../checkin/types").CheckinState;
+  RUN_CHECKIN: import("../checkin/types").CheckinState;
+  OPEN_CHECKIN_PAGE: undefined;
   GET_POPUP_STATE: PopupState;
   GET_INTERACTION_SETTINGS: TrailInteractionSettings;
   UPDATE_INTERACTION_SETTINGS: TrailInteractionSettings;

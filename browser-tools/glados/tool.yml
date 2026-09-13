@@ -1,0 +1,65 @@
+schema_version: 1
+id: glados-checkin
+name: GLaDOS One 每日签到
+version: "1.0.0"
+description: 在 glados.one 登录会话中签到，核对首次成功或今日已签的返回文案。
+match:
+  domains: [glados.one]
+checkin:
+  entry_url: https://glados.one/console/checkin
+  timezone: Asia/Shanghai
+presentation:
+  title: 每日签到
+  source_label: GLaDOS
+  actions:
+    single_run: 立即签到
+  collections:
+    account:
+      label: 签到结果
+      fields:
+        points: { label: 当前积分, order: 10 }
+        days: { label: 连续签到天数, order: 20 }
+        days_left: { label: 剩余天数, order: 30 }
+        result: { label: 网站返回, order: 40 }
+workflow:
+  - action: wait_for
+    selector: '.checkin-cute-btn'
+    visible: true
+    timeout_ms: 15000
+    optional: true
+  - action: if
+    condition: { selector: '.checkin-cute-btn', visible: true }
+    then:
+      - action: if
+        condition: { selector: '.checkin-cute-btn:not([disabled])', visible: true }
+        then:
+          - action: click
+            selector: '.checkin-cute-btn:not([disabled])'
+      - action: wait_for
+        selector: '.checkin-cute-btn.is-done[disabled]'
+        timeout_ms: 15000
+      - action: extract
+        collection: account
+        selector: '#root'
+        fields:
+          points: { selector: '.checkin-stats-grid > div:nth-child(1) > div:last-child', transforms: [trim, parse_number] }
+          days: { selector: '.checkin-stats-grid > div:nth-child(2) > div:last-child', transforms: [trim, parse_number] }
+          days_left: { selector: '.checkin-stats-grid > div:nth-child(3) > div:last-child', transforms: [trim, parse_number] }
+          result: { selector: '.checkin-btn-label', transforms: [trim] }
+      - action: if
+        condition: { selector: '.checkin-btn-label', text: 'Checkin! Got' }
+        then:
+          - action: finish
+            outcome: success
+            message: 签到成功
+      - action: if
+        condition: { selector: '.checkin-btn-label', text: "Today's observation logged" }
+        then:
+          - action: finish
+            outcome: already_done
+            message: 今日已签到
+      - action: pause_for_user
+        reason: 网站返回了未识别的签到结果，请查看页面后重试。
+    else:
+      - action: pause_for_user
+        reason: 未找到 GLaDOS 签到区，请在 glados.one 完成登录或验证后重试。

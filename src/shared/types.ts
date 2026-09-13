@@ -218,6 +218,10 @@ export type TrailInteractionSettings = {
 };
 
 export type RuntimeMessage =
+  | { type: "GET_CHECKIN_STATE" }
+  | { type: "CONFIGURE_CHECKIN"; toolId: string; enabled: boolean; time: string }
+  | { type: "RUN_CHECKIN"; toolId: string }
+  | { type: "OPEN_CHECKIN_PAGE"; toolId: string }
   | { type: "GET_POPUP_STATE" }
   | { type: "GET_INTERACTION_SETTINGS" }
   | { type: "UPDATE_INTERACTION_SETTINGS"; settings: Partial<TrailInteractionSettings> }

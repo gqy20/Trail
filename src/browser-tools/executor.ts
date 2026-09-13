@@ -11,9 +11,11 @@ import { matchesBrowserTool } from "./matcher";
 import { resolveParameters, resolveTemplate } from "./template";
 import { applyBrowserToolTransforms } from "./transforms";
 
-type ExecutionSignal = "continue" | "stop_repeat" | "pause";
+type ExecutionSignal = "continue" | "stop_repeat" | "pause" | "finish";
 
 type ExecutionContext = {
+  outcome?: "success" | "already_done";
+  message?: string;
   definition: BrowserToolDefinition;
   parameters: Record<string, unknown>;
   data: Record<string, Array<Record<string, unknown>>>;
@@ -51,6 +53,7 @@ export async function executeBrowserTool(
 
     context.parameters = resolveParameters(definition, suppliedParameters);
     const signal = await executeSteps(definition.workflow, context, false);
+    if (definition.checkin && signal !== "pause" && !context.outcome) throw new Error("未获得明确的签到结果。");
 
     return buildResult(context, runId, startedAt, signal === "pause" ? "paused" : "completed");
   } catch (error) {
@@ -85,9 +88,18 @@ async function executeSteps(steps: BrowserToolStep[], context: ExecutionContext,
 
 async function executeStep(step: BrowserToolStep, context: ExecutionContext, insideRepeat: boolean): Promise<ExecutionSignal> {
   switch (step.action) {
+    case "if": {
+      const condition = { ...step.condition, selector: resolve(step.condition.selector, context) };
+      return executeSteps(findMatchingElement(condition) ? step.then : step.else || [], context, insideRepeat);
+    }
+    case "finish":
+      context.outcome = step.outcome;
+      context.message = step.message;
+      return "finish";
     case "wait_for": {
       const selector = resolve(step.selector, context);
-      const element = await waitForElement(selector, step.timeout_ms);
+      const condition = { selector, visible: step.visible, text: step.text };
+      const element = findMatchingElement(condition) || await waitForMutation(() => findMatchingElement(condition), step.timeout_ms ?? 15_000);
       if (!element) {
         if (step.optional) {
           context.warnings.push(`未找到可选元素：${selector}`);
@@ -196,7 +208,7 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
         }
         const recordsBefore = totalRecordCount(context.data);
         const signal = await executeSteps(step.steps, context, true);
-        if (signal === "pause") return signal;
+        if (signal === "pause" || signal === "finish") return signal;
         if (signal === "stop_repeat") break;
         if (step.stop_after_unchanged) {
           unchangedIterations = totalRecordCount(context.data) === recordsBefore ? unchangedIterations + 1 : 0;
@@ -205,7 +217,7 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
         if (step.stop_after_records && totalRecordCount(context.data) - repeatStartRecordCount >= step.stop_after_records) break;
         if (index < max - 1 && step.between?.length) {
           const betweenSignal = await executeSteps(step.between, context, true);
-          if (betweenSignal === "pause") return betweenSignal;
+          if (betweenSignal === "pause" || betweenSignal === "finish") return betweenSignal;
           if (betweenSignal === "stop_repeat") break;
         }
       }
@@ -327,6 +339,18 @@ function resolve(value: string, context: ExecutionContext): string {
   return resolveTemplate(value, context.definition, context.parameters);
 }
 
+function findMatchingElement(condition: { selector: string; visible?: boolean; text?: string }): Element | undefined {
+  return [...document.querySelectorAll(condition.selector)].find((element) => {
+    if (condition.text && !(element.textContent || "").includes(condition.text)) return false;
+    if (condition.visible !== undefined) {
+      const style = getComputedStyle(element);
+      const visible = element.getClientRects().length > 0 && style.visibility !== "hidden" && style.visibility !== "collapse" && style.display !== "none";
+      if (visible !== condition.visible) return false;
+    }
+    return true;
+  });
+}
+
 function fingerprint(selector: string): string {
   return [...document.querySelectorAll(selector)]
     .slice(0, 100)
@@ -383,6 +407,8 @@ function buildResult(
 ): BrowserToolRunResult {
   return {
     toolId: context.definition.id,
+    outcome: context.outcome,
+    message: context.message,
     runId,
     pageUrl: location.href,
     pageTitle: document.title,

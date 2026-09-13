@@ -300,6 +300,16 @@ export async function runBrowserTool(input: {
   return persistRunResult(result, definition.name);
 }
 
+// Only the background check-in controller calls this after manual/schedule authorization.
+// It is deliberately not exposed as a runtime message or a userInitiated bypass.
+export async function executeAuthorizedCheckin(tool: StoredBrowserTool, tabId: number): Promise<BrowserToolRunResult> {
+  const definition = parseBrowserToolYaml(tool.yaml);
+  if (!definition.checkin) throw new Error("此工具未声明签到能力。");
+  const tab = await getTargetTab(tabId);
+  const result = await executeBrowserToolOnTab(definition, {}, tab);
+  return persistRunResult(result, definition.name);
+}
+
 async function executeBrowserToolOnTab(
   definition: ReturnType<typeof parseBrowserToolYaml>,
   parameters: Record<string, unknown>,
@@ -347,6 +357,8 @@ async function sendToolMessageWithRetry(
       return await chrome.tabs.sendMessage<ExecuteBrowserToolMessage, BrowserToolRunResult | { error: string }>(tabId, message);
     } catch (error) {
       lastError = error;
+      // A closed response channel may mean the action already ran. Never replay it.
+      if (!(error instanceof Error) || !error.message.includes("Receiving end does not exist")) throw error;
       await sleep(350);
     }
   }

@@ -28,6 +28,9 @@ import {
 } from "./browserTools";
 import { downloadBrowserToolItems } from "./browserToolDownloads";
 import { downloadLiteratureQueue, pauseLiteratureDownload, resumeLiteratureDownload } from "./literatureDownloads";
+import { configureCheckin, getCheckinState, openCheckinPage, registerCheckins, runCheckin } from "./checkins";
+
+registerCheckins();
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecutionProgress | BrowserToolExecutionProgressEvent, sender, sendResponse) => {
   if (message.type === "BROWSER_TOOL_EXECUTION_PROGRESS") {
@@ -46,7 +49,15 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecu
 });
 
 async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
+  if (["GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE"].includes(message.type)) {
+    const extensionUrl = chrome.runtime.getURL("");
+    if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(extensionUrl)) throw new Error("签到操作只能从 Trail 界面发起。");
+  }
   switch (message.type) {
+    case "GET_CHECKIN_STATE": return getCheckinState();
+    case "CONFIGURE_CHECKIN": return configureCheckin(message.toolId, message.enabled, message.time);
+    case "RUN_CHECKIN": return runCheckin(message.toolId);
+    case "OPEN_CHECKIN_PAGE": return openCheckinPage(message.toolId);
     case "GET_POPUP_STATE":
       return getPopupState();
     case "GET_INTERACTION_SETTINGS":
@@ -105,12 +116,6 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return undefined;
   }
 }
-
-chrome.runtime.onInstalled.addListener(() => {
-  void importBundledBrowserTools().catch((error: unknown) => {
-    console.error("Trail 无法初始化内置 Browser Tools。", error);
-  });
-});
 
 chrome.tabs.onCreated.addListener((tab) => {
   if (tab.id !== undefined) void recordTabEvent("created", tab.id, tab);

@@ -1,0 +1,59 @@
+schema_version: 1
+id: ablesci-checkin
+name: 科研通每日签到
+version: "1.0.0"
+description: 复用科研通登录状态，确认签到结果并读取积分。
+match:
+  domains: [www.ablesci.com]
+checkin:
+  entry_url: https://www.ablesci.com/
+  timezone: Asia/Shanghai
+presentation:
+  title: 每日签到
+  source_label: 科研通
+  actions:
+    single_run: 立即签到
+  collections:
+    account:
+      label: 签到结果
+      fields:
+        points: { label: 当前积分, order: 10 }
+        days: { label: 连续签到天数, order: 20 }
+workflow:
+  - action: wait_for
+    selector: body
+  - action: if
+    condition: { selector: '.fly-signin #user-point-now', visible: true }
+    then:
+      - action: if
+        condition: { selector: '.fly-signin .btn-sign', visible: true }
+        then:
+          - action: click
+            selector: '.fly-signin .btn-sign'
+          - action: wait_for
+            selector: '.layui-layer-content'
+            visible: true
+            text: 签到成功
+            timeout_ms: 15000
+          - action: extract
+            collection: account
+            selector: '.fly-signin'
+            fields:
+              points: { selector: '#user-point-now', transforms: [trim, parse_number] }
+              days: { selector: '#sign-count', transforms: [trim, parse_number] }
+          - action: finish
+            outcome: success
+            message: 签到成功
+        else:
+          - action: extract
+            collection: account
+            selector: '.fly-signin'
+            fields:
+              points: { selector: '#user-point-now', transforms: [trim, parse_number] }
+              days: { selector: '#sign-count', transforms: [trim, parse_number] }
+          - action: finish
+            outcome: already_done
+            message: 今日已签到
+    else:
+      - action: pause_for_user
+        reason: 未找到科研通账户签到区，请打开页面完成登录或验证后重试。
