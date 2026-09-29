@@ -11,6 +11,8 @@ import type {
 import { importBundledBrowserTools, getBundledToolVersions } from "../browser-tools/bundled";
 import { parseBrowserToolYaml } from "../browser-tools/loader";
 import { matchesBrowserTool } from "../browser-tools/matcher";
+import { resolveTemplate } from "../browser-tools/template";
+import { stageAndMaybePublish } from "./feed";
 import {
   deleteStoredBrowserTool,
   getBrowserToolRuns,
@@ -19,6 +21,17 @@ import {
   saveBrowserToolRun,
   saveStoredBrowserTool
 } from "../browser-tools/storage";
+import {
+  advanceBatchRun,
+  clearBatchRunState,
+  clearControlRequest,
+  consumeControlRequest,
+  getBatchRunState,
+  requestPauseBatchRun,
+  requestStopBatchRun,
+  saveBatchRunState,
+  type BatchRunState
+} from "./runControl";
 
 export function validateBrowserToolYaml(source: string) {
   return parseBrowserToolYaml(source);
@@ -100,91 +113,251 @@ export async function runStoredBrowserToolBatch(input: {
   if (tab.id === undefined || !tab.url) throw new Error("没有找到可运行批量检索的网页标签页。");
   if (!matchesBrowserTool(definition, tab.url)) throw new Error(`工具 ${definition.id} 不适用于当前页面。`);
 
-  const startedAt = Date.now();
+  await clearBatchRunState();
+  clearControlRequest();
+  const state: BatchRunState = {
+    runId: `browser_tool_batch_${createBackgroundRunId()}`,
+    toolId: definition.id,
+    toolName: definition.name,
+    keywords,
+    nextIndex: 0,
+    completedKeywords: 0,
+    parameters: input.parameters,
+    tabId: tab.id,
+    status: "running",
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+    lastPageUrl: tab.url,
+    lastPageTitle: tab.title || tab.url,
+    data: {}
+  };
+  await saveBatchRunState(state);
+  return continueBatchRun(definition, state, tab.id, input.nativeExport);
+}
+
+/** 从暂停状态恢复批量运行；由 Trail 界面的“继续”触发。 */
+export async function resumeBrowserToolBatch(input: { tabId?: number; userInitiated?: boolean }): Promise<BrowserToolRunResult> {
+  const state = await getBatchRunState();
+  if (!state) throw new Error("没有可继续的批量运行。");
+  if (state.status !== "paused") throw new Error(`当前运行状态为 ${state.status}，不能继续。`);
+  const tool = await getStoredBrowserTool(state.toolId);
+  if (!tool) throw new Error(`没有找到 Browser Tool：${state.toolId}`);
+  const definition = parseBrowserToolYaml(tool.yaml);
+  assertUserInitiated(definition, input.userInitiated);
+
+  let tab: chrome.tabs.Tab | undefined;
+  if (state.tabId !== undefined) tab = await chrome.tabs.get(state.tabId).catch(() => undefined);
+  if (!tab || !tab.url || !matchesBrowserTool(definition, tab.url)) tab = await getTargetTab(input.tabId);
+  if (!tab.id || !tab.url || !matchesBrowserTool(definition, tab.url)) {
+    throw new Error("继续运行需要打开一个匹配工具域名的网页标签页。");
+  }
+  clearControlRequest();
+  const resumed: BatchRunState = { ...state, status: "running", tabId: tab.id, updatedAt: Date.now() };
+  await saveBatchRunState(resumed);
+  return continueBatchRun(definition, resumed, tab.id);
+}
+
+export async function getBrowserToolBatchRunState(): Promise<BatchRunState | null> {
+  return getBatchRunState();
+}
+
+export function pauseBrowserToolBatch(): { requested: boolean } {
+  return requestPauseBatchRun();
+}
+
+/** 停止批量运行：运行中在下一个输入边界收尾；已暂停时立即以现有数据收尾。 */
+export async function stopBrowserToolBatch(): Promise<{ requested: boolean; finalized: boolean }> {
+  const state = await getBatchRunState();
+  if (!state) return { requested: false, finalized: false };
+  if (state.status === "running") {
+    requestStopBatchRun();
+    return { requested: true, finalized: false };
+  }
+  if (state.status !== "paused") return { requested: false, finalized: false };
+  const tool = await getStoredBrowserTool(state.toolId);
+  if (!tool) throw new Error(`没有找到 Browser Tool：${state.toolId}`);
+  const definition = parseBrowserToolYaml(tool.yaml);
+  await finalizeBatchRun(definition, { ...state, status: "stopped" }, "partial", `已手动停止：完成 ${state.completedKeywords}/${state.keywords.length} 个输入。`);
+  return { requested: true, finalized: true };
+}
+
+/**
+ * 批量主循环。每个输入完成前先消费暂停/停止请求；
+ * 进度写入 session 存储以支撑暂停恢复与中断检测。
+ */
+async function continueBatchRun(
+  definition: ReturnType<typeof parseBrowserToolYaml>,
+  initial: BatchRunState,
+  tabId: number,
+  nativeExport?: { definitionId: string; maxRecords: number }
+): Promise<BrowserToolRunResult> {
+  const startedAt = initial.startedAt;
+  const batch = definition.batch;
+  if (!batch) throw new Error(`工具 ${definition.id} 没有声明批量检索能力。`);
   const progressId = `browser_tool_progress_${createBackgroundRunId()}`;
-  const data: BrowserToolRunResult["data"] = {};
   const warnings: string[] = [];
   const nativeExports: NonNullable<BrowserToolRunResult["nativeExports"]> = [];
-  let completedKeywords = 0;
-  let lastPageUrl = tab.url;
-  let lastPageTitle = tab.title || tab.url;
+  let state = initial;
   let failed = false;
 
-  for (const [index, keyword] of keywords.entries()) {
-    try {
-      emitProgress({
-        type: "BROWSER_TOOL_PROGRESS_UPDATE",
-        progressId,
-        toolId: definition.id,
-        scope: "keyword",
-        label: "正在处理检索式",
-        itemLabel: "条",
-        current: index + 1,
-        total: keywords.length,
-        recordCount: Object.values(data).reduce((total, records) => total + records.length, 0)
-      });
-      const currentTab = await chrome.tabs.get(tab.id);
-      if (!currentTab.url) throw new Error("目标标签页没有有效 URL。");
-      const navigation = definition.batch.navigation;
-      const nextUrl = navigation.type === "query_parameter"
-        ? buildBatchUrl(currentTab.url, navigation.parameter, keyword)
-        : navigation.url;
-      if (!matchesBrowserTool(definition, nextUrl)) throw new Error(`工具 ${definition.id} 的批量导航地址不在适用范围内。`);
-      const runParameters = navigation.type === "fixed_url"
-        ? { ...input.parameters, [navigation.input_parameter]: keyword }
-        : input.parameters;
-      await navigateTab(tab.id, nextUrl);
-      const readyTab = await chrome.tabs.get(tab.id);
-      const result = await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId);
-      lastPageUrl = result.pageUrl;
-      lastPageTitle = result.pageTitle;
+  const heartbeat = setInterval(() => {
+    state = { ...state, updatedAt: Date.now() };
+    void saveBatchRunState(state).catch(() => undefined);
+  }, 30_000);
 
-      for (const [collection, records] of Object.entries(result.data)) {
-        const target = (data[collection] ||= []);
-        target.push(...records.map((record) => ({ _query: keyword, ...record })));
+  try {
+    while (state.nextIndex < state.keywords.length) {
+      const control = consumeControlRequest();
+      if (control.stop) {
+        return await finalizeBatchRun(definition, { ...state, status: "stopped" }, "partial",
+          `已手动停止：完成 ${state.completedKeywords}/${state.keywords.length} 个输入。`, warnings);
       }
-      warnings.push(...result.warnings.map((warning) => `[${keyword}] ${warning}`));
-      if (result.status !== "completed") {
+      if (control.pause) {
+        return await finalizeBatchRun(definition, { ...state, status: "paused" }, "paused",
+          `已暂停：完成 ${state.completedKeywords}/${state.keywords.length} 个输入，可稍后继续。`, warnings);
+      }
+
+      const keyword = state.keywords[state.nextIndex];
+      const index = state.nextIndex;
+      try {
+        emitProgress({
+          type: "BROWSER_TOOL_PROGRESS_UPDATE",
+          progressId,
+          toolId: definition.id,
+          scope: "keyword",
+          label: "正在处理检索式",
+          itemLabel: "条",
+          current: index + 1,
+          total: state.keywords.length,
+          recordCount: countBatchRecords(state)
+        });
+        const currentTab = await chrome.tabs.get(tabId);
+        if (!currentTab.url) throw new Error("目标标签页没有有效 URL。");
+        const navigation = batch.navigation;
+        const nextUrl = navigation.type === "query_parameter"
+          ? buildBatchUrl(currentTab.url, navigation.parameter, keyword)
+          : resolveBatchFixedUrl(navigation.url, definition, state.parameters, keyword);
+        if (!matchesBrowserTool(definition, nextUrl)) throw new Error(`工具 ${definition.id} 的批量导航地址不在适用范围内。`);
+        const runParameters = navigation.type === "fixed_url"
+          ? { ...state.parameters, [navigation.input_parameter]: keyword }
+          : state.parameters;
+        await navigateTab(tabId, nextUrl);
+        const readyTab = await chrome.tabs.get(tabId);
+        const result = await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId);
+
+        if (result.status === "paused") {
+          // 登录墙/验证码：保持游标不变，处理后可从该输入继续。
+          warnings.push(`[${keyword}] 需要人工处理：${result.error || "登录或验证码"}`);
+          const pausedState = { ...state, status: "paused" as const, updatedAt: Date.now(), lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
+          await saveBatchRunState(pausedState);
+          return await finalizeBatchRun(definition, pausedState, "paused",
+            `[${keyword}] 需要人工处理，运行已暂停；处理后点“继续”将从这个输入重试。`, warnings);
+        }
+
+        state = {
+          ...advanceBatchRun(state, keyword, result.data),
+          lastPageUrl: result.pageUrl,
+          lastPageTitle: result.pageTitle
+        };
+        warnings.push(...result.warnings.map((warning) => `[${keyword}] ${warning}`));
+        if (result.status !== "completed") {
+          failed = true;
+          warnings.push(`[${keyword}] ${result.error || "提取未完整完成"}`);
+          break;
+        }
+        if (nativeExport) {
+          const exportDefinition = definition.native_exports?.find((item) => item.id === nativeExport?.definitionId);
+          if (!exportDefinition) throw new Error("工具没有对应的原生导出定义。");
+          const exportSummary = await runNativeExportBatches(tabId, definition.id, exportDefinition, nativeExport.maxRecords, keyword, progressId);
+          nativeExports.push(exportSummary);
+          if (exportSummary.error) warnings.push(`[${keyword}] 原生导出部分完成：${exportSummary.error}`);
+        }
+        await saveBatchRunState(state);
+      } catch (error) {
         failed = true;
-        warnings.push(`[${keyword}] ${result.error || (result.status === "paused" ? "需要人工处理登录或验证码" : "提取未完整完成")}`);
+        warnings.push(`[${keyword}] ${error instanceof Error ? error.message : "批量检索失败"}`);
         break;
       }
-      if (input.nativeExport) {
-        const exportDefinition = definition.native_exports?.find((item) => item.id === input.nativeExport?.definitionId);
-        if (!exportDefinition) throw new Error("工具没有对应的原生导出定义。");
-        const exportSummary = await runNativeExportBatches(tab.id, definition.id, exportDefinition, input.nativeExport.maxRecords, keyword, progressId);
-        nativeExports.push(exportSummary);
-        if (exportSummary.error) warnings.push(`[${keyword}] 原生导出部分完成：${exportSummary.error}`);
-      }
-      completedKeywords += 1;
-    } catch (error) {
-      failed = true;
-      warnings.push(`[${keyword}] ${error instanceof Error ? error.message : "批量检索失败"}`);
-      break;
-    }
 
-    if (index < keywords.length - 1) await sleep(definition.batch.delay_between_keywords_ms || 0);
+      if (index < state.keywords.length - 1) {
+        const rawDelay = batch.delay_between_keywords_ms;
+        const delay = typeof rawDelay === "string"
+          ? Number(resolveTemplate(rawDelay, definition, state.parameters))
+          : rawDelay || 0;
+        if (Number.isFinite(delay) && delay > 0) await sleep(delay);
+      }
+    }
+  } finally {
+    clearInterval(heartbeat);
   }
 
   const status: BrowserToolRunResult["status"] = failed
-    ? completedKeywords > 0
+    ? state.completedKeywords > 0
       ? "partial"
       : "failed"
     : "completed";
   const result: BrowserToolRunResult = {
     toolId: definition.id,
-    runId: `browser_tool_batch_${createBackgroundRunId()}`,
-    pageUrl: lastPageUrl,
-    pageTitle: lastPageTitle,
+    runId: state.runId,
+    pageUrl: state.lastPageUrl,
+    pageTitle: state.lastPageTitle,
     startedAt,
     finishedAt: Date.now(),
     status,
-    data,
+    data: state.data,
     warnings,
     nativeExports: nativeExports.length > 0 ? nativeExports : undefined,
-    error: failed ? `已完成 ${completedKeywords}/${keywords.length} 个检索词。` : undefined
+    error: failed ? `已完成 ${state.completedKeywords}/${state.keywords.length} 个输入。` : undefined
   };
-  return persistRunResult(result, `${definition.name} · 批量`);
+  void stageAndMaybePublish(definition, result).catch(() => undefined);
+  await clearBatchRunState();
+  return persistRunResult(result, `${state.toolName} · 批量`);
+}
+
+/** 暂停或停止时的收尾：暂停保留运行状态供继续；停止/失败清理状态并暂存已得数据。 */
+async function finalizeBatchRun(
+  definition: ReturnType<typeof parseBrowserToolYaml>,
+  state: BatchRunState,
+  status: BrowserToolRunResult["status"],
+  error: string,
+  warnings: string[] = []
+): Promise<BrowserToolRunResult> {
+  if (status === "paused") await saveBatchRunState(state);
+  const result: BrowserToolRunResult = {
+    toolId: definition.id,
+    runId: state.runId,
+    pageUrl: state.lastPageUrl,
+    pageTitle: state.lastPageTitle,
+    startedAt: state.startedAt,
+    finishedAt: Date.now(),
+    status,
+    data: state.data,
+    warnings,
+    error
+  };
+  if (status !== "paused") {
+    void stageAndMaybePublish(definition, result).catch(() => undefined);
+    await clearBatchRunState();
+  }
+  return persistRunResult(result, `${state.toolName} · 批量`);
+}
+
+function countBatchRecords(state: BatchRunState): number {
+  return Object.values(state.data).reduce((total, records) => total + records.length, 0);
+}
+
+/** fixed_url 支持 {{ parameters.x }} 模板；当前批次的输入参数会注入为关键字值。 */
+function resolveBatchFixedUrl(
+  url: string,
+  definition: ReturnType<typeof parseBrowserToolYaml>,
+  parameters: Record<string, unknown>,
+  keyword: string
+): string {
+  if (!url.includes("{{")) return url;
+  const navigation = definition.batch!.navigation;
+  if (navigation.type !== "fixed_url") return url;
+  const batchParameters = { ...parameters, [navigation.input_parameter]: keyword };
+  return resolveTemplate(url, definition, batchParameters);
 }
 
 async function runNativeExportBatches(
@@ -298,6 +471,7 @@ export async function runBrowserTool(input: {
   if (!matchesBrowserTool(definition, tab.url)) throw new Error(`工具 ${definition.id} 不适用于当前页面。`);
 
   const result = await executeBrowserToolOnTab(definition, input.parameters, tab);
+  void stageAndMaybePublish(definition, result).catch(() => undefined);
   return persistRunResult(result, definition.name);
 }
 

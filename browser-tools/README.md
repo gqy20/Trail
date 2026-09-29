@@ -31,6 +31,7 @@ tools:
 - `scroll`: 按固定距离滚动页面或指定容器，也可回到顶部/底部，适用于虚拟滚动结果列表。
 - `wait_for_change`: 等待先前观察过的元素内容变化。
 - `extract`: 从一组 DOM 元素提取结构化字段。
+- `graphql_fetch`: 在已登录的 x.com 页面上下文调用站点内部 GraphQL 接口并按 JSON 路径提取记录（见下节）。
 - `repeat`: 有上限地重复一组动作。
 - `pause_for_user`: 在登录、验证码等节点停止并把原因返回给调用方。
 - `pause_if_present`: 在限定时间内检测到登录或验证码选择器时暂停，否则继续工作流。
@@ -67,7 +68,17 @@ batch:
     input_parameter: keyword
 ```
 
-`fixed_url` 仍会经过工具域名和 URL 匹配校验；工作流负责填写 `{{ parameters.keyword }}`、提交检索并提取结果。
+`fixed_url` 仍会经过工具域名和 URL 匹配校验；工作流负责填写 `{{ parameters.keyword }}`、提交检索并提取结果。`fixed_url` 支持在 URL 中使用 `{{ parameters.<参数> }}` 模板，当前批次的输入值会注入对应参数（如 `https://x.com/{{ parameters.username }}`），渲染结果同样要经过域名校验。`batch.delay_between_keywords_ms` 也可以声明为 `{{ parameters.<数字参数> }}` 模板，把输入间隔节奏暴露为界面参数。
+
+## GraphQL 采集与订阅源暂存
+
+`graphql_fetch` 面向提供内部 GraphQL 接口的站点（当前为 x.com）。它复用当前标签页的登录会话，由后台在页面主世界执行请求；认证头（公开 bearer、`ct0` CSRF）由核心代码注入，YAML 只声明操作名、变量模板、feature 开关和字段映射，不能提供任何认证信息或脚本。queryId 会在运行时扫描页面已加载的 `client-web` bundle 自动解析，失败时使用 YAML 中的 `query_id` 兜底（站点发布轮换后更新该值即可）。
+
+- `variables` 的值支持 `{{ parameters.x }}` 与 `{{ values.x }}` 模板；`store` 可把响应路径存入 `values` 供后续步骤引用（如先 `UserByScreenName` 取 `user_id`，再 `UserTweets` 分页取推文）。
+- `extract.walk.has` 递归遍历响应 JSON，命中节点按 `fields` 的相对点路径取值，支持 `fallback_paths`（长文优先、正文兜底）与 `item_path`（数组元素子路径，如媒体 URL）。
+- `cursor` 声明分页游标的匹配键与取值路径，`max_pages`（上限 20）与 `page_delay_ms` 控制节奏，遇到 429 会直接报错终止。
+
+工具可以声明 `feed: { collection: tweets, platform: twitter }`。声明后，成功或部分完成的运行会把该集合的记录自动收敛并暂存到订阅源（Trail 的"订阅源"页负责发布到 GitHub Pages 仓库）；失败或暂停的运行不暂存。实测规则位于 `twitter/timeline.yml`。
 
 `repeat` 可以声明可选的实时进度元数据。运行时会把当前循环、总循环数和已发现记录数发送到侧边栏：
 
@@ -103,6 +114,8 @@ batch:
 `stop_after_records` 在当前循环新增记录达到目标数量时立即结束；`wait_for_change` 会在 DOM 更新后立即继续，不必耗尽固定等待时间。`extract.dedupe_by` 可以指定记录身份字段（通常是详情 URL），已见记录会在解析其他字段前跳过，减少渐进列表的重复 DOM 工作。
 
 侧边栏随后会显示批量输入区。运行时依次导航目标标签页、复用原工作流提取，并给每条记录增加 `_query` 来源列；默认在完成后自动下载汇总 CSV。遇到登录、验证码或提取失败会停止后续检索并保留已完成结果。
+
+批量运行支持暂停/继续/停止：运行面板提供控制条，**暂停在当前输入完成后生效**，进度与已得记录写入会话存储（Service Worker 重启不丢，浏览器关闭后清空），"继续"从剩余输入重启循环；遇到登录墙或验证码时运行自动转为暂停，处理后可从该输入重试；"停止"以已完成部分收尾，结果照常保存并暂存到订阅源。
 
 ## 展示契约
 

@@ -37,7 +37,12 @@
     "storage",
     "sidePanel",
     "downloads",
-    "alarms"
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*"
   ],
   "icons": {
     "16": "icons/icon-16.png",

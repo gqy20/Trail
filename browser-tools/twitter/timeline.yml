@@ -1,0 +1,196 @@
+schema_version: 1
+id: twitter-timeline
+name: X 用户时间线采集
+version: "1.0.0"
+description: 在已登录的 x.com 会话中读取指定用户的最新推文（含长文、互动数与媒体链接），结果自动暂存到订阅源。
+match:
+  domains: [x.com, twitter.com]
+feed:
+  collection: tweets
+  platform: twitter
+parameters:
+  username:
+    type: string
+    required: true
+    label: 用户名
+    presentation: { placement: hidden }
+  tweets_per_user:
+    type: number
+    default: 30
+    min: 5
+    max: 100
+    label: 每个用户读取条数
+    presentation:
+      placement: primary
+      style: sentence
+      prefix: 每个用户读取
+      suffix: 条推文
+  delay_between_users_ms:
+    type: number
+    default: 3000
+    min: 0
+    max: 60000
+    label: 用户间隔（毫秒）
+    presentation:
+      placement: primary
+      style: sentence
+      prefix: 用户间隔
+      suffix: 毫秒
+batch:
+  navigation:
+    type: fixed_url
+    url: "https://x.com/{{ parameters.username }}"
+    input_parameter: username
+  max_keywords: 60
+  delay_between_keywords_ms: "{{ parameters.delay_between_users_ms }}"
+limits:
+  max_records: 120
+  delay_between_actions_ms: 500
+workflow:
+  - action: wait_for
+    selector: "body"
+    timeout_ms: 8000
+    optional: true
+  - action: pause_if_present
+    selector: "[data-testid='loginButton']"
+    timeout_ms: 2000
+    reason: x.com 未检测到登录状态，请先登录后重试。
+  - action: graphql_fetch
+    operation: UserByScreenName
+    query_id: "IGgvgiOx4QZndDHuD3x9TQ"
+    variables:
+      screen_name: "{{ parameters.username }}"
+      withSafetyModeUserFields: true
+    features:
+      hidden_profile_subscriptions_enabled: true
+      profile_label_improvements_pcf_label_in_post_enabled: true
+      responsive_web_profile_redirect_enabled: true
+      rweb_tipjar_consumption_enabled: true
+      responsive_web_graphql_exclude_directive_enabled: true
+      verified_phone_label_enabled: false
+      subscriptions_verification_info_is_identity_verified_enabled: true
+      subscriptions_verification_info_verified_since_enabled: true
+      highlights_tweets_tab_ui_enabled: true
+      responsive_web_twitter_article_notes_tab_enabled: true
+      subscriptions_feature_can_gift_premium: true
+      creator_subscriptions_tweet_preview_api_enabled: true
+      responsive_web_graphql_skip_user_profile_image_extensions_enabled: false
+      responsive_web_graphql_timeline_navigation_enabled: true
+    field_toggles:
+      withPayments: true
+      withAuxiliaryUserLabels: true
+    store:
+      user_id: data.user.result.rest_id
+  - action: graphql_fetch
+    operation: UserTweets
+    query_id: "lrMzG9qPQHpqJdP3AbM-bQ"
+    variables:
+      userId: "{{ values.user_id }}"
+      count: "{{ parameters.tweets_per_user }}"
+      includePromotedContent: false
+      withQuickPromoteEligibilityTweetFields: true
+      withVoice: true
+    features:
+      rweb_video_screen_enabled: true
+      rweb_cashtags_enabled: true
+      payments_enabled: false
+      profile_label_improvements_pcf_label_in_post_enabled: true
+      responsive_web_profile_redirect_enabled: true
+      rweb_tipjar_consumption_enabled: true
+      verified_phone_label_enabled: false
+      creator_subscriptions_tweet_preview_api_enabled: true
+      responsive_web_graphql_timeline_navigation_enabled: true
+      responsive_web_graphql_skip_user_profile_image_extensions_enabled: false
+      premium_content_api_read_enabled: false
+      communities_web_enable_tweet_community_results_fetch: true
+      c9s_tweet_anatomy_moderator_badge_enabled: true
+      responsive_web_grok_analyze_button_fetch_trends_enabled: false
+      responsive_web_grok_analyze_post_followups_enabled: true
+      rweb_cashtags_composer_attachment_enabled: true
+      responsive_web_jetfuel_frame: true
+      responsive_web_grok_share_attachment_enabled: true
+      responsive_web_grok_annotations_enabled: true
+      articles_preview_enabled: true
+      responsive_web_edit_tweet_api_enabled: true
+      graphql_is_translatable_rweb_tweet_is_translatable_enabled: true
+      view_counts_everywhere_api_enabled: true
+      longform_notetweets_consumption_enabled: true
+      responsive_web_twitter_article_tweet_consumption_enabled: true
+      tweet_awards_web_tipping_enabled: false
+      content_disclosure_indicator_enabled: true
+      content_disclosure_ai_generated_indicator_enabled: true
+      responsive_web_grok_show_grok_translated_post: false
+      responsive_web_grok_analysis_button_from_backend: true
+      post_ctas_fetch_enabled: false
+      freedom_of_speech_not_reach_fetch_enabled: true
+      standardized_nudges_misinfo: true
+      tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true
+      longform_notetweets_rich_text_read_enabled: true
+      longform_notetweets_inline_media_enabled: true
+      responsive_web_grok_image_annotation_enabled: true
+      responsive_web_grok_imagine_annotation_enabled: true
+      responsive_web_grok_community_note_auto_translation_is_enabled: false
+      responsive_web_enhance_cards_enabled: false
+    field_toggles:
+      withPayments: true
+      withAuxiliaryUserLabels: true
+      withArticleRichContentState: true
+      withArticlePlainText: true
+      withArticleSummaryText: true
+      withArticleVoiceOver: true
+      withGrokAnalyze: true
+      withDisallowedReplyControls: true
+    max_pages: 2
+    page_delay_ms: 2000
+    cursor: { match_key: cursorType, match_value: Bottom, value_path: value }
+    extract:
+      collection: tweets
+      walk: { has: tweet_results.result }
+      dedupe_by: id
+      fields:
+        id: { path: tweet_results.result.rest_id }
+        handle: { path: tweet_results.result.core.user_results.result.legacy.screen_name, optional: true }
+        author: { path: tweet_results.result.core.user_results.result.legacy.name, optional: true }
+        text:
+          path: tweet_results.result.note_tweet.note_tweet_results.result.text
+          fallback_paths: [tweet_results.result.legacy.full_text]
+          transforms: [trim]
+        created_at: { path: tweet_results.result.legacy.created_at, transforms: [parse_date] }
+        likes: { path: tweet_results.result.legacy.favorite_count, optional: true }
+        retweets: { path: tweet_results.result.legacy.retweet_count, optional: true }
+        replies: { path: tweet_results.result.legacy.reply_count, optional: true }
+        views: { path: tweet_results.result.views.count, transforms: [parse_number], optional: true }
+        media:
+          path: tweet_results.result.legacy.extended_entities.media
+          item_path: media_url_https
+          optional: true
+presentation:
+  title: X 时间线采集
+  source_label: X / Twitter
+  batch_input:
+    label: 用户名
+    placeholder: 每行一个 X 用户名（不带 @）
+    item_label: 用户
+    count_unit: 个
+    import_formats: [txt, csv]
+    csv_headers: [用户名, username, handle]
+  actions:
+    run: 开始采集
+    run_empty: 输入用户名后开始
+    running: 正在采集…
+    single_run: 读取当前打开用户的时间线
+  results:
+    title: 本次抓取
+    item_label: 条
+    count_unit: 条
+  collections:
+    tweets:
+      label: 推文
+      item_label: 条
+      count_unit: 条
+      fields:
+        handle: { label: 用户, order: 10, emphasis: primary }
+        text: { label: 正文, order: 20 }
+        created_at: { label: 发布时间, order: 30 }
+        likes: { label: 赞, order: 40 }
+        retweets: { label: 转发, order: 50 }

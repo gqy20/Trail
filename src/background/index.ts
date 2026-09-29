@@ -18,17 +18,23 @@ import type { RuntimeMessage } from "../shared/types";
 import type { BrowserToolExecutionProgress, BrowserToolExecutionProgressEvent } from "../browser-tools/contracts";
 import {
   getBrowserToolManagerState,
+  getBrowserToolBatchRunState,
   importBundledBrowserTools,
   importBrowserTool,
+  pauseBrowserToolBatch,
   removeBrowserTool,
+  resumeBrowserToolBatch,
   runBrowserTool,
   runStoredBrowserToolBatch,
   runStoredBrowserTool,
+  stopBrowserToolBatch,
   validateBrowserToolYaml
 } from "./browserTools";
 import { downloadBrowserToolItems } from "./browserToolDownloads";
 import { downloadLiteratureQueue, pauseLiteratureDownload, resumeLiteratureDownload } from "./literatureDownloads";
 import { configureCheckin, getCheckinState, openCheckinPage, registerCheckins, runCheckin } from "./checkins";
+import { getFeedState, probeFeedConnection, publishStagedFeed, saveFeedPublisherConfig, stagePosts } from "./feed";
+import { fetchGraphqlPageForTab, resolveGraphqlQueryIdForTab } from "./graphqlBridge";
 import { restoreBundledBrowserTool } from "../browser-tools/bundled";
 
 registerCheckins();
@@ -50,7 +56,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecu
 });
 
 async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
-  if (["RESTORE_BUNDLED_BROWSER_TOOL", "GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE"].includes(message.type)) {
+  if (["RESTORE_BUNDLED_BROWSER_TOOL", "GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE", "GET_FEED_STATE", "SAVE_FEED_CONFIG", "STAGE_FEED_POSTS", "PUBLISH_FEED", "PROBE_FEED_REPO", "GET_BATCH_RUN_STATE", "PAUSE_BATCH_RUN", "RESUME_BATCH_RUN", "STOP_BATCH_RUN"].includes(message.type)) {
     const extensionUrl = chrome.runtime.getURL("");
     if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(extensionUrl)) throw new Error("此操作只能从 Trail 界面发起。");
   }
@@ -60,6 +66,17 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
     case "CONFIGURE_CHECKIN": return configureCheckin(message.toolId, message.enabled, message.time);
     case "RUN_CHECKIN": return runCheckin(message.toolId);
     case "OPEN_CHECKIN_PAGE": return openCheckinPage(message.toolId);
+    case "GET_FEED_STATE": return getFeedState();
+    case "SAVE_FEED_CONFIG": return saveFeedPublisherConfig(message.config);
+    case "STAGE_FEED_POSTS": return stagePosts(message.posts);
+    case "PUBLISH_FEED": return publishStagedFeed();
+    case "PROBE_FEED_REPO": return probeFeedConnection();
+    case "BROWSER_TOOL_GRAPHQL_RESOLVE": return resolveGraphqlQueryIdForTab(message, sender);
+    case "BROWSER_TOOL_GRAPHQL_FETCH": return fetchGraphqlPageForTab(message, sender);
+    case "GET_BATCH_RUN_STATE": return getBrowserToolBatchRunState();
+    case "PAUSE_BATCH_RUN": return pauseBrowserToolBatch();
+    case "RESUME_BATCH_RUN": return resumeBrowserToolBatch({ tabId: message.tabId, userInitiated: message.userInitiated });
+    case "STOP_BATCH_RUN": return stopBrowserToolBatch();
     case "GET_POPUP_STATE":
       return getPopupState();
     case "GET_INTERACTION_SETTINGS":

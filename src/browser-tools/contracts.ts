@@ -118,6 +118,7 @@ export type BrowserToolTransform =
   | "normalize_whitespace"
   | "parse_year"
   | "parse_number"
+  | "parse_date"
   | "split_authors";
 
 export type BrowserToolWaitForStep = {
@@ -206,6 +207,42 @@ export type BrowserToolPauseIfPresentStep = {
   timeout_ms?: number;
 };
 
+export type BrowserToolGraphqlFieldDefinition = {
+  /** 相对命中节点的点路径；支持数字段作为数组下标。 */
+  path: string;
+  /** path 未命中时依次尝试的备选路径（如长文优先、正文兜底）。 */
+  fallback_paths?: string[];
+  /** path 指向数组时，从每个元素读取的子路径，返回字符串/数字数组。 */
+  item_path?: string;
+  transforms?: BrowserToolTransform[];
+  optional?: boolean;
+};
+
+export type BrowserToolGraphqlFetchStep = {
+  action: "graphql_fetch";
+  /** GraphQL 操作名，如 UserTweets；用于 queryId 解析和请求路径拼装。 */
+  operation: string;
+  variables?: Record<string, unknown>;
+  features?: Record<string, boolean>;
+  field_toggles?: Record<string, boolean>;
+  /** 响应根路径 → values 存储，供后续步骤以 {{ values.name }} 引用。 */
+  store?: Record<string, string>;
+  extract?: {
+    collection: string;
+    /** 递归遍历响应，节点存在该点路径时命中（如 tweet_results.result）。 */
+    walk?: { has: string };
+    fields: Record<string, BrowserToolGraphqlFieldDefinition>;
+    dedupe_by?: string;
+  };
+  /** 分页游标：遍历到 match_key === match_value 的节点时读取 value_path。 */
+  cursor?: { match_key: string; match_value: string; value_path: string };
+  max_pages?: number | string;
+  page_delay_ms?: number;
+  /** 页面 bundle 扫描失败时的 queryId 兜底（会随站点发布轮换）。 */
+  query_id?: string;
+  optional?: boolean;
+};
+
 export type BrowserToolStep =
   | { action: "if"; condition: { selector: string; visible?: boolean; text?: string }; then: BrowserToolStep[]; else?: BrowserToolStep[] }
   | { action: "finish"; outcome: "success" | "already_done"; message: string }
@@ -219,6 +256,7 @@ export type BrowserToolStep =
   | BrowserToolExtractStep
   | BrowserToolRepeatStep
   | BrowserToolPauseIfPresentStep
+  | BrowserToolGraphqlFetchStep
   | BrowserToolPauseStep;
 
 export type BrowserToolDefinition = {
@@ -236,6 +274,8 @@ export type BrowserToolDefinition = {
   selectors?: Record<string, string>;
   workflow: BrowserToolStep[];
   presentation?: BrowserToolPresentation;
+  /** 声明后，成功运行中该集合的记录会自动进入订阅源暂存。 */
+  feed?: { collection: string; platform: string };
   downloads?: BrowserToolDownloadDefinition[];
   native_exports?: BrowserToolNativeExportDefinition[];
   batch?: {
@@ -243,7 +283,8 @@ export type BrowserToolDefinition = {
       | { type: "query_parameter"; parameter: string }
       | { type: "fixed_url"; url: string; input_parameter: string };
     max_keywords?: number;
-    delay_between_keywords_ms?: number;
+    /** 数字或 "{{ parameters.x }}" 模板，便于把节奏参数暴露给用户。 */
+    delay_between_keywords_ms?: number | string;
   };
   limits?: {
     delay_between_actions_ms?: number;

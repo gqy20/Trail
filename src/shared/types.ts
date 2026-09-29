@@ -7,6 +7,7 @@ import type {
   StoredBrowserTool
 } from "../browser-tools/contracts";
 import type { LiteratureDownloadItemInput } from "../literature-queue/types";
+import type { FeedPublisherConfig, FeedPublisherSnapshot, FeedPublishResult, FeedRepoProbe } from "../publisher/types";
 
 export type TrailSource = "tab_group" | "window";
 
@@ -223,6 +224,24 @@ export type RuntimeMessage =
   | { type: "CONFIGURE_CHECKIN"; toolId: string; enabled: boolean; time: string }
   | { type: "RUN_CHECKIN"; toolId: string }
   | { type: "OPEN_CHECKIN_PAGE"; toolId: string }
+  | { type: "GET_FEED_STATE" }
+  | { type: "SAVE_FEED_CONFIG"; config: FeedPublisherConfig }
+  | { type: "STAGE_FEED_POSTS"; posts: unknown[] }
+  | { type: "PUBLISH_FEED" }
+  | { type: "PROBE_FEED_REPO" }
+  | { type: "BROWSER_TOOL_GRAPHQL_RESOLVE"; operation: string }
+  | {
+      type: "BROWSER_TOOL_GRAPHQL_FETCH";
+      operation: string;
+      query_id: string;
+      variables: Record<string, unknown>;
+      features?: Record<string, boolean>;
+      field_toggles?: Record<string, boolean>;
+    }
+  | { type: "GET_BATCH_RUN_STATE" }
+  | { type: "PAUSE_BATCH_RUN" }
+  | { type: "RESUME_BATCH_RUN"; tabId?: number; userInitiated?: boolean }
+  | { type: "STOP_BATCH_RUN" }
   | { type: "GET_POPUP_STATE" }
   | { type: "GET_INTERACTION_SETTINGS" }
   | { type: "UPDATE_INTERACTION_SETTINGS"; settings: Partial<TrailInteractionSettings> }

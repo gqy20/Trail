@@ -4,6 +4,8 @@ import type {
   BrowserToolDefinition,
   BrowserToolDownloadDefinition,
   BrowserToolFieldDefinition,
+  BrowserToolGraphqlFieldDefinition,
+  BrowserToolGraphqlFetchStep,
   BrowserToolParameterDefinition,
   BrowserToolPresentation,
   BrowserToolStep,
@@ -20,6 +22,7 @@ const TRANSFORMS = new Set<BrowserToolTransform>([
   "normalize_whitespace",
   "parse_year",
   "parse_number",
+  "parse_date",
   "split_authors"
 ]);
 
@@ -63,6 +66,15 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     throw new Error("batch.navigation.input_parameter 必须引用已声明的字符串参数。");
   }
   const presentation = root.presentation === undefined ? undefined : validatePresentation(root.presentation);
+  let feed: BrowserToolDefinition["feed"];
+  if (root.feed !== undefined) {
+    const source = asRecord(root.feed, "feed");
+    const collection = readString(source.collection, "feed.collection");
+    if (!COLLECTION_PATTERN.test(collection)) throw new Error("feed.collection 无效。");
+    const platform = readString(source.platform, "feed.platform");
+    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(platform)) throw new Error("feed.platform 无效。");
+    feed = { collection, platform };
+  }
   const downloads = root.downloads === undefined ? undefined : validateDownloads(root.downloads);
   const nativeExports = root.native_exports === undefined ? undefined : validateNativeExports(root.native_exports);
   let checkin: BrowserToolDefinition["checkin"];
@@ -94,6 +106,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     selectors,
     workflow,
     presentation,
+    feed,
     downloads,
     native_exports: nativeExports,
     batch,
@@ -336,11 +349,14 @@ function validateBatch(value: unknown): BrowserToolDefinition["batch"] {
     validatedNavigation = { type: "query_parameter", parameter };
   } else if (navigation.type === "fixed_url") {
     const url = readString(navigation.url, "batch.navigation.url");
-    const parsedUrl = new URL(url);
+    // 模板 URL（如 https://x.com/{{ parameters.username }}）在运行时按批次渲染；
+    // 校验协议时先剥掉 {{ ... }} 占位符，存储时保留原文。
+    const containsTemplate = url.includes("{{");
+    const parsedUrl = new URL(containsTemplate ? url.replace(/\{\{[^}]*\}\}/g, "trail") : url);
     if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") throw new Error("batch.navigation.url 只支持 HTTP(S)。");
     const inputParameter = readString(navigation.input_parameter, "batch.navigation.input_parameter");
     if (!COLLECTION_PATTERN.test(inputParameter)) throw new Error("batch.navigation.input_parameter 无效。");
-    validatedNavigation = { type: "fixed_url", url: parsedUrl.href, input_parameter: inputParameter };
+    validatedNavigation = { type: "fixed_url", url: containsTemplate ? url : parsedUrl.href, input_parameter: inputParameter };
   } else {
     throw new Error("batch.navigation.type 只支持 query_parameter 或 fixed_url。");
   }
@@ -349,8 +365,13 @@ function validateBatch(value: unknown): BrowserToolDefinition["batch"] {
   if (maxKeywords !== undefined && (!Number.isInteger(maxKeywords) || maxKeywords < 1 || maxKeywords > BROWSER_TOOL_LIMITS.maxBatchKeywords)) {
     throw new Error(`batch.max_keywords 必须是 1-${BROWSER_TOOL_LIMITS.maxBatchKeywords} 的整数。`);
   }
-  const delay = readOptionalNumber(batch.delay_between_keywords_ms, "batch.delay_between_keywords_ms");
-  if (delay !== undefined && (delay < 0 || delay > BROWSER_TOOL_LIMITS.maxBatchDelayMs)) {
+  const delay = typeof batch.delay_between_keywords_ms === "string"
+    ? readString(batch.delay_between_keywords_ms, "batch.delay_between_keywords_ms")
+    : readOptionalNumber(batch.delay_between_keywords_ms, "batch.delay_between_keywords_ms");
+  if (typeof delay === "string" && !/\{\{\s*parameters\.[a-zA-Z0-9_-]+\s*\}\}/.test(delay)) {
+    throw new Error("batch.delay_between_keywords_ms 字符串必须引用 parameters 中的数字参数。");
+  }
+  if (typeof delay === "number" && (delay < 0 || delay > BROWSER_TOOL_LIMITS.maxBatchDelayMs)) {
     throw new Error("batch.delay_between_keywords_ms 超出范围。");
   }
 
@@ -582,10 +603,124 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
         if (outcome !== "success" && outcome !== "already_done") throw new Error("finish.outcome 无效。");
         return { action, outcome, message: validateUiText(readString(step.message, `${path}.message`), `${path}.message`, 300) };
       }
+      case "graphql_fetch": {
+        const operation = readString(step.operation, `${path}.operation`);
+        if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(operation)) throw new Error(`${path}.operation 无效。`);
+        const queryId = readOptionalString(step.query_id, `${path}.query_id`);
+        if (queryId !== undefined && !/^[A-Za-z0-9_-]{3,80}$/.test(queryId)) throw new Error(`${path}.query_id 无效。`);
+        const maxPages = typeof step.max_pages === "string"
+          ? readString(step.max_pages, `${path}.max_pages`)
+          : readOptionalNumber(step.max_pages, `${path}.max_pages`);
+        if (typeof maxPages === "string" && !/\{\{\s*(parameters|values)\.[a-zA-Z0-9_-]+\s*\}\}/.test(maxPages)) {
+          throw new Error(`${path}.max_pages 字符串必须引用参数或存储值。`);
+        }
+        if (typeof maxPages === "number" && (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 20)) {
+          throw new Error(`${path}.max_pages 必须是 1-20 的整数。`);
+        }
+        const pageDelay = readOptionalNumber(step.page_delay_ms, `${path}.page_delay_ms`);
+        if (pageDelay !== undefined && (pageDelay < 0 || pageDelay > BROWSER_TOOL_LIMITS.maxWaitMs)) {
+          throw new Error(`${path}.page_delay_ms 超出范围。`);
+        }
+        const variables = step.variables === undefined ? undefined : validateGraphqlValueMap(step.variables, `${path}.variables`);
+        const features = step.features === undefined ? undefined : validateGraphqlFlagMap(step.features, `${path}.features`);
+        const fieldToggles = step.field_toggles === undefined ? undefined : validateGraphqlFlagMap(step.field_toggles, `${path}.field_toggles`);
+        const store = step.store === undefined ? undefined : readStringMap(step.store, `${path}.store`);
+
+        let extract: BrowserToolGraphqlFetchStep["extract"];
+        if (step.extract !== undefined) {
+          const source = asRecord(step.extract, `${path}.extract`);
+          const collection = readString(source.collection, `${path}.extract.collection`);
+          if (!COLLECTION_PATTERN.test(collection)) throw new Error(`${path}.extract.collection 无效。`);
+          const walk = source.walk === undefined ? undefined : asRecord(source.walk, `${path}.extract.walk`);
+          const walkHas = walk === undefined ? undefined : readString(walk.has, `${path}.extract.walk.has`);
+          const fieldsSource = asRecord(source.fields, `${path}.extract.fields`);
+          const fields: Record<string, BrowserToolGraphqlFieldDefinition> = {};
+          for (const [fieldName, rawField] of Object.entries(fieldsSource)) {
+            if (!COLLECTION_PATTERN.test(fieldName)) throw new Error(`${path}.extract.fields.${fieldName} 名称无效。`);
+            const field = asRecord(rawField, `${path}.extract.fields.${fieldName}`);
+            const fieldPath = readString(field.path, `${path}.extract.fields.${fieldName}.path`);
+            if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(fieldPath)) throw new Error(`${path}.extract.fields.${fieldName}.path 无效。`);
+            const fallbackPaths = field.fallback_paths === undefined ? undefined : readStringArray(field.fallback_paths, `${path}.extract.fields.${fieldName}.fallback_paths`);
+            fallbackPaths?.forEach((fallback) => {
+              if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(fallback)) throw new Error(`${path}.extract.fields.${fieldName}.fallback_paths 含无效路径。`);
+            });
+            const itemPath = field.item_path === undefined ? undefined : readString(field.item_path, `${path}.extract.fields.${fieldName}.item_path`);
+            const transforms = field.transforms === undefined ? undefined : readStringArray(field.transforms, `${path}.extract.fields.${fieldName}.transforms`);
+            transforms?.forEach((transform) => {
+              if (!TRANSFORMS.has(transform as BrowserToolTransform)) throw new Error(`未知转换：${transform}`);
+            });
+            fields[fieldName] = {
+              path: fieldPath,
+              fallback_paths: fallbackPaths,
+              item_path: itemPath,
+              transforms: transforms as BrowserToolTransform[] | undefined,
+              optional: readOptionalBoolean(field.optional, `${path}.extract.fields.${fieldName}.optional`)
+            };
+          }
+          if (Object.keys(fields).length === 0) throw new Error(`${path}.extract.fields 不能为空。`);
+          const dedupeBy = readOptionalString(source.dedupe_by, `${path}.extract.dedupe_by`);
+          if (dedupeBy && !(dedupeBy in fields)) throw new Error(`${path}.extract.dedupe_by 必须引用已声明字段。`);
+          extract = { collection, walk: walkHas ? { has: walkHas } : undefined, fields, dedupe_by: dedupeBy };
+        }
+
+        let cursor: BrowserToolGraphqlFetchStep["cursor"];
+        if (step.cursor !== undefined) {
+          const source = asRecord(step.cursor, `${path}.cursor`);
+          cursor = {
+            match_key: readString(source.match_key, `${path}.cursor.match_key`),
+            match_value: readString(source.match_value, `${path}.cursor.match_value`),
+            value_path: readString(source.value_path, `${path}.cursor.value_path`)
+          };
+        }
+
+        return {
+          action,
+          operation,
+          variables,
+          features,
+          field_toggles: fieldToggles,
+          store,
+          extract,
+          cursor,
+          max_pages: maxPages,
+          page_delay_ms: pageDelay,
+          query_id: queryId,
+          optional: readOptionalBoolean(step.optional, `${path}.optional`)
+        };
+      }
       default:
         throw new Error(`${path}.action 不支持：${action}`);
     }
   });
+}
+
+function validateGraphqlValueMap(value: unknown, path: string): Record<string, unknown> {
+  const source = asRecord(value, path);
+  const result: Record<string, unknown> = {};
+  for (const [name, raw] of Object.entries(source)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name)) throw new Error(`${path}.${name} 名称无效。`);
+    if (typeof raw === "string") {
+      if (raw.length > 2_000) throw new Error(`${path}.${name} 过长。`);
+      result[name] = readString(raw, `${path}.${name}`);
+    } else if (typeof raw === "number" || typeof raw === "boolean") {
+      result[name] = raw;
+    } else {
+      throw new Error(`${path}.${name} 只能是字符串、数字或布尔值。`);
+    }
+  }
+  return result;
+}
+
+function validateGraphqlFlagMap(value: unknown, path: string): Record<string, boolean> {
+  const source = asRecord(value, path);
+  const result: Record<string, boolean> = {};
+  for (const [name, raw] of Object.entries(source)) {
+    if (!/^[A-Za-z0-9_]{1,128}$/.test(name)) throw new Error(`${path}.${name} 名称无效。`);
+    if (typeof raw !== "boolean") throw new Error(`${path}.${name} 必须是布尔值。`);
+    result[name] = raw;
+  }
+  if (Object.keys(result).length > 120) throw new Error(`${path} 键过多。`);
+  return result;
 }
 
 function validateLimits(value: unknown): BrowserToolDefinition["limits"] {

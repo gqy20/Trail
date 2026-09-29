@@ -19,6 +19,11 @@ function applyTransform(value: unknown, transform: BrowserToolTransform): unknow
       const match = normalized.match(/-?\d+(?:\.\d+)?/);
       return match ? Number(match[0]) : undefined;
     }
+    case "parse_date": {
+      if (typeof value !== "string" && typeof value !== "number") return value;
+      const time = typeof value === "number" ? value : Date.parse(value.trim());
+      return Number.isFinite(time) ? new Date(time).toISOString() : value;
+    }
     case "split_authors":
       return typeof value === "string"
         ? value

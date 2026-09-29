@@ -18,6 +18,17 @@ type RuntimeResponseMap = {
   CONFIGURE_CHECKIN: import("../checkin/types").CheckinState;
   RUN_CHECKIN: import("../checkin/types").CheckinState;
   OPEN_CHECKIN_PAGE: undefined;
+  GET_FEED_STATE: import("../publisher/types").FeedPublisherSnapshot;
+  SAVE_FEED_CONFIG: import("../publisher/types").FeedPublisherSnapshot;
+  STAGE_FEED_POSTS: { staged: number };
+  PUBLISH_FEED: import("../publisher/types").FeedPublishResult;
+  PROBE_FEED_REPO: import("../publisher/types").FeedRepoProbe;
+  BROWSER_TOOL_GRAPHQL_RESOLVE: { queryId: string | null };
+  BROWSER_TOOL_GRAPHQL_FETCH: { status: number; json: unknown };
+  GET_BATCH_RUN_STATE: import("../background/runControl").BatchRunState | null;
+  PAUSE_BATCH_RUN: { requested: boolean };
+  RESUME_BATCH_RUN: BrowserToolRunResult;
+  STOP_BATCH_RUN: { requested: boolean; finalized: boolean };
   GET_POPUP_STATE: PopupState;
   GET_INTERACTION_SETTINGS: TrailInteractionSettings;
   UPDATE_INTERACTION_SETTINGS: TrailInteractionSettings;

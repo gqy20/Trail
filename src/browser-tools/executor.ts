@@ -3,13 +3,16 @@ import type {
   BrowserToolExecutionProgressEvent,
   BrowserToolExtractStep,
   BrowserToolFieldDefinition,
+  BrowserToolGraphqlFetchStep,
   BrowserToolRunResult,
   BrowserToolStep
 } from "./contracts";
+import { extractGraphqlCursor, extractGraphqlRecords, readJsonPath } from "./graphql";
 import { BROWSER_TOOL_LIMITS } from "./limits";
 import { matchesBrowserTool } from "./matcher";
 import { resolveParameters, resolveTemplate } from "./template";
 import { applyBrowserToolTransforms } from "./transforms";
+import { sendMessage } from "../shared/runtime";
 
 type ExecutionSignal = "continue" | "stop_repeat" | "pause" | "finish";
 
@@ -18,6 +21,7 @@ type ExecutionContext = {
   message?: string;
   definition: BrowserToolDefinition;
   parameters: Record<string, unknown>;
+  values: Record<string, unknown>;
   data: Record<string, Array<Record<string, unknown>>>;
   warnings: string[];
   fingerprints: Map<string, string>;
@@ -37,6 +41,7 @@ export async function executeBrowserTool(
   const context: ExecutionContext = {
     definition,
     parameters: {},
+    values: {},
     data: {},
     warnings: [],
     fingerprints: new Map(),
@@ -186,6 +191,8 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
     }
     case "extract":
       return extractCollection(step, context) ? "continue" : insideRepeat ? "stop_repeat" : "continue";
+    case "graphql_fetch":
+      return executeGraphqlFetchStep(step, context);
     case "repeat": {
       const requestedMax = typeof step.max === "number" ? step.max : Number(resolve(step.max, context));
       if (!Number.isInteger(requestedMax) || requestedMax < 1) throw new Error("repeat.max 运行时参数必须是正整数。");
@@ -336,7 +343,101 @@ function queryElement(selector: string): Element {
 }
 
 function resolve(value: string, context: ExecutionContext): string {
-  return resolveTemplate(value, context.definition, context.parameters);
+  return resolveTemplate(value, context.definition, context.parameters, context.values);
+}
+
+const GRAPHQL_MAX_PAGES = 20;
+const graphqlQueryIdCache = new Map<string, string>();
+
+/** 在已登录的 x.com 页面上下文中调用内部 GraphQL 接口并提取结构化数据。 */
+async function executeGraphqlFetchStep(step: BrowserToolGraphqlFetchStep, context: ExecutionContext): Promise<ExecutionSignal> {
+  const host = location.hostname.toLowerCase();
+  if (host !== "x.com" && host !== "twitter.com" && !host.endsWith(".x.com")) {
+    throw new Error(`graphql_fetch 需要 x.com 页面上下文（当前：${host}）。`);
+  }
+  if (!/(?:^|;\s*)ct0=/.test(document.cookie)) {
+    throw new Error("页面缺少 x.com 登录态（ct0），请先登录后重试。");
+  }
+
+  const queryId = await resolveGraphqlQueryId(host, step);
+  const requestedMax = typeof step.max_pages === "number"
+    ? step.max_pages
+    : step.max_pages !== undefined ? Number(resolve(String(step.max_pages), context)) : 1;
+  if (!Number.isInteger(requestedMax) || requestedMax < 1) throw new Error("graphql_fetch.max_pages 必须是正整数。");
+  const maxPages = Math.min(requestedMax, GRAPHQL_MAX_PAGES);
+
+  let cursor: string | null = null;
+  for (let page = 0; page < maxPages; page += 1) {
+    if (page > 0 && step.page_delay_ms) await sleep(step.page_delay_ms);
+    const variables: Record<string, unknown> = {};
+    for (const [name, value] of Object.entries(step.variables || {})) {
+      variables[name] = typeof value === "string" ? resolve(value, context) : value;
+    }
+    if (step.cursor && cursor) variables.cursor = cursor;
+
+    const payload = await sendMessage({
+      type: "BROWSER_TOOL_GRAPHQL_FETCH",
+      operation: step.operation,
+      query_id: queryId,
+      variables,
+      features: step.features,
+      field_toggles: step.field_toggles
+    });
+    if (!payload || typeof payload.json !== "object" || payload.json === null) {
+      throw new Error(`GraphQL ${step.operation} 没有返回 JSON 数据。`);
+    }
+
+    for (const [name, path] of Object.entries(step.store || {})) {
+      const value = readJsonPath(payload.json, resolve(path, context));
+      if (value === undefined) throw new Error(`未从 ${step.operation} 响应读取到 ${name}（账号可能不存在、改名或被冻结）。`);
+      context.values[name] = value;
+    }
+
+    if (step.extract) collectGraphqlRecords(step, payload.json, context);
+    const nextCursor = step.cursor ? extractGraphqlCursor(payload.json, step.cursor) : null;
+    if (!nextCursor || nextCursor === cursor) break;
+    cursor = nextCursor;
+  }
+  return "continue";
+}
+
+async function resolveGraphqlQueryId(host: string, step: BrowserToolGraphqlFetchStep): Promise<string> {
+  const cacheKey = `${host}:${step.operation}`;
+  const cached = graphqlQueryIdCache.get(cacheKey);
+  if (cached) return cached;
+  const resolved = await sendMessage({ type: "BROWSER_TOOL_GRAPHQL_RESOLVE", operation: step.operation });
+  const queryId = resolved?.queryId || step.query_id || "";
+  if (!/^[A-Za-z0-9_-]{3,80}$/.test(queryId)) {
+    throw new Error(`无法解析 ${step.operation} 的 queryId，页面 bundle 扫描失败且工具未提供兜底值。`);
+  }
+  graphqlQueryIdCache.set(cacheKey, queryId);
+  return queryId;
+}
+
+function collectGraphqlRecords(step: BrowserToolGraphqlFetchStep, payload: unknown, context: ExecutionContext): void {
+  const spec = step.extract!;
+  const collection = (context.data[spec.collection] ||= []);
+  const seenIdentities = context.recordIdentities.get(spec.collection) || new Set<string>();
+  context.recordIdentities.set(spec.collection, seenIdentities);
+  const seenFingerprints = context.recordFingerprints.get(spec.collection) || new Set<string>();
+  context.recordFingerprints.set(spec.collection, seenFingerprints);
+
+  for (const record of extractGraphqlRecords(payload, spec)) {
+    if (totalRecordCount(context.data) >= context.maxRecords) {
+      if (!context.warnings.includes("已达到工具的最大记录数。")) context.warnings.push("已达到工具的最大记录数。");
+      return;
+    }
+    if (spec.dedupe_by) {
+      const identity = JSON.stringify(record[spec.dedupe_by]);
+      if (seenIdentities.has(identity)) continue;
+      seenIdentities.add(identity);
+    } else {
+      const fingerprint = JSON.stringify(record);
+      if (seenFingerprints.has(fingerprint)) continue;
+      seenFingerprints.add(fingerprint);
+    }
+    collection.push(record);
+  }
 }
 
 function findMatchingElement(condition: { selector: string; visible?: boolean; text?: string }): Element | undefined {

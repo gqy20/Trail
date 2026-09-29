@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/noto-sans-sc/wght.css";
-import { Download, ExternalLink, FileJson, FileUp, History, Play, Plus, RefreshCw, Settings2, Trash2, Wrench, X } from "lucide-react";
+import { Download, ExternalLink, FileJson, FileUp, History, Pause, Play, Plus, RefreshCw, Rss, Settings2, Square, Trash2, Wrench, X } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
 import { formatDateTime } from "../../shared/time";
 import { LiteratureQueueView } from "./LiteratureQueue";
 import { CheckinsView } from "./Checkins";
+import { FeedPublisherView } from "./FeedPublisher";
+import { describeBatchRun, type BatchRunState } from "../../background/runControl";
 import { TRAIL_VERSION } from "../../shared/version";
 import type {
   BrowserToolManagerState,
@@ -41,10 +43,11 @@ function BrowserToolsApp() {
   const [nativeExportLimit, setNativeExportLimit] = useState(1000);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
-  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "history" | "settings" | "checkins">("collect");
+  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "history" | "settings" | "checkins" | "feed">("collect");
   const [error, setError] = useState("");
   const [catalogNotice, setCatalogNotice] = useState("");
   const [executionProgress, setExecutionProgress] = useState<Record<string, BrowserToolExecutionProgress>>({});
+  const [batchRun, setBatchRun] = useState<BatchRunState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keywordFileInputRef = useRef<HTMLInputElement>(null);
   const targetTabId = useMemo(() => readTargetTabId(), []);
@@ -73,7 +76,7 @@ function BrowserToolsApp() {
   const nativeExportDefinition = selectedTool?.definition.native_exports?.[0];
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
   const toolUi = resolveToolUi(selectedTool?.definition);
-  const pageTitle = activeView === "checkins" ? "每日签到" : toolUi.title;
+  const pageTitle = activeView === "checkins" ? "每日签到" : activeView === "feed" ? "订阅源发布" : toolUi.title;
   const directBatchKeywords = useMemo(
     () => parseBatchInput(keywordDraft, selectedTool?.definition.presentation?.batch_input?.csv_headers),
     [keywordDraft, selectedTool?.updatedAt]
@@ -201,6 +204,19 @@ function BrowserToolsApp() {
     finally { setBusy(false); }
   }
 
+  useEffect(() => {
+    let alive = true;
+    const load = () => void sendMessage({ type: "GET_BATCH_RUN_STATE" }).then((next) => {
+      if (alive) setBatchRun(next);
+    }).catch(() => undefined);
+    load();
+    const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === "session" && changes["trail.browserToolBatchRun.v1"]) load();
+    };
+    chrome.storage.onChanged.addListener(changed);
+    return () => { alive = false; chrome.storage.onChanged.removeListener(changed); };
+  }, []);
+
   async function runBatch() {
     if (!selectedTool?.definition.batch || !state?.targetTab || batchKeywords.length === 0 || composerIncomplete || batchTooLarge) return;
     setBusy(true);
@@ -230,6 +246,48 @@ function BrowserToolsApp() {
       setBusy(false);
       setBusyAction(undefined);
       setExecutionProgress({});
+    }
+  }
+
+  /** 继续已暂停的批量运行：结果与正常批量一致处理。 */
+  async function resumeBatch() {
+    if (!state?.targetTab) { setError("继续运行需要先打开一个匹配工具域名的网页标签页。"); return; }
+    setBusy(true);
+    setBusyAction("batch");
+    setExecutionProgress({});
+    setError("");
+    setLastResult(undefined);
+    try {
+      const result = await sendMessage({ type: "RESUME_BATCH_RUN", tabId: state.targetTab.id, userInitiated: true });
+      setLastResult(result);
+      setActiveView("results");
+      if (autoExportCsv) exportRunCsv(result);
+      await refresh();
+    } catch (err) {
+      setError(toErrorMessage(err));
+    } finally {
+      setBusy(false);
+      setBusyAction(undefined);
+      setExecutionProgress({});
+    }
+  }
+
+  async function pauseBatch() {
+    try {
+      await sendMessage({ type: "PAUSE_BATCH_RUN" });
+      setBatchRun(await sendMessage({ type: "GET_BATCH_RUN_STATE" }));
+    } catch (err) {
+      setError(toErrorMessage(err));
+    }
+  }
+
+  async function stopBatch() {
+    if (!window.confirm("停止批量运行？已完成输入的记录会保留并进入结果。")) return;
+    try {
+      await sendMessage({ type: "STOP_BATCH_RUN" });
+      setBatchRun(await sendMessage({ type: "GET_BATCH_RUN_STATE" }));
+    } catch (err) {
+      setError(toErrorMessage(err));
     }
   }
 
@@ -266,6 +324,7 @@ function BrowserToolsApp() {
           </div>
           <nav className="tools-nav" aria-label={`${toolUi.title}导航`}>
             <button className={activeView === "checkins" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("checkins")}>签到</button>
+            <button className={activeView === "feed" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("feed")}>订阅源</button>
             <button className={activeView === "collect" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collect")}>运行</button>
             {lastResult ? <button className={activeView === "results" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("results")}>结果</button> : null}
             <button className={activeView === "queue" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("queue")}>
@@ -394,6 +453,16 @@ function BrowserToolsApp() {
                   </section>
                 ) : null}
 
+                {batchRun && (batchRun.status === "running" || batchRun.status === "paused") ? (
+                  <BatchRunControlBar
+                    run={batchRun}
+                    busy={busy || busyAction !== undefined}
+                    onPause={() => void pauseBatch()}
+                    onResume={() => void resumeBatch()}
+                    onStop={() => void stopBatch()}
+                  />
+                ) : null}
+
                 {busyAction === "batch" && Object.keys(executionProgress).length > 0 ? (
                   <ExecutionProgressPanel progress={executionProgress} />
                 ) : null}
@@ -435,6 +504,7 @@ function BrowserToolsApp() {
 
         {activeView === "queue" ? <LiteratureQueueView /> : null}
         {activeView === "checkins" ? <CheckinsView /> : null}
+        {activeView === "feed" ? <FeedPublisherView /> : null}
 
         {activeView === "history" ? (
           <section className="history-view stack">
@@ -534,6 +604,35 @@ function BrowserToolsApp() {
       </div>
     </main>
   );
+}
+
+function BatchRunControlBar({ run, busy, onPause, onResume, onStop }: {
+  run: BatchRunState;
+  busy: boolean;
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+}) {
+  const total = run.keywords.length;
+  const done = run.completedKeywords;
+  const records = Object.values(run.data).reduce((sum, list) => sum + list.length, 0);
+  const paused = run.status === "paused";
+  return <div className="panel batch-run-bar stack">
+    <div className="batch-run-summary">
+      <span className={`mini-badge run-${paused ? "paused" : "running"}`}>{paused ? "已暂停" : "运行中"}</span>
+      <span className="muted text-small">{describeBatchRun(run)}</span>
+    </div>
+    <div className="batch-run-progress" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+      <span style={{ width: `${total > 0 ? Math.round((done / total) * 100) : 0}%` }} />
+    </div>
+    <div className="batch-run-actions">
+      {paused
+        ? <button className="button primary" disabled={busy} onClick={onResume}><Play size={15} />继续（剩余 {total - done} 个）</button>
+        : <button className="button secondary" disabled={busy} onClick={onPause}><Pause size={15} />暂停</button>}
+      <button className="button secondary" disabled={busy} onClick={onStop}><Square size={15} />停止</button>
+    </div>
+    <p className="muted text-small">{records} 条记录已入运行状态；暂停在当前输入完成后生效，关闭浏览器会话后运行状态清空。</p>
+  </div>;
 }
 
 function ExecutionProgressPanel({ progress }: { progress: Record<string, BrowserToolExecutionProgress> }) {

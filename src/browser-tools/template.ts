@@ -1,16 +1,18 @@
 import type { BrowserToolDefinition } from "./contracts";
 
-const TEMPLATE_PATTERN = /\{\{\s*(parameters|selectors)\.([a-zA-Z0-9_-]+)\s*\}\}|\$\{(parameters|selectors)\.([a-zA-Z0-9_-]+)\}/g;
+const TEMPLATE_PATTERN = /\{\{\s*(parameters|selectors|values)\.([a-zA-Z0-9_-]+)\s*\}\}/g;
 
 export function resolveTemplate(
   value: string,
   definition: BrowserToolDefinition,
-  parameters: Record<string, unknown>
+  parameters: Record<string, unknown>,
+  values?: Record<string, unknown>
 ): string {
-  const rendered = value.replace(TEMPLATE_PATTERN, (_match, firstScope, firstName, secondScope, secondName) => {
-    const scope = (firstScope || secondScope) as "parameters" | "selectors";
-    const name = (firstName || secondName) as string;
-    const resolved = scope === "parameters" ? parameters[name] : definition.selectors?.[name];
+  const rendered = value.replace(TEMPLATE_PATTERN, (_match, scope: string, name: string) => {
+    let resolved: unknown;
+    if (scope === "parameters") resolved = parameters[name];
+    else if (scope === "selectors") resolved = definition.selectors?.[name];
+    else resolved = values?.[name];
     if (resolved === undefined || resolved === null) throw new Error(`模板变量不存在：${scope}.${name}`);
     return String(resolved);
   });

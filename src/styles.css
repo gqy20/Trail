@@ -2640,3 +2640,26 @@ button.session-card:hover {
 .checkin-schedule label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .checkin-time input { font: inherit; padding: 5px; border: 1px solid #d7d7d7; border-radius: 6px; background: transparent; color: inherit; }
 .checkin-domain { overflow-wrap: anywhere; }
+
+/* 订阅源发布 */
+.feed-view { align-content: start; }
+.feed-view > p { margin: 0; }
+.feed-view .view-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.feed-view .panel p { margin: 0; }
+.feed-view .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.feed-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.feed-config-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--trail-muted); min-width: 0; }
+.feed-config-grid label.feed-config-wide { grid-column: 1 / -1; }
+.feed-config-grid input { font: inherit; font-size: 13px; color: inherit; padding: 6px 8px; border: 1px solid #d7d7d7; border-radius: 6px; background: transparent; width: 100%; }
+.feed-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.feed-actions .button { display: inline-flex; align-items: center; gap: 6px; }
+
+/* 批量运行控制 */
+.batch-run-bar { gap: 10px; }
+.batch-run-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.batch-run-progress { height: 6px; border-radius: 999px; background: rgba(127,127,127,.25); overflow: hidden; }
+.batch-run-progress span { display: block; height: 100%; background: var(--trail-accent, #4c6ef5); transition: width 300ms ease; }
+.batch-run-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.batch-run-actions .button { display: inline-flex; align-items: center; gap: 6px; }
+.batch-run-bar p { margin: 0; }
+.feed-config-grid label.feed-config-toggle { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: inherit; }

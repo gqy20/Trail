@@ -88,7 +88,20 @@ Chrome 运行时每 5 分钟检查到期任务，浏览器启动后会补跑当�
 
 自动运行只接受用户开启时的工具版本；YAML 改变后会暂停并要求重新开启。网络加载失败最多每天尝试 3 次，间隔至少 30 分钟。登录、验证码、返回结果不明或后台中断时保留工作页面，点击“打开网站”处理后重试。成功后只关闭本次创建的工作标签页。
 
-验证命令：`npx playwright install chromium`（首次安装浏览器），然后 `npm run test:checkin`。测试使用隔离扩展配置及页面夹具，不使用真实账户；可通过 `TRAIL_TEST_CHROMIUM` 指定已有 Chromium 可执行文件。
+验证命令：`pnpm exec playwright install chromium`（首次安装浏览器），然后 `pnpm run test:checkin`。测试使用隔离扩展配置及页面夹具，不使用真实账户；可通过 `TRAIL_TEST_CHROMIUM` 指定已有 Chromium 可执行文件。
+
+## 订阅源发布
+
+Side Panel 的“订阅源”页把采集结果发布到一个独立的 GitHub 静态仓库（feed），由 GitHub Pages 分发，不需要本地服务端：
+
+1. 新建一个 feed 仓库（骨架见仓库内 README），在 GitHub 仓库设置中开启 Pages（分支即内容源）。
+2. 创建 fine-grained token，只授予该仓库 Contents 读写权限。
+3. 在“订阅源”页填写 owner、仓库名、分支和 token，保存后可“测试连接”。
+4. 声明了 `feed` 段的采集工具（如内置的“X 用户时间线采集”）在运行成功后会把记录自动暂存；“立即发布”把暂存记录合并到远端 `data/posts.json`（按 `平台:内容id` UPSERT、按配置封顶裁剪），并重写 `rss/all.xml`、各账号 RSS 和时间线页。
+
+订阅地址形如 `https://<owner>.github.io/<repo>/rss/all.xml`。发布失败时暂存保留、错误写入状态，下一轮重试；token 只保存在本机 `chrome.storage.local`，发布目标由设置配置，工具 YAML 接触不到。X 采集依赖扩展获得 x.com 的 host 权限（用于在页面主世界调用站点自身接口），首次更新安装时会重新请求授权。
+
+订阅源页还提供两个开关：**采集成功后自动发布**（每轮采集暂存后立即推送，无需手动点“立即发布”，发布失败只记状态不影响采集）和**订阅源不收录转推/转发**。采集节奏在工具运行页以句子式参数暴露，如“每个用户读取 30 条推文”“用户间隔 3000 毫秒”，均可在界面上直接调整。
 
 ## 当前边界
 
@@ -100,15 +113,17 @@ Chrome 运行时每 5 分钟检查到期任务，浏览器启动后会补跑当�
 ## 本地开发
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
+
+运行 `pnpm run knip` 检查未使用的文件、依赖和导出。`knip.json` 显式声明扩展的后台、content script 和页面入口；报告需要结合实际调用方式审阅，不自动删除代码。此命令独立于现有构建检查，发现问题时返回非零退出码。
 
 构建完成后，在 Chrome 扩展管理页打开“开发者模式”，选择“加载已解压的扩展程序”，加载生成的 `dist/` 目录。
 
 测试交互捕获时，需要刷新扩展和目标网页：
 
-1. 运行 `npm run build`。
+1. 运行 `pnpm run build`。
 2. 在 `chrome://extensions` 中重新加载 Trail。
 3. 刷新需要测试的网页，让 `content.js` 重新注入。
 4. 点击 Trail popup 中的“开始记录”。
@@ -127,7 +142,7 @@ git push origin v0.1.0
 产品发布版本以 `package.json` 为唯一来源，扩展清单、锁文件、设置页和发布包保持一致。更新版本使用：
 
 ```bash
-npm version minor --no-git-tag-version
+pnpm version minor --no-git-tag-version
 ```
 
 该命令更新 package/锁文件，并自动同步扩展清单；随后补充对应的更新日志。每次构建都会检查以下版本号，防止代码更新而扩展版本不变：
@@ -160,5 +175,5 @@ chore(scope): message
 安装本地 Git hooks 后，会在提交前运行项目检查，并在提交时校验 commit message：
 
 ```bash
-npm run install-hooks
+pnpm run install-hooks
 ```
