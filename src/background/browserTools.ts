@@ -115,6 +115,35 @@ export async function runStoredBrowserToolBatch(input: {
   if (tab.id === undefined || !tab.url) throw new Error("没有找到可运行批量检索的网页标签页。");
   if (!matchesBrowserTool(definition, tab.url)) throw new Error(`工具 ${definition.id} 不适用于当前页面。`);
 
+  return startBatchRun(definition, keywords, input.parameters, tab.id, input.nativeExport);
+}
+
+/** 调度器专用入口：用户开启定时采集时已锁定规则版本，不再要求 userInitiated。 */
+export async function executeAuthorizedCollectorBatch(
+  toolId: string,
+  keywords: string[],
+  tabId: number
+): Promise<BrowserToolRunResult> {
+  const tool = await getStoredBrowserTool(toolId);
+  if (!tool) throw new Error(`没有找到 Browser Tool：${toolId}`);
+  const definition = parseBrowserToolYaml(tool.yaml);
+  if (!definition.feed || !definition.batch) throw new Error("此工具未声明采集能力。");
+  const normalized = normalizeKeywords(keywords);
+  const maxKeywords = definition.batch.max_keywords || 25;
+  if (normalized.length === 0) throw new Error("关注列表为空。");
+  if (normalized.length > maxKeywords) throw new Error(`关注账号超过工具上限 ${maxKeywords}。`);
+  const tab = await chrome.tabs.get(tabId);
+  if (!tab.url || !matchesBrowserTool(definition, tab.url)) throw new Error("采集标签页不匹配工具域名。");
+  return startBatchRun(definition, normalized, {}, tabId);
+}
+
+async function startBatchRun(
+  definition: ReturnType<typeof parseBrowserToolYaml>,
+  keywords: string[],
+  parameters: Record<string, unknown>,
+  tabId: number,
+  nativeExport?: { definitionId: string; maxRecords: number }
+): Promise<BrowserToolRunResult> {
   await clearBatchRunState();
   clearControlRequest();
   const state: BatchRunState = {
@@ -124,17 +153,17 @@ export async function runStoredBrowserToolBatch(input: {
     keywords,
     nextIndex: 0,
     completedKeywords: 0,
-    parameters: input.parameters,
-    tabId: tab.id,
+    parameters,
+    tabId,
     status: "running",
     startedAt: Date.now(),
     updatedAt: Date.now(),
-    lastPageUrl: tab.url,
-    lastPageTitle: tab.title || tab.url,
+    lastPageUrl: "",
+    lastPageTitle: definition.name,
     data: {}
   };
   await saveBatchRunState(state);
-  return continueBatchRun(definition, state, tab.id, input.nativeExport);
+  return continueBatchRun(definition, state, tabId, nativeExport);
 }
 
 /** 从暂停状态恢复批量运行；由 Trail 界面的“继续”触发。 */

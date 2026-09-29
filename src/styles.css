@@ -2698,3 +2698,20 @@ code, pre, kbd, samp, .code-textarea {
   .checkin-controls { flex-direction: column; align-items: stretch; }
   .checkin-actions { justify-content: flex-end; }
 }
+
+/* 定时采集面板 */
+.collector-panel { gap: 10px; }
+.collector-panel .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.collector-interval { width: 56px; padding: 3px 6px; font: inherit; border: 1px solid #d7d7d7; border-radius: 8px; background: transparent; color: inherit; text-align: center; }
+.collector-follows { display: grid; gap: 8px; }
+.collector-follows-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.collector-follows-actions { display: flex; gap: 8px; }
+.collector-follows-actions .button { display: inline-flex; align-items: center; gap: 5px; }
+.collector-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 132px; overflow-y: auto; }
+.collector-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 4px 2px 8px; border-radius: 999px; background: var(--trail-surface-muted); }
+.collector-chip button { display: inline-flex; padding: 2px; border-radius: 999px; color: var(--trail-muted); background: transparent; }
+.collector-chip button:hover { color: var(--trail-danger, #cf222e); }
+.collector-add { display: flex; gap: 8px; }
+.collector-add .input { flex: 1; }
+.collector-add .button { display: inline-flex; align-items: center; gap: 5px; }
+.collector-panel > p { margin: 0; }

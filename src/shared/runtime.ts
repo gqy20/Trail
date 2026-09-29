@@ -32,6 +32,14 @@ type RuntimeResponseMap = {
   CLEAR_STAGED_FEED: { cleared: number };
   GET_TRAIL_LOGS: import("../logging/logger").LogEntry[];
   CLEAR_TRAIL_LOGS: { cleared: number };
+  GET_COLLECTOR_STATE: import("../collector/types").CollectorState;
+  CONFIGURE_COLLECTOR: import("../collector/types").CollectorState;
+  RUN_COLLECTOR_NOW: import("../collector/types").CollectorState;
+  OPEN_COLLECTOR_PAGE: undefined;
+  GET_FOLLOWS: import("../collector/types").FollowEntry[];
+  ADD_FOLLOW: import("../collector/types").FollowEntry[];
+  REMOVE_FOLLOW: import("../collector/types").FollowEntry[];
+  IMPORT_FOLLOWS: import("../collector/types").FollowsImportResult;
   GET_POPUP_STATE: PopupState;
   GET_INTERACTION_SETTINGS: TrailInteractionSettings;
   UPDATE_INTERACTION_SETTINGS: TrailInteractionSettings;

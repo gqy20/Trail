@@ -11,6 +11,7 @@ import { LiteratureQueueView } from "./LiteratureQueue";
 import { CheckinsView } from "./Checkins";
 import { FeedPublisherView } from "./FeedPublisher";
 import { LogsView } from "./LogsView";
+import { CollectorPanel } from "./CollectorPanel";
 import { describeBatchRun, type BatchRunState } from "../../background/runControl";
 import { TRAIL_VERSION } from "../../shared/version";
 import type {
@@ -419,6 +420,10 @@ function BrowserToolsApp() {
                       {batchTooLarge ? <span className="error-text">请减少 {batchInputCount - batchLimit} 个</span> : null}
                     </div>
                   </section>
+                ) : null}
+
+                {selectedTool.definition.feed ? (
+                  <CollectorPanel toolId={selectedTool.id} platform={selectedTool.definition.feed.platform} name={selectedTool.definition.name} />
                 ) : null}
 
                 {hasPrimaryParameters || selectedTool.definition.batch ? (

@@ -73,7 +73,16 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     if (!COLLECTION_PATTERN.test(collection)) throw new Error("feed.collection 无效。");
     const platform = readString(source.platform, "feed.platform");
     if (!/^[a-z][a-z0-9_-]{0,31}$/.test(platform)) throw new Error("feed.platform 无效。");
-    feed = { collection, platform };
+    let entryUrl: string | undefined;
+    if (source.entry_url !== undefined) {
+      entryUrl = readString(source.entry_url, "feed.entry_url");
+      const url = new URL(entryUrl);
+      if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new Error("feed.entry_url 必须是无凭证的 HTTPS URL。");
+      if (!matchesBrowserTool({ match: { domains, urls: match.urls as string[] | undefined } } as BrowserToolDefinition, entryUrl)) {
+        throw new Error("feed.entry_url 必须匹配工具的域名和 URL。");
+      }
+    }
+    feed = { collection, platform, entry_url: entryUrl };
   }
   const downloads = root.downloads === undefined ? undefined : validateDownloads(root.downloads);
   const nativeExports = root.native_exports === undefined ? undefined : validateNativeExports(root.native_exports);

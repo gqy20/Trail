@@ -33,12 +33,21 @@ import {
 import { downloadBrowserToolItems } from "./browserToolDownloads";
 import { downloadLiteratureQueue, pauseLiteratureDownload, resumeLiteratureDownload } from "./literatureDownloads";
 import { configureCheckin, getCheckinState, openCheckinPage, registerCheckins, runCheckin } from "./checkins";
+import {
+  configureCollector,
+  getCollectorState,
+  openCollectorPage,
+  registerCollectors,
+  runCollector
+} from "./collectors";
+import { addFollow, getFollows, importFollows, removeFollow } from "../collector/follows";
 import { getFeedState, probeFeedConnection, publishStagedFeed, saveFeedPublisherConfig, stagePosts, clearStagedFeed } from "./feed";
 import { fetchGraphqlPageForTab, resolveGraphqlQueryIdForTab } from "./graphqlBridge";
 import { clearLogEntries, getLogEntries } from "../logging/logger";
 import { restoreBundledBrowserTool } from "../browser-tools/bundled";
 
 registerCheckins();
+registerCollectors();
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecutionProgress | BrowserToolExecutionProgressEvent, sender, sendResponse) => {
   if (message.type === "BROWSER_TOOL_EXECUTION_PROGRESS") {
@@ -57,7 +66,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecu
 });
 
 async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
-  if (["RESTORE_BUNDLED_BROWSER_TOOL", "GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE", "GET_FEED_STATE", "SAVE_FEED_CONFIG", "STAGE_FEED_POSTS", "PUBLISH_FEED", "PROBE_FEED_REPO", "CLEAR_STAGED_FEED", "CLEAR_TRAIL_LOGS", "GET_BATCH_RUN_STATE", "PAUSE_BATCH_RUN", "RESUME_BATCH_RUN", "STOP_BATCH_RUN"].includes(message.type)) {
+  if (["RESTORE_BUNDLED_BROWSER_TOOL", "GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE", "GET_FEED_STATE", "SAVE_FEED_CONFIG", "STAGE_FEED_POSTS", "PUBLISH_FEED", "PROBE_FEED_REPO", "CLEAR_STAGED_FEED", "CLEAR_TRAIL_LOGS", "GET_COLLECTOR_STATE", "CONFIGURE_COLLECTOR", "RUN_COLLECTOR_NOW", "OPEN_COLLECTOR_PAGE", "ADD_FOLLOW", "REMOVE_FOLLOW", "IMPORT_FOLLOWS", "GET_BATCH_RUN_STATE", "PAUSE_BATCH_RUN", "RESUME_BATCH_RUN", "STOP_BATCH_RUN"].includes(message.type)) {
     const extensionUrl = chrome.runtime.getURL("");
     if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(extensionUrl)) throw new Error("此操作只能从 Trail 界面发起。");
   }
@@ -75,6 +84,14 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
     case "CLEAR_STAGED_FEED": return clearStagedFeed();
     case "GET_TRAIL_LOGS": return getLogEntries();
     case "CLEAR_TRAIL_LOGS": return clearTrailLogs();
+    case "GET_COLLECTOR_STATE": return getCollectorState();
+    case "CONFIGURE_COLLECTOR": return configureCollector(message.toolId, message.enabled, message.intervalHours);
+    case "RUN_COLLECTOR_NOW": return runCollector(message.toolId);
+    case "OPEN_COLLECTOR_PAGE": return openCollectorPage(message.toolId);
+    case "GET_FOLLOWS": return getFollows(message.platform);
+    case "ADD_FOLLOW": return addFollow({ platform: message.platform, handle: message.handle, displayName: message.displayName });
+    case "REMOVE_FOLLOW": return removeFollow(message.platform, message.handle);
+    case "IMPORT_FOLLOWS": return importFollows(message.platform, message.text);
     case "BROWSER_TOOL_GRAPHQL_RESOLVE": return resolveGraphqlQueryIdForTab(message, sender);
     case "BROWSER_TOOL_GRAPHQL_FETCH": return fetchGraphqlPageForTab(message, sender);
     case "GET_BATCH_RUN_STATE": return getBrowserToolBatchRunState();

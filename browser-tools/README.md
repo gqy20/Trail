@@ -78,7 +78,7 @@ batch:
 - `extract.walk.has` 递归遍历响应 JSON，命中节点按 `fields` 的相对点路径取值，支持 `fallback_paths`（长文优先、正文兜底）与 `item_path`（数组元素子路径，如媒体 URL）。
 - `cursor` 声明分页游标的匹配键与取值路径，`max_pages`（上限 20）与 `page_delay_ms` 控制节奏，遇到 429 会直接报错终止。
 
-工具可以声明 `feed: { collection: tweets, platform: twitter }`。声明后，成功或部分完成的运行会把该集合的记录自动收敛并暂存到订阅源（Trail 的"订阅源"页负责发布到 GitHub Pages 仓库）；失败或暂停的运行不暂存。实测规则位于 `twitter/timeline.yml`。
+工具可以声明 `feed: { collection: tweets, platform: twitter }`。声明后，成功或部分完成的运行会把该集合的记录自动收敛并暂存到订阅源（Trail 的"订阅源"页负责发布到 GitHub Pages 仓库）；失败或暂停的运行不暂存。补充 `feed.entry_url`（须为匹配工具域名的无凭证 HTTPS 地址，如 `https://x.com/home`）后，工具具备定时采集能力：运行页可管理关注账号（`trail.follows.v1`）并按间隔自动执行，规则版本锁定与重试语义与签到一致。实测规则位于 `twitter/timeline.yml`。
 
 `repeat` 可以声明可选的实时进度元数据。运行时会把当前循环、总循环数和已发现记录数发送到侧边栏：
 

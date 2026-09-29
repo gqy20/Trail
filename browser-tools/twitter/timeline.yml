@@ -8,6 +8,7 @@ match:
 feed:
   collection: tweets
   platform: twitter
+  entry_url: https://x.com/home
 parameters:
   username:
     type: string

@@ -275,7 +275,7 @@ export type BrowserToolDefinition = {
   workflow: BrowserToolStep[];
   presentation?: BrowserToolPresentation;
   /** 声明后，成功运行中该集合的记录会自动进入订阅源暂存。 */
-  feed?: { collection: string; platform: string };
+  feed?: { collection: string; platform: string; entry_url?: string };
   downloads?: BrowserToolDownloadDefinition[];
   native_exports?: BrowserToolNativeExportDefinition[];
   batch?: {

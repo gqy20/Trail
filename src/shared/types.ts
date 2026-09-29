@@ -7,6 +7,7 @@ import type {
   StoredBrowserTool
 } from "../browser-tools/contracts";
 import type { LiteratureDownloadItemInput } from "../literature-queue/types";
+import type { CollectorState, FollowEntry, FollowsImportResult } from "../collector/types";
 import type { FeedPublisherConfig, FeedPublisherSnapshot, FeedPublishResult, FeedRepoProbe } from "../publisher/types";
 
 export type TrailSource = "tab_group" | "window";
@@ -245,6 +246,14 @@ export type RuntimeMessage =
   | { type: "CLEAR_STAGED_FEED" }
   | { type: "GET_TRAIL_LOGS" }
   | { type: "CLEAR_TRAIL_LOGS" }
+  | { type: "GET_COLLECTOR_STATE" }
+  | { type: "CONFIGURE_COLLECTOR"; toolId: string; enabled: boolean; intervalHours: number }
+  | { type: "RUN_COLLECTOR_NOW"; toolId: string }
+  | { type: "OPEN_COLLECTOR_PAGE"; toolId: string }
+  | { type: "GET_FOLLOWS"; platform: string }
+  | { type: "ADD_FOLLOW"; platform: string; handle: string; displayName?: string }
+  | { type: "REMOVE_FOLLOW"; platform: string; handle: string }
+  | { type: "IMPORT_FOLLOWS"; platform: string; text: string }
   | { type: "GET_POPUP_STATE" }
   | { type: "GET_INTERACTION_SETTINGS" }
   | { type: "UPDATE_INTERACTION_SETTINGS"; settings: Partial<TrailInteractionSettings> }
