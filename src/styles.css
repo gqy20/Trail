@@ -2692,8 +2692,5 @@ code, pre, kbd, samp, .code-textarea {
 }
 .queue-status { display: inline-flex; align-items: center; justify-content: center; }
 
-/* 订阅源表单：三列对齐，数值与开关并排 */
-.feed-config-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.feed-config-inline { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 18px; }
-.feed-config-inline label { flex-direction: row; align-items: center; gap: 6px; }
-.feed-config-inline label:not(.feed-config-toggle) input[type="number"] { width: 84px; }
+/* 订阅源表单：身份三字段一行（三列子网格），数值/开关两列对齐 */
+.feed-config-identity { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
