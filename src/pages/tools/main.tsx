@@ -626,9 +626,12 @@ function BatchRunControlBar({ run, busy, onPause, onResume, onStop }: {
   const done = run.completedKeywords;
   const records = Object.values(run.data).reduce((sum, list) => sum + list.length, 0);
   const paused = run.status === "paused";
+  const pending = run.pendingControl;
   return <div className="panel batch-run-bar stack">
     <div className="batch-run-summary">
-      <span className={`mini-badge run-${paused ? "paused" : "running"}`}>{paused ? "已暂停" : "运行中"}</span>
+      <span className={`mini-badge run-${pending ? "paused" : paused ? "paused" : "running"}`}>
+        {pending === "stop" ? "停止中" : pending === "pause" ? "暂停中" : paused ? "已暂停" : "运行中"}
+      </span>
       <span className="muted text-small">{describeBatchRun(run)}</span>
     </div>
     <div className="batch-run-progress" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
@@ -637,10 +640,14 @@ function BatchRunControlBar({ run, busy, onPause, onResume, onStop }: {
     <div className="batch-run-actions">
       {paused
         ? <button className="button primary" title={`剩余 ${total - done} 个输入`} disabled={busy} onClick={onResume}><Play size={15} />继续</button>
-        : <button className="button secondary" onClick={onPause}><Pause size={15} />暂停</button>}
-      <button className="button secondary" onClick={onStop}><Square size={15} />停止</button>
+        : <button className="button secondary" disabled={pending !== undefined} onClick={onPause}><Pause size={15} />{pending === "pause" ? "暂停中…" : "暂停"}</button>}
+      <button className="button secondary" disabled={pending !== undefined} onClick={onStop}><Square size={15} />{pending === "stop" ? "停止中…" : "停止"}</button>
     </div>
-    <p className="muted text-small" title="关闭浏览器会话后运行状态清空">{records} 条已保存 · 暂停在当前输入完成后生效</p>
+    <p className="muted text-small" title="关闭浏览器会话后运行状态清空">
+      {pending
+        ? `${pending === "stop" ? "停止" : "暂停"}请求已受理，当前条目完成后生效（详情页间隔约 5–10 秒）`
+        : `${records} 条已保存 · 暂停在当前输入完成后生效`}
+    </p>
   </div>;
 }
 

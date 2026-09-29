@@ -30,6 +30,7 @@ import {
   consumeControlRequest,
   getBatchRunState,
   isTransientBatchError,
+  peekControlRequest,
   requestPauseBatchRun,
   requestStopBatchRun,
   saveBatchRunState,
@@ -210,7 +211,7 @@ export async function stopBrowserToolBatch(): Promise<{ requested: boolean; fina
   const tool = await getStoredBrowserTool(state.toolId);
   if (!tool) throw new Error(`没有找到 Browser Tool：${state.toolId}`);
   const definition = parseBrowserToolYaml(tool.yaml);
-  await finalizeBatchRun(definition, { ...state, status: "stopped" }, "partial", `已手动停止：完成 ${state.completedKeywords}/${state.keywords.length} 个输入。`);
+  await finalizeBatchRun(definition, { ...state, status: "stopped", pendingControl: undefined }, "partial", `已手动停止：完成 ${state.completedKeywords}/${state.keywords.length} 个输入。`);
   return { requested: true, finalized: true };
 }
 
@@ -244,15 +245,18 @@ async function continueBatchRun(
 
   try {
     while (state.nextIndex < state.keywords.length) {
+      const persisted = state.pendingControl;
       const control = consumeControlRequest();
-      if (control.stop) {
+      const stopRequested = control.stop || persisted === 'stop';
+      const pauseRequested = control.pause || persisted === 'pause';
+      if (stopRequested) {
         logInfo("batch", "batch.control", "收到停止请求，在当前输入边界收尾", { completed: state.completedKeywords, total: state.keywords.length });
-        return await finalizeBatchRun(definition, { ...state, status: "stopped" }, "partial",
+        return await finalizeBatchRun(definition, { ...state, status: "stopped", pendingControl: undefined }, "partial",
           `已手动停止：完成 ${state.completedKeywords}/${state.keywords.length} 个输入。`, warnings);
       }
-      if (control.pause) {
+      if (pauseRequested) {
         logInfo("batch", "batch.control", "收到暂停请求，在当前输入边界挂起", { completed: state.completedKeywords, total: state.keywords.length });
-        return await finalizeBatchRun(definition, { ...state, status: "paused" }, "paused",
+        return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined }, "paused",
           `已暂停：完成 ${state.completedKeywords}/${state.keywords.length} 个输入，可稍后继续。`, warnings);
       }
 
@@ -288,9 +292,9 @@ async function continueBatchRun(
           // 登录墙/验证码：保持游标不变，处理后可从该输入继续。
           logWarn("batch", "batch.paused", "需要人工处理，运行转暂停", { keyword, detail: result.error || "登录或验证码" });
           warnings.push(`[${keyword}] 需要人工处理：${result.error || "登录或验证码"}`);
-          const pausedState = { ...state, status: "paused" as const, updatedAt: Date.now(), lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
+          const pausedState = { ...state, status: "paused" as const, pendingControl: undefined, updatedAt: Date.now(), lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
           await saveBatchRunState(pausedState);
-          return await finalizeBatchRun(definition, pausedState, "paused",
+          return await finalizeBatchRun(definition, { ...pausedState, pendingControl: undefined }, "paused",
             `[${keyword}] 需要人工处理，运行已暂停；处理后点“继续”将从这个输入重试。`, warnings);
         }
 
@@ -722,7 +726,16 @@ async function enrichWithDetails(
     if (!current?.url || !current.url.startsWith(new URL(listUrl).origin)) {
       await navigateTab(tabId, listUrl).catch(() => undefined);
     }
+    // 用户已请求暂停/停止时提前结束补全，账号边界立即生效。
+    const peeked = peekControlRequest();
+    if (peeked.pause || peeked.stop) break;
     if (delay > 0 && enriched < maxItems) await sleep(delay);
+  }
+  if (enriched === 0 && records.length > 0) {
+    // 卡片全在但详情全失败：多半是登录墙/风控浮层拦截了点击，继续跑只是白跑。
+    const reason = "详情补全全部失败（页面可能要求登录或验证），已暂停；完成验证后点继续将从该账号重试。";
+    logWarn("detail", "detail.allFailed", "详情补全全部失败，运行转暂停", { toolId: definition.id, records: records.length });
+    return { ...result, status: "paused", error: reason, warnings: [...result.warnings, reason] };
   }
   logInfo("detail", "detail.enrich", "详情页补全完成", { toolId: definition.id, enriched });
   return result;

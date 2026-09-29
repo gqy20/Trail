@@ -41,6 +41,10 @@ workflow:
     url_contains: "/login"
     reason: 小红书登录态失效（页面被重定向到登录页），请重新登录后重试。
   - action: pause_if_present
+    selector: ".login-container, .login-modal, .login-mask, [class*='login'][class*='modal']"
+    timeout_ms: 2500
+    reason: 页面出现登录墙（会话未登录或已失效），请在页面上完成登录后点继续。
+  - action: pause_if_present
     url_contains: "error_code=3000"
     reason: 小红书风控拦截（error_code=3000xx），请稍后在页面完成验证后重试。
   - action: wait_for

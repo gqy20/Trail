@@ -16,6 +16,8 @@ export type BatchRunState = {
   parameters: Record<string, unknown>;
   tabId?: number;
   status: BatchRunStatus;
+  /** 用户已请求但尚未生效的暂停/停止；运行循环在边界消费并清除。 */
+  pendingControl?: "pause" | "stop";
   startedAt: number;
   updatedAt: number;
   lastPageUrl: string;
@@ -72,14 +74,32 @@ export async function clearBatchRunState(): Promise<void> {
 }
 
 export function requestPauseBatchRun(): { requested: boolean } {
-  const state = controlRequest;
-  if (!state.pause && !state.stop) controlRequest = { ...state, pause: true };
-  return { requested: controlRequest.pause };
+  controlRequest = { pause: true, stop: false };
+  void persistPendingControl('pause');
+  return { requested: true };
 }
 
 export function requestStopBatchRun(): { requested: boolean } {
   controlRequest = { pause: false, stop: true };
+  void persistPendingControl('stop');
   return { requested: true };
+}
+
+/** 把待生效的控制请求写入状态，供 UI 即时反馈与 SW 重启后的恢复。 */
+async function persistPendingControl(control: 'pause' | 'stop'): Promise<void> {
+  try {
+    const state = await getBatchRunState();
+    if (state && state.status === 'running') {
+      await saveBatchRunState({ ...state, pendingControl: control, updatedAt: Date.now() });
+    }
+  } catch {
+    // 状态写入失败不影响内存标志生效。
+  }
+}
+
+/** 不消费地查看当前控制请求；长循环（如详情补全）用它提前响应暂停/停止。 */
+export function peekControlRequest(): ControlRequest {
+  return { ...controlRequest };
 }
 
 /** 运行循环在账号边界调用：取出当前控制请求并复位。 */
