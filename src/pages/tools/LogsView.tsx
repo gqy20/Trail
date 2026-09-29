@@ -70,8 +70,7 @@ export function LogsView() {
   return <section className="logs-view stack">
     <div className="view-heading"><h2>运行日志</h2><ScrollText size={20} /></div>
     <p className="muted text-small">
-      后台关键路径的结构化日志（批量运行、GraphQL 请求、订阅源发布），保留最新 600 条。
-      敏感字段（token、cookie 等）写入前已脱敏；导出的文本可直接用于问题反馈。
+      批量、GraphQL、发布的结构化日志，保留 600 条；敏感字段写入前已脱敏，导出可直接用于反馈。
     </p>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
     <div className="logs-toolbar">

@@ -94,8 +94,7 @@ export function FeedPublisherView() {
   return <section className="feed-view stack">
     <div className="view-heading"><h2>订阅源发布</h2><Rss size={20} /></div>
     <p className="muted text-small">
-      抓取到的记录暂存在本地，发布时合并到 GitHub 仓库的 data/posts.json，并重写 RSS 与时间线页。
-      发布目标仓库和 token 只保存在本机浏览器里。
+      记录暂存本地，发布时合并到 GitHub 仓库的 data/posts.json 并重写 RSS 与时间线页；token 只存本机。
     </p>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
     {notice ? <p className="text-small">{notice}</p> : null}
@@ -106,8 +105,8 @@ export function FeedPublisherView() {
         <label>owner<input ref={ownerRef} value={draft.owner} disabled={busy} onChange={(e) => setDraft({ ...draft, owner: e.target.value })} placeholder="gqy20" /></label>
         <label>仓库<input ref={repoRef} value={draft.repo} disabled={busy} onChange={(e) => setDraft({ ...draft, repo: e.target.value })} placeholder="feed" /></label>
         <label>分支<input ref={branchRef} value={draft.branch} disabled={busy} onChange={(e) => setDraft({ ...draft, branch: e.target.value })} placeholder="main" /></label>
-        <label className="feed-config-wide">token（只授该仓库 Contents 读写）<input ref={tokenRef} type="text" autoComplete="off" spellCheck={false} value={draft.token} disabled={busy} onChange={(e) => setDraft({ ...draft, token: e.target.value })} placeholder="github_pat_…" /></label>
-        <label className="feed-config-wide">Pages 根地址（可选，默认 https://&lt;owner&gt;.github.io/&lt;repo&gt;/）<input ref={pagesRef} value={draft.pagesBaseUrl || ""} disabled={busy} onChange={(e) => setDraft({ ...draft, pagesBaseUrl: e.target.value })} placeholder="https://gqy20.github.io/feed/" /></label>
+        <label className="feed-config-wide" title="只授予该仓库 Contents 读写权限">token<input ref={tokenRef} type="text" autoComplete="off" spellCheck={false} value={draft.token} disabled={busy} onChange={(e) => setDraft({ ...draft, token: e.target.value })} placeholder="github_pat_…" /></label>
+        <label className="feed-config-wide" title="留空则默认 https://<owner>.github.io/<repo>/">Pages 地址<input ref={pagesRef} value={draft.pagesBaseUrl || ""} disabled={busy} onChange={(e) => setDraft({ ...draft, pagesBaseUrl: e.target.value })} placeholder="https://gqy20.github.io/feed/" /></label>
         <label className="feed-config-toggle feed-config-wide"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 采集成功后自动发布（无需手动点“立即发布”）</label>
         <label className="feed-config-toggle feed-config-wide"><input type="checkbox" checked={draft.excludeRetweets === true} disabled={busy} onChange={(e) => setDraft({ ...draft, excludeRetweets: e.target.checked })} /> 订阅源不收录转推/转发</label>
         <label>历史封顶<input type="number" min={100} max={20000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
@@ -122,13 +121,13 @@ export function FeedPublisherView() {
           await sendMessage({ type: "SAVE_FEED_CONFIG", config: currentDraft() });
           const probe = await sendMessage({ type: "PROBE_FEED_REPO" });
           return `配置已保存。连接成功：仓库为${probe.repoPrivate ? "私有" : "公共"}，默认分支 ${probe.defaultBranch}。`;
-        })}><PlugZap size={15} />保存并测试连接</button>
+        })}><PlugZap size={15} />保存并测试</button>
       </div>
     </article>
 
     <article className="panel stack">
       <div className="section-heading"><strong>待发布</strong><span className="muted text-small">{snapshot ? `${snapshot.stagedCount} 条` : "…"}</span></div>
-      <p className="muted text-small">采集渠道接入后，每轮抓取的结果会先进暂存；发布失败时暂存保留，下次重试。</p>
+      <p className="muted text-small">发布失败时暂存保留，下次重试。</p>
       <div className="feed-actions">
         <button className="button secondary" disabled={busy} onClick={() => void act("sample", () =>
           sendMessage({ type: "STAGE_FEED_POSTS", posts: SAMPLE_POSTS }).then((result) => `已暂存 ${result.staged} 条（含示例数据）。`)

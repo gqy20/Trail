@@ -180,12 +180,12 @@ export function LiteratureQueueView() {
       </div>
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".csv,text/csv" onChange={(event) => { void importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
 
-      <div className="queue-stats">
-        <QueueStat label="可处理" value={summary.actionable} />
-        <QueueStat label="已完成" value={summary.completed} tone="success" />
-        <QueueStat label="需检索" value={summary.needsSearch} />
-        <QueueStat label="需处理" value={summary.needsUser + summary.failed} tone={summary.needsUser + summary.failed > 0 ? "warning" : undefined} />
-      </div>
+      <p className="checkin-meta muted text-small">{[
+        `可处理 ${summary.actionable}`,
+        summary.completed ? `完成 ${summary.completed}` : null,
+        summary.needsSearch ? `待检索 ${summary.needsSearch}` : null,
+        summary.needsUser + summary.failed ? `需处理 ${summary.needsUser + summary.failed}` : null
+      ].filter(Boolean).join(" · ")}</p>
 
       <div className="queue-controls">
         <div className="input-mode-switch" role="tablist" aria-label="下载范围">
@@ -196,15 +196,13 @@ export function LiteratureQueueView() {
           ))}
         </div>
         <div className="queue-run-settings">
-          <label>
-            并行数量
+          <label title="同一时间打开的解析页面数，建议 1–2">
+            并行
             <select className="input" value={concurrency} disabled={busy} onChange={(event) => void updateConcurrency(Number(event.target.value))}>
               {[1, 2, 3, 4].map((value) => <option value={value} key={value}>{value}</option>)}
             </select>
           </label>
-          <span className="muted text-small">同一时间打开的解析页面，建议 1–2</span>
         </div>
-        <span className="muted text-small">已完成项目会自动跳过</span>
       </div>
 
       {busy && progress ? (
@@ -230,7 +228,7 @@ export function LiteratureQueueView() {
 
       <div className="queue-list">
         {scopedItems.slice(0, 60).map((item) => <QueueRow item={item} key={item.id} />)}
-        {scopedItems.length > 60 ? <p className="queue-list-note">当前显示前 60 篇，运行时会处理该范围内全部 {scopedItems.length} 篇。</p> : null}
+        {scopedItems.length > 60 ? <p className="queue-list-note">显示前 60 篇，共 {scopedItems.length} 篇。</p> : null}
       </div>
 
       <div className="queue-footer">
@@ -243,10 +241,6 @@ export function LiteratureQueueView() {
       {error ? <p className="error-text text-small">{error}</p> : null}
     </section>
   );
-}
-
-function QueueStat({ label, value, tone }: { label: string; value: number; tone?: "success" | "warning" }) {
-  return <div className={tone ? `queue-stat ${tone}` : "queue-stat"}><strong>{value}</strong><span>{label}</span></div>;
 }
 
 function QueueRow({ item }: { item: LiteratureQueueItem }) {

@@ -635,7 +635,7 @@ function BatchRunControlBar({ run, busy, onPause, onResume, onStop }: {
         : <button className="button secondary" disabled={busy} onClick={onPause}><Pause size={15} />暂停</button>}
       <button className="button secondary" disabled={busy} onClick={onStop}><Square size={15} />停止</button>
     </div>
-    <p className="muted text-small">{records} 条记录已入运行状态；暂停在当前输入完成后生效，关闭浏览器会话后运行状态清空。</p>
+    <p className="muted text-small" title="关闭浏览器会话后运行状态清空">{records} 条已保存 · 暂停在当前输入完成后生效</p>
   </div>;
 }
 
@@ -1077,7 +1077,7 @@ function CollectionPreview({
           ))}
         </tbody>
       </table>
-      {records.length > 20 ? <div className="muted text-small result-preview-note">预览前 20 条，导出包含全部已保存记录。</div> : null}
+      {records.length > 20 ? <div className="muted text-small result-preview-note">预览前 20 条，导出含全部。</div> : null}
     </div>
   ) : <span className="muted">没有记录。</span>;
 
