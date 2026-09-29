@@ -5,6 +5,7 @@ import { applyImport, normalizeFollow, parseFollowsText } from "../src/collector
 import { clampIntervalHours, isCollectorDue } from "../src/collector/schedule";
 import { pruneAndCheck } from "../src/collector/budget";
 import { pickRotation } from "../src/collector/rotation";
+import { resolveParameterDefaults } from "../src/browser-tools/template";
 import { filterSinceRecords } from "../src/collector/watermarks";
 import type { CollectorJob, FollowEntry } from "../src/collector/types";
 
@@ -117,4 +118,12 @@ test("xhs/twitter YAML 声明增量采集", () => {
   expect(xhs.since).toMatchObject({ field: "created_at", lookback_days: 7 });
   const twitter = parseBrowserToolYaml(readFileSync("browser-tools/twitter/timeline.yml", "utf8"));
   expect(twitter.since).toMatchObject({ field: "created_at" });
+});
+
+test("resolveParameterDefaults 填充默认值不校验必填", () => {
+  const definition = parseBrowserToolYaml(readFileSync("browser-tools/twitter/timeline.yml", "utf8"));
+  const resolved = resolveParameterDefaults(definition, {});
+  expect(resolved.delay_between_users_ms).toBe(3000);
+  expect(resolved.tweets_per_user).toBe(30);
+  expect(resolved.username).toBeUndefined(); // 必填参数由批量循环按关键词注入，不在此处
 });

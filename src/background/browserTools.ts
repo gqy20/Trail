@@ -11,7 +11,7 @@ import type {
 import { importBundledBrowserTools, getBundledToolVersions } from "../browser-tools/bundled";
 import { parseBrowserToolYaml } from "../browser-tools/loader";
 import { matchesBrowserTool } from "../browser-tools/matcher";
-import { resolveTemplate } from "../browser-tools/template";
+import { resolveParameterDefaults, resolveTemplate } from "../browser-tools/template";
 import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
 import { getFollows } from "../collector/follows";
@@ -150,6 +150,9 @@ async function startBatchRun(
 ): Promise<BrowserToolRunResult> {
   await clearBatchRunState();
   clearControlRequest();
+  // 界面批量入口已解析默认值，定时调度授权入口传空参数——这里统一补齐，
+  // 否则 YAML 中引用 parameters 的模板（如用户间隔）在后台解析时报变量不存在。
+  const resolvedParameters = resolveParameterDefaults(definition, parameters);
   const state: BatchRunState = {
     runId: `browser_tool_batch_${createBackgroundRunId()}`,
     toolId: definition.id,
@@ -157,7 +160,7 @@ async function startBatchRun(
     keywords,
     nextIndex: 0,
     completedKeywords: 0,
-    parameters,
+    parameters: resolvedParameters,
     tabId,
     status: "running",
     startedAt: Date.now(),

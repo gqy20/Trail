@@ -46,3 +46,15 @@ export function resolveParameters(
   if (unknown.length > 0) throw new Error(`包含未声明参数：${unknown.join(", ")}`);
   return result;
 }
+
+/** 填充声明参数的默认值（不校验必填），供后台批量入口使用。 */
+export function resolveParameterDefaults(
+  definition: BrowserToolDefinition,
+  supplied: Record<string, unknown>
+): Record<string, unknown> {
+  const result = { ...supplied };
+  for (const [name, parameter] of Object.entries(definition.parameters || {})) {
+    if (result[name] === undefined && parameter.default !== undefined) result[name] = parameter.default;
+  }
+  return result;
+}
