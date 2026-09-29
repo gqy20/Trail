@@ -2684,3 +2684,17 @@ code, pre, kbd, samp, .code-textarea {
 
 /* 订阅源表单：身份三字段一行（三列子网格），数值/开关两列对齐 */
 .feed-config-identity { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; }
+
+/* 窄面板：头部与导航允许换行，身份字段降为两列 */
+@media (max-width: 380px) {
+  .tools-header { flex-wrap: wrap; row-gap: 8px; }
+  .tools-nav { flex-wrap: wrap; row-gap: 4px; }
+  .tools-nav-item { padding: 5px 8px; }
+}
+
+@media (max-width: 340px) {
+  .feed-config-identity { grid-template-columns: 1fr 1fr; }
+  .feed-config-identity label:last-child { grid-column: 1 / -1; }
+  .checkin-controls { flex-direction: column; align-items: stretch; }
+  .checkin-actions { justify-content: flex-end; }
+}
