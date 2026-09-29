@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/noto-serif-sc/wght.css";
 import "@fontsource-variable/source-code-pro/wght.css";
-import { Download, ExternalLink, FileJson, FileUp, History, Pause, Play, Plus, RefreshCw, Rss, Settings2, Square, Trash2, Wrench, X } from "lucide-react";
+import { Download, ExternalLink, FileJson, FileUp, Pause, Play, Plus, RefreshCw, Rss, Settings2, Square, Trash2, Wrench, X } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
@@ -11,7 +11,7 @@ import { LiteratureQueueView } from "./LiteratureQueue";
 import { CheckinsView } from "./Checkins";
 import { FeedPublisherView } from "./FeedPublisher";
 import { LogsView } from "./LogsView";
-import { CollectorPanel } from "./CollectorPanel";
+import { CollectorsView } from "./CollectorsView";
 import { describeBatchRun, type BatchRunState } from "../../background/runControl";
 import { TRAIL_VERSION } from "../../shared/version";
 import type {
@@ -46,7 +46,7 @@ function BrowserToolsApp() {
   const [nativeExportLimit, setNativeExportLimit] = useState(1000);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
-  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "history" | "settings" | "checkins" | "feed" | "logs">("collect");
+  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "settings" | "checkins" | "feed" | "logs" | "collectors">("collect");
   const [error, setError] = useState("");
   const [catalogNotice, setCatalogNotice] = useState("");
   const [executionProgress, setExecutionProgress] = useState<Record<string, BrowserToolExecutionProgress>>({});
@@ -79,7 +79,7 @@ function BrowserToolsApp() {
   const nativeExportDefinition = selectedTool?.definition.native_exports?.[0];
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
   const toolUi = resolveToolUi(selectedTool?.definition);
-  const pageTitle = activeView === "checkins" ? "每日签到" : activeView === "feed" ? "订阅源发布" : activeView === "logs" ? "运行日志" : toolUi.title;
+  const pageTitle = activeView === "checkins" ? "每日签到" : activeView === "feed" ? "订阅源发布" : activeView === "logs" ? "运行日志" : activeView === "collectors" ? "采集" : toolUi.title;
   const directBatchKeywords = useMemo(
     () => parseBatchInput(keywordDraft, selectedTool?.definition.presentation?.batch_input?.csv_headers),
     [keywordDraft, selectedTool?.updatedAt]
@@ -329,13 +329,11 @@ function BrowserToolsApp() {
             <button className={activeView === "checkins" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("checkins")}>签到</button>
             <button className={activeView === "feed" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("feed")}>订阅源</button>
             <button className={activeView === "logs" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("logs")}>日志</button>
+            <button className={activeView === "collectors" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collectors")}>采集</button>
             <button className={activeView === "collect" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collect")}>运行</button>
             {lastResult ? <button className={activeView === "results" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("results")}>结果</button> : null}
             <button className={activeView === "queue" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("queue")}>
               <Download size={15} /> 队列
-            </button>
-            <button className={activeView === "history" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("history")}>
-              <History size={15} /> 历史
             </button>
             <button className={activeView === "settings" ? "icon-button active" : "icon-button"} title="设置" aria-label="设置" onClick={() => setActiveView("settings")}>
               <Settings2 size={16} />
@@ -420,10 +418,6 @@ function BrowserToolsApp() {
                       {batchTooLarge ? <span className="error-text">请减少 {batchInputCount - batchLimit} 个</span> : null}
                     </div>
                   </section>
-                ) : null}
-
-                {selectedTool.definition.feed ? (
-                  <CollectorPanel toolId={selectedTool.id} platform={selectedTool.definition.feed.platform} name={selectedTool.definition.name} />
                 ) : null}
 
                 {hasPrimaryParameters || selectedTool.definition.batch ? (
@@ -514,27 +508,7 @@ function BrowserToolsApp() {
         {activeView === "checkins" ? <CheckinsView /> : null}
         {activeView === "feed" ? <FeedPublisherView /> : null}
         {activeView === "logs" ? <LogsView /> : null}
-
-        {activeView === "history" ? (
-          <section className="history-view stack">
-            <div className="view-heading">
-              <h2>历史记录</h2>
-              <span className="muted">{state?.recentRuns.length || 0} 次运行</span>
-            </div>
-            {(state?.recentRuns || []).map((run) => (
-                <details className="panel run-history-item" key={run.runId}>
-                  <summary>
-                    <span><strong>{getRunTitle(run, state?.tools || [])}</strong><span className="muted text-small">{formatDateTime(run.savedAt)}</span></span>
-                    <span className={`mini-badge run-${run.status}`}>{statusLabel(run.status)}</span>
-                  </summary>
-                  <RunExportActions result={run} />
-                  <RunCollections data={run.data} presentation={getToolDefinition(run.toolId, state?.tools || [])?.presentation} initiallyOpen={false} />
-                  {run.error ? <p className="error-text">{run.error}</p> : null}
-                </details>
-            ))}
-            {state?.recentRuns.length === 0 ? <EmptyResult definition={selectedTool?.definition} onBack={() => setActiveView("collect")} /> : null}
-          </section>
-        ) : null}
+        {activeView === "collectors" ? <CollectorsView /> : null}
 
         {activeView === "settings" ? (
           <section className="settings-view stack">

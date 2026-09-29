@@ -54,7 +54,7 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
   const interval = job?.intervalHours ?? 4;
   return <div className="panel collector-panel stack">
     <div className="section-heading">
-      <strong>定时采集</strong>
+      <strong>{name}</strong>
       <label className="feed-config-toggle">
         <input
           type="checkbox"
@@ -100,7 +100,7 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
             <button aria-label={`移除 ${entry.handle}`} disabled={busy} onClick={() => void act(() => sendMessage({ type: "REMOVE_FOLLOW", platform: entry.platform, handle: entry.handle }).then(() => undefined))}><X size={12} /></button>
           </span>
         ))}
-        {follows && follows.length === 0 ? <span className="muted text-small">还没有账号，导入 tmp/twitter-follows.csv 或逐个添加。</span> : null}
+        {follows && follows.length === 0 ? <span className="muted text-small">还没有账号，导入名单或逐个添加。</span> : null}
       </div>
       <div className="collector-add">
         <input className="input" placeholder={`@${platform === "twitter" ? "handle" : "账号"}`} value={handle} disabled={busy} onChange={(e) => setHandle(e.target.value)}
@@ -119,7 +119,6 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
         })}><Plus size={15} />添加</button>
       </div>
     </div>
-    <p className="muted text-small" title={`${name} · ${platform}`}>到点自动采集关注账号，结果暂存到订阅源；需登录验证时暂停保留页面。浏览器未运行时错过的时间在下次启动后补跑。</p>
   </div>;
 }
 
