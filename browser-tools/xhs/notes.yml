@@ -1,8 +1,8 @@
 schema_version: 1
 id: xhs-notes
 name: 小红书用户笔记采集
-version: "1.0.0"
-description: 在已登录的小红书会话中读取指定用户的最新笔记并进入详情页提取全文，节奏按风控保守设置。
+version: "2.0.0"
+description: 读取用户主页 SSR 状态获取笔记列表（零滚动零点击），再点真实卡片进入详情页提取全文；详情 URL 使用 profile 上下文的规范形式。
 match:
   domains: [www.xiaohongshu.com, xiaohongshu.com]
 feed:
@@ -44,37 +44,26 @@ workflow:
     selector: ".login-container, .login-modal, .login-mask, [class*='login'][class*='modal']"
     timeout_ms: 2500
     reason: 页面出现登录墙（会话未登录或已失效），请在页面上完成登录后点继续。
-  - action: pause_if_present
-    url_contains: "error_code=3000"
-    reason: 小红书风控拦截（error_code=3000xx），请稍后在页面完成验证后重试。
   - action: wait_for
     selector: "section.note-item a[href], a.cover[href*='/explore/'], a[href*='/search_result/']"
     timeout_ms: 15000
-  - action: repeat
-    max: 6
-    stop_after_records: 8
-    steps:
-      - action: extract
-        collection: notes
-        selector: "section.note-item, li.note-item, div.note-item"
-        dedupe_by: id
-        fields:
-          url:
-            selector: "a[href*='/explore/'], a[href*='/search_result/']"
-            attribute: href
-          id:
-            selector: "a[href*='/explore/'], a[href*='/search_result/']"
-            attribute: href
-            transforms: [{ match: "/(?:explore|search_result)/([0-9a-f]{8,})" }]
-          title:
-            selector: ".title, .note-text, a.title span"
-            transforms: [trim]
-            optional: true
-    between:
-      - action: scroll
-        position: bottom
-      - action: wait
-        duration_ms: 1200
+    optional: true
+  - action: state_read
+    max_items: "{{ parameters.notes_per_user }}"
+    extract:
+      collection: notes
+      walk: { has: noteCard }
+      dedupe_by: id
+      fields:
+        id: { path: id }
+        xsec_token: { path: xsecToken }
+        title: { path: noteCard.displayTitle, optional: true }
+        likes: { path: noteCard.interactInfo.liked, transforms: [parse_number], optional: true }
+        created_at: { path: noteCard.time, transforms: [parse_date], optional: true }
+        url:
+          template: "{{ __page_url }}/{{ id }}?xsec_token={{ xsec_token }}&xsec_source=pc_user"
+          transforms:
+            - trim
 detail_extract:
   collection: notes
   url_field: url
@@ -143,7 +132,7 @@ presentation:
       item_label: 篇
       count_unit: 篇
       fields:
-        _query: { label: 账号, order: 5, emphasis: primary }
+        _query: { label: 账号, order: 5 }
         title: { label: 标题, order: 10 }
         text: { label: 正文, order: 20 }
         likes: { label: 赞, order: 30 }

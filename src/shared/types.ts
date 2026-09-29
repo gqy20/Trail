@@ -239,6 +239,7 @@ export type RuntimeMessage =
       features?: Record<string, boolean>;
       field_toggles?: Record<string, boolean>;
     }
+  | { type: "BROWSER_TOOL_STATE_READ"; source?: string }
   | { type: "GET_BATCH_RUN_STATE" }
   | { type: "PAUSE_BATCH_RUN" }
   | { type: "RESUME_BATCH_RUN"; tabId?: number; userInitiated?: boolean }

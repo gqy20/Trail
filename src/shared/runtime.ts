@@ -25,6 +25,7 @@ type RuntimeResponseMap = {
   PROBE_FEED_REPO: import("../publisher/types").FeedRepoProbe;
   BROWSER_TOOL_GRAPHQL_RESOLVE: { queryId: string | null };
   BROWSER_TOOL_GRAPHQL_FETCH: { status: number; json: unknown };
+  BROWSER_TOOL_STATE_READ: { state: unknown };
   GET_BATCH_RUN_STATE: import("../background/runControl").BatchRunState | null;
   PAUSE_BATCH_RUN: { requested: boolean };
   RESUME_BATCH_RUN: BrowserToolRunResult;

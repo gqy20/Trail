@@ -42,7 +42,7 @@ import {
 } from "./collectors";
 import { addFollow, getFollows, importFollows, removeFollow } from "../collector/follows";
 import { getFeedState, probeFeedConnection, publishStagedFeed, saveFeedPublisherConfig, stagePosts, clearStagedFeed } from "./feed";
-import { fetchGraphqlPageForTab, resolveGraphqlQueryIdForTab } from "./graphqlBridge";
+import { fetchGraphqlPageForTab, readPageStateForTab, resolveGraphqlQueryIdForTab } from "./graphqlBridge";
 import { clearLogEntries, getLogEntries } from "../logging/logger";
 import { restoreBundledBrowserTool } from "../browser-tools/bundled";
 
@@ -94,6 +94,7 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
     case "IMPORT_FOLLOWS": return importFollows(message.platform, message.text);
     case "BROWSER_TOOL_GRAPHQL_RESOLVE": return resolveGraphqlQueryIdForTab(message, sender);
     case "BROWSER_TOOL_GRAPHQL_FETCH": return fetchGraphqlPageForTab(message, sender);
+    case "BROWSER_TOOL_STATE_READ": return readPageStateForTab(message, sender);
     case "GET_BATCH_RUN_STATE": return getBrowserToolBatchRunState();
     case "PAUSE_BATCH_RUN": return pauseBrowserToolBatch();
     case "RESUME_BATCH_RUN": return resumeBrowserToolBatch({ tabId: message.tabId, userInitiated: message.userInitiated });

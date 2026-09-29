@@ -70,6 +70,10 @@ batch:
 
 `fixed_url` 仍会经过工具域名和 URL 匹配校验；工作流负责填写 `{{ parameters.keyword }}`、提交检索并提取结果。`fixed_url` 支持在 URL 中使用 `{{ parameters.<参数> }}` 模板，当前批次的输入值会注入对应参数（如 `https://x.com/{{ parameters.username }}`），渲染结果同样要经过域名校验。`batch.delay_between_keywords_ms` 也可以声明为 `{{ parameters.<数字参数> }}` 模板，把输入间隔节奏暴露为界面参数。
 
+## state_read：页面状态读取
+
+部分站点（如小红书）把首屏数据 SSR 注入到 `window.__INITIAL_STATE__`（Pinia store）。`state_read` 经后台在页面主世界读取该状态并做声明式提取，字段语法与 `graphql_fetch.extract` 相同（`walk.has` 递归命中、`path` 取值、`transforms` 转换），另支持 `template` 字段：`{{ 字段名 }}` 引用同记录已提取字段、`{{ __page_url }}` 为当前页地址，用于组合带上下文 token 的规范 URL（小红书详情页的 `/user/profile/<uid>/<id>?xsec_token=…&xsec_source=pc_user` 形式，裸 `/explore/<id>` 会触发"当前笔记暂时无法浏览"）。
+
 ## GraphQL 采集与订阅源暂存
 
 `graphql_fetch` 面向提供内部 GraphQL 接口的站点（当前为 x.com）。它复用当前标签页的登录会话，由后台在页面主世界执行请求；认证头（公开 bearer、`ct0` CSRF）由核心代码注入，YAML 只声明操作名、变量模板、feature 开关和字段映射，不能提供任何认证信息或脚本。queryId 会在运行时扫描页面已加载的 `client-web` bundle 自动解析，失败时使用 YAML 中的 `query_id` 兜底（站点发布轮换后更新该值即可）。

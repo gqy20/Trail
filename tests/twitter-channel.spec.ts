@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { parseBrowserToolYaml } from "../src/browser-tools/loader";
-import { extractGraphqlCursor, extractGraphqlRecords, readJsonPath } from "../src/browser-tools/graphql";
+import { extractGraphqlCursor, extractGraphqlRecords, extractStateRecords, readJsonPath } from "../src/browser-tools/graphql";
 import { resolveTemplate } from "../src/browser-tools/template";
 import { applyBrowserToolTransforms } from "../src/browser-tools/transforms";
 import { recordsToFeedPosts } from "../src/publisher/collect";
@@ -238,4 +238,46 @@ test("xhs/notes.yml 通过校验并保留风控节奏声明", () => {
   // pause_if_present 支持 url_contains
   const pause = definition.workflow[0] as { url_contains?: string };
   expect(pause.url_contains).toBe("/login");
+});
+
+test("xhs v2 YAML：state_read 路线与模板 URL", () => {
+  const definition = parseBrowserToolYaml(readFileSync("browser-tools/xhs/notes.yml", "utf8"));
+  const stateRead = definition.workflow.find((step) => step.action === "state_read") as Extract<typeof definition.workflow[number], { action: "state_read" }>;
+  expect(stateRead).toBeDefined();
+  expect(stateRead.max_items).toBe("{{ parameters.notes_per_user }}");
+  expect(stateRead.extract.walk).toEqual({ has: "noteCard" });
+  expect(stateRead.extract.dedupe_by).toBe("id");
+  expect(stateRead.extract.fields.url.template).toContain("xsec_source=pc_user");
+  // 不再有滚动提取卡片的 repeat
+  expect(definition.workflow.some((step) => step.action === "repeat")).toBe(false);
+});
+
+test("extractStateRecords 从 Pinia store 形态提取并组合规范 URL", () => {
+  const payload = {
+    user: {
+      notes: [[
+        { id: "649eb34e0000000027013df8", xsecToken: "AB4%3D", noteCard: { displayTitle: "海底星空", interactInfo: { liked: "24" }, time: "2026-09-28" } },
+        { id: "649eb34e0000000027013df9", xsecToken: "CD5%3D", noteCard: { displayTitle: "第二篇", interactInfo: { liked: "8" }, time: "2026-09-27" } }
+      ]]
+    }
+  };
+  const records = extractStateRecords(payload, {
+    collection: "notes",
+    walk: { has: "noteCard" },
+    dedupe_by: "id",
+    fields: {
+      id: { path: "id" },
+      xsec_token: { path: "xsecToken" },
+      title: { path: "noteCard.displayTitle" },
+      likes: { path: "noteCard.interactInfo.liked", transforms: ["parse_number"] },
+      created_at: { path: "noteCard.time", transforms: ["parse_date"] },
+      url: { template: "{{ __page_url }}/{{ id }}?xsec_token={{ xsec_token }}&xsec_source=pc_user" }
+    }
+  }, "https://www.xiaohongshu.com/user/profile/5d7ece920000000001018707");
+  expect(records).toHaveLength(2);
+  const first = records[0];
+  expect(first.title).toBe("海底星空");
+  expect(first.likes).toBe(24);
+  expect(first.created_at).toBe("2026-09-28T00:00:00.000Z");
+  expect(first.url).toBe("https://www.xiaohongshu.com/user/profile/5d7ece920000000001018707/649eb34e0000000027013df8?xsec_token=AB4%3D&xsec_source=pc_user");
 });

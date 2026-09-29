@@ -172,3 +172,33 @@ async function fetchGraphqlInPage(
     return { status: 0, ok: false, json: null, error: error instanceof Error ? error.message : String(error) };
   }
 }
+
+/** 页面主世界读取 SSR 注入的全局状态（当前仅 __INITIAL_STATE__），供 state_read 步骤使用。 */
+export async function readPageStateForTab(
+  message: Extract<RuntimeMessage, { type: "BROWSER_TOOL_STATE_READ" }>,
+  sender: chrome.runtime.MessageSender
+): Promise<{ state: unknown }> {
+  const tabId = sender.tab?.id;
+  const senderUrl = sender.url || sender.tab?.url || "";
+  if (tabId === undefined || !senderUrl) throw new Error("状态读取缺少来源标签页。");
+  const parsed = new URL(senderUrl);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("状态读取只支持普通网页。");
+  const source = message.source || "__INITIAL_STATE__";
+  if (source !== "__INITIAL_STATE__") throw new Error("不支持的状态源。");
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    func: readInitialStateInPage
+  });
+  return { state: results[0]?.result ?? null };
+}
+
+function readInitialStateInPage(): unknown {
+  try {
+    const value = (window as { __INITIAL_STATE__?: unknown }).__INITIAL_STATE__;
+    if (value === undefined || value === null) return null;
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+}

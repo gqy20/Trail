@@ -105,3 +105,37 @@ function readGraphqlField(node: Record<string, unknown>, field: BrowserToolGraph
   if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") return undefined;
   return applyBrowserToolTransforms(raw, field.transforms);
 }
+
+/**
+ * state_read 的模板字段：{{ 字段名 }} 引用同记录已提取字段，
+ * {{ __page_url }} 为当前页地址（不带尾斜杠）。
+ */
+export function resolveStateTemplate(template: string, record: Record<string, unknown>, pageUrl: string): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, name: string) => {
+    if (name === "__page_url") return pageUrl.replace(/\/+$/, "");
+    const value = record[name];
+    if (value === undefined || value === null) throw new Error(`模板字段不存在：${name}`);
+    return String(value);
+  });
+}
+
+/** state_read 提取：路径字段走 JSON 提取，模板字段引用已提取的同记录字段组合。 */
+export function extractStateRecords(
+  root: unknown,
+  spec: NonNullable<import("./contracts").BrowserToolStateReadStep["extract"]>,
+  pageUrl: string
+): Array<Record<string, unknown>> {
+  const records = extractGraphqlRecords(root, {
+    collection: spec.collection,
+    walk: spec.walk,
+    // 先只提取路径字段；模板字段在记录层二次解析。
+    fields: Object.fromEntries(Object.entries(spec.fields).filter(([, field]) => field.path)) as NonNullable<GraphqlExtractSpec["fields"]>
+  });
+  for (const record of records) {
+    for (const [name, field] of Object.entries(spec.fields)) {
+      if (!field.template) continue;
+      record[name] = applyBrowserToolTransforms(resolveStateTemplate(field.template, record, pageUrl), field.transforms);
+    }
+  }
+  return records;
+}

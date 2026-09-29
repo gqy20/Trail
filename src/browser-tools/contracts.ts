@@ -223,6 +223,31 @@ export type BrowserToolGraphqlFieldDefinition = {
   optional?: boolean;
 };
 
+export type BrowserToolStateReadField = {
+  /** 相对命中节点的点路径。 */
+  path?: string;
+  fallback_paths?: string[];
+  item_path?: string;
+  /** 组合模板：{{ 字段名 }} 引用同记录已提取字段，{{ __page_url }} 为当前页地址。 */
+  template?: string;
+  transforms?: BrowserToolTransformSpec[];
+  optional?: boolean;
+};
+
+export type BrowserToolStateReadStep = {
+  action: "state_read";
+  /** 主世界全局数据源，当前支持页面 SSR 注入的 __INITIAL_STATE__。 */
+  source?: "__INITIAL_STATE__";
+  extract: {
+    collection: string;
+    walk?: { has: string };
+    fields: Record<string, BrowserToolStateReadField>;
+    dedupe_by?: string;
+  };
+  max_items?: number | string;
+  optional?: boolean;
+};
+
 export type BrowserToolGraphqlFetchStep = {
   action: "graphql_fetch";
   /** GraphQL 操作名，如 UserTweets；用于 queryId 解析和请求路径拼装。 */
@@ -262,6 +287,7 @@ export type BrowserToolStep =
   | BrowserToolRepeatStep
   | BrowserToolPauseIfPresentStep
   | BrowserToolGraphqlFetchStep
+  | BrowserToolStateReadStep
   | BrowserToolPauseStep;
 
 export type BrowserToolDefinition = {

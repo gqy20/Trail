@@ -5,9 +5,10 @@ import type {
   BrowserToolFieldDefinition,
   BrowserToolGraphqlFetchStep,
   BrowserToolRunResult,
+  BrowserToolStateReadStep,
   BrowserToolStep
 } from "./contracts";
-import { extractGraphqlCursor, extractGraphqlRecords, readJsonPath } from "./graphql";
+import { extractGraphqlCursor, extractGraphqlRecords, extractStateRecords, readJsonPath } from "./graphql";
 import { BROWSER_TOOL_LIMITS } from "./limits";
 import { matchesBrowserTool } from "./matcher";
 import { resolveParameters, resolveTemplate } from "./template";
@@ -198,6 +199,8 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
       return extractCollection(step, context) ? "continue" : insideRepeat ? "stop_repeat" : "continue";
     case "graphql_fetch":
       return executeGraphqlFetchStep(step, context);
+    case "state_read":
+      return executeStateReadStep(step, context);
     case "repeat": {
       const requestedMax = typeof step.max === "number" ? step.max : Number(resolve(step.max, context));
       if (!Number.isInteger(requestedMax) || requestedMax < 1) throw new Error("repeat.max 运行时参数必须是正整数。");
@@ -541,4 +544,53 @@ function buildResult(
     warnings: context.warnings,
     error
   };
+}
+
+/** 在页面主世界读取 SSR 状态（如小红书 __INITIAL_STATE__）并按声明提取记录。 */
+async function executeStateReadStep(step: BrowserToolStateReadStep, context: ExecutionContext): Promise<ExecutionSignal> {
+  const payload = await sendMessage({ type: "BROWSER_TOOL_STATE_READ", source: step.source });
+  const state = payload?.state;
+  if (!state || typeof state !== "object") {
+    if (step.optional) {
+      context.warnings.push("页面没有可读取的状态数据。");
+      return "continue";
+    }
+    throw new Error("页面没有 __INITIAL_STATE__ 数据（可能被重定向或需要登录）。");
+  }
+
+  const requestedMax = typeof step.max_items === "number"
+    ? step.max_items
+    : step.max_items !== undefined ? Number(resolve(String(step.max_items), context)) : undefined;
+  if (requestedMax !== undefined && (!Number.isInteger(requestedMax) || requestedMax < 1)) {
+    throw new Error("state_read.max_items 必须是正整数。");
+  }
+
+  const records = extractStateRecords(state, step.extract, location.href);
+  const collection = (context.data[step.extract.collection] ||= []);
+  const seenIdentities = context.recordIdentities.get(step.extract.collection) || new Set<string>();
+  context.recordIdentities.set(step.extract.collection, seenIdentities);
+  const seenFingerprints = context.recordFingerprints.get(step.extract.collection) || new Set<string>();
+  context.recordFingerprints.set(step.extract.collection, seenFingerprints);
+
+  let added = 0;
+  for (const record of records) {
+    if (requestedMax !== undefined && added >= requestedMax) break;
+    if (totalRecordCount(context.data) >= context.maxRecords) {
+      if (!context.warnings.includes("已达到工具的最大记录数。")) context.warnings.push("已达到工具的最大记录数。");
+      break;
+    }
+    if (step.extract.dedupe_by) {
+      const identity = JSON.stringify(record[step.extract.dedupe_by]);
+      if (seenIdentities.has(identity)) continue;
+      seenIdentities.add(identity);
+    } else {
+      const fingerprint = JSON.stringify(record);
+      if (seenFingerprints.has(fingerprint)) continue;
+      seenFingerprints.add(fingerprint);
+    }
+    collection.push(record);
+    added += 1;
+  }
+  context.warnings.push(`state_read 提取 ${added} 条记录。`);
+  return "continue";
 }

@@ -7,6 +7,7 @@ import type {
   BrowserToolGraphqlFieldDefinition,
   BrowserToolGraphqlFetchStep,
   BrowserToolTransformSpec,
+  BrowserToolStateReadStep,
   BrowserToolParameterDefinition,
   BrowserToolPresentation,
   BrowserToolStep,
@@ -695,6 +696,8 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
           optional: readOptionalBoolean(step.optional, `${path}.optional`)
         };
       }
+      case "state_read":
+        return validateStateReadStep(action, step, path);
       default:
         throw new Error(`${path}.action 不支持：${action}`);
     }
@@ -883,5 +886,57 @@ function validateDetailExtract(value: unknown): NonNullable<BrowserToolDefinitio
     max_items: maxItems,
     delay_ms: delay,
     blockers
+  };
+}
+
+/** state_read 步骤：读取页面 SSR 状态并按声明提取；字段为 path 提取或 template 组合。 */
+function validateStateReadStep(
+  action: string,
+  step: Record<string, unknown>,
+  path: string
+): BrowserToolStateReadStep {
+  const source = step.source === undefined ? undefined : readString(step.source, `${path}.source`);
+  if (source !== undefined && source !== "__INITIAL_STATE__") throw new Error(`${path}.source 只支持 __INITIAL_STATE__。`);
+  const extractSource = asRecord(step.extract, `${path}.extract`);
+  const collection = readString(extractSource.collection, `${path}.extract.collection`);
+  if (!COLLECTION_PATTERN.test(collection)) throw new Error(`${path}.extract.collection 无效。`);
+  const walk = extractSource.walk === undefined ? undefined : asRecord(extractSource.walk, `${path}.extract.walk`);
+  const walkHas = walk === undefined ? undefined : readString(walk.has, `${path}.extract.walk.has`);
+  const fieldsSource = asRecord(extractSource.fields, `${path}.extract.fields`);
+  const fields: Record<string, import("./contracts").BrowserToolStateReadField> = {};
+  for (const [fieldName, rawField] of Object.entries(fieldsSource)) {
+    if (!COLLECTION_PATTERN.test(fieldName)) throw new Error(`${path}.extract.fields.${fieldName} 名称无效。`);
+    const field = asRecord(rawField, `${path}.extract.fields.${fieldName}`);
+    const hasPath = typeof field.path === "string";
+    const hasTemplate = typeof field.template === "string";
+    if (hasPath === hasTemplate) throw new Error(`${path}.extract.fields.${fieldName} 必须且只能声明 path 或 template。`);
+    if (hasPath && !/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(field.path as string)) {
+      throw new Error(`${path}.extract.fields.${fieldName}.path 无效。`);
+    }
+    fields[fieldName] = {
+      path: hasPath ? field.path as string : undefined,
+      fallback_paths: field.fallback_paths === undefined ? undefined : readStringArray(field.fallback_paths, `${path}.extract.fields.${fieldName}.fallback_paths`),
+      item_path: field.item_path === undefined ? undefined : readString(field.item_path, `${path}.extract.fields.${fieldName}.item_path`),
+      template: hasTemplate ? field.template as string : undefined,
+      transforms: field.transforms === undefined ? undefined : validateTransforms(field.transforms, `${path}.extract.fields.${fieldName}.transforms`),
+      optional: readOptionalBoolean(field.optional, `${path}.extract.fields.${fieldName}.optional`)
+    };
+  }
+  if (Object.keys(fields).length === 0) throw new Error(`${path}.extract.fields 不能为空。`);
+  const dedupeBy = readOptionalString(extractSource.dedupe_by, `${path}.extract.dedupe_by`);
+  if (dedupeBy && !(dedupeBy in fields)) throw new Error(`${path}.extract.dedupe_by 必须引用已声明字段。`);
+  const maxItems = typeof step.max_items === "string" ? readString(step.max_items, `${path}.max_items`) : readOptionalNumber(step.max_items, `${path}.max_items`);
+  if (typeof maxItems === "number" && (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 200)) {
+    throw new Error(`${path}.max_items 必须是 1-200 的整数。`);
+  }
+  if (typeof maxItems === "string" && !/\{\{\s*(parameters|values)\.[a-zA-Z0-9_-]+\s*\}\}/.test(maxItems)) {
+    throw new Error(`${path}.max_items 字符串必须引用参数或存储值。`);
+  }
+  return {
+    action: "state_read",
+    source: source as "__INITIAL_STATE__" | undefined,
+    extract: { collection, walk: walkHas ? { has: walkHas } : undefined, fields, dedupe_by: dedupeBy },
+    max_items: maxItems,
+    optional: readOptionalBoolean(step.optional, `${path}.optional`)
   };
 }

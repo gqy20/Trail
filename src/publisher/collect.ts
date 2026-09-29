@@ -42,7 +42,7 @@ export function recordsToFeedPosts(
       fetched_at: record.fetched_at || new Date().toISOString(),
       is_repost: isRepost || undefined,
       metrics: Object.keys(metrics).length > 0 ? metrics : undefined,
-      media: record.media
+      media: typeof record.media === "string" ? [record.media] : record.media
     });
     if (post) posts.push(post);
   }
