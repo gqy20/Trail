@@ -139,7 +139,8 @@ presentation:
       item_label: 篇
       count_unit: 篇
       fields:
-        title: { label: 标题, order: 10, emphasis: primary }
+        _query: { label: 账号, order: 5, emphasis: primary }
+        title: { label: 标题, order: 10 }
         text: { label: 正文, order: 20 }
         likes: { label: 赞, order: 30 }
         collects: { label: 藏, order: 40 }

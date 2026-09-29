@@ -2715,3 +2715,11 @@ code, pre, kbd, samp, .code-textarea {
 .collector-add .input { flex: 1; }
 .collector-add .button { display: inline-flex; align-items: center; gap: 5px; }
 .collector-panel > p { margin: 0; }
+
+/* 结果表格：单元格限宽截断，悬停可见全文由导出兜底 */
+.result-preview-table td {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

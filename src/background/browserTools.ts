@@ -14,6 +14,7 @@ import { matchesBrowserTool } from "../browser-tools/matcher";
 import { resolveTemplate } from "../browser-tools/template";
 import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
+import { getFollows } from "../collector/follows";
 import {
   deleteStoredBrowserTool,
   getBrowserToolRuns,
@@ -233,6 +234,7 @@ async function continueBatchRun(
   let failed = false;
   let retriedIndex = -1;
   const runStartedAt = Date.now();
+  const displayNames = definition.feed ? new Map((await getFollows(definition.feed.platform)).filter((entry) => entry.displayName).map((entry) => [entry.handle, entry.displayName!])) : undefined;
   logInfo("batch", "batch.start", "批量运行开始", { toolId: definition.id, runId: initial.runId, total: initial.keywords.length, fromIndex: initial.nextIndex });
 
   const heartbeat = setInterval(() => {
@@ -293,7 +295,7 @@ async function continueBatchRun(
         }
 
         state = {
-          ...advanceBatchRun(state, keyword, result.data),
+          ...advanceBatchRun(state, keyword, (() => { const name = displayNames?.get(keyword); return name ? enrichAuthor(result.data, keyword, name) : result.data; })()),
           lastPageUrl: result.pageUrl,
           lastPageTitle: result.pageTitle
         };
@@ -760,4 +762,16 @@ async function extractDetailsOnTab(
 /** CSS.escape 的最小实现（属性选择器值转义）。 */
 function cssEscape(value: string): string {
   return value.replace(/["\\\]]/g, "\\$&");
+}
+
+/** 批量合并时给记录补充可读的账号名（详情页没提取到 author 时兜底）。 */
+function enrichAuthor(
+  data: BrowserToolRunResult["data"],
+  keyword: string,
+  displayName: string
+): BrowserToolRunResult["data"] {
+  return Object.fromEntries(Object.entries(data).map(([collection, records]) => [
+    collection,
+    records.map((record) => ({ _query: keyword, author: displayName, ...record }))
+  ]));
 }

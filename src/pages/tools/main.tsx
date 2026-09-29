@@ -1161,6 +1161,7 @@ function renderCellValue(value: unknown, presentation?: BrowserToolFieldPresenta
 
 function formatCellValue(value: unknown): string {
   if (value === undefined || value === null) return "—";
+  if (typeof value === "string" && !value.trim()) return "—";
   if (Array.isArray(value)) return value.map(formatCsvValue).join("；");
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);

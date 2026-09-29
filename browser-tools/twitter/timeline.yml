@@ -190,6 +190,7 @@ presentation:
       item_label: 条
       count_unit: 条
       fields:
+        _query: { label: 用户, order: 5 }
         handle: { label: 用户, order: 10, emphasis: primary }
         text: { label: 正文, order: 20 }
         created_at: { label: 发布时间, order: 30 }
