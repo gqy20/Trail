@@ -1347,10 +1347,7 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-.queue-status.status-completed { background: var(--trail-accent-soft); color: #08756b; }
-.queue-status.status-needs_user,
-.queue-status.status-failed { background: #fff4d8; color: #8d6516; }
-.queue-status.status-resolving { background: #eaf1fb; color: #41648d; }
+/* 状态语义由图标形状承载（悬停有文字），不再叠加按状态着色的底色。 */
 
 .queue-list-note {
   margin: 0;
@@ -2674,12 +2671,11 @@ button.session-card:hover {
 .logs-toolbar .button { display: inline-flex; align-items: center; gap: 6px; }
 .logs-list { display: flex; flex-direction: column; gap: 8px; }
 .log-entry { border: 1px solid rgba(127,127,127,.2); border-radius: 8px; padding: 8px 12px; background: rgba(127,127,127,.05); }
-.log-entry.log-error { border-color: rgba(205,32,50,.45); }
-.log-entry.log-warn { border-color: rgba(191,144,0,.45); }
+/* 级别由彩色字母区分，条目边框不再按级别重复着色。 */
 .log-entry header { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
 .log-entry time { margin-left: auto; color: var(--trail-muted, #888); font-variant-numeric: tabular-nums; }
 .log-entry p { margin: 4px 0 0; font-size: 13px; }
-.log-level { border-radius: 5px; padding: 0 6px; font-size: 11px; border: 1px solid currentColor; }
+.log-level { font-size: 11px; font-weight: 600; }
 .log-level-debug { color: #6e7781; }
 .log-level-info { color: #0969da; }
 .log-level-warn { color: #9a6700; }
