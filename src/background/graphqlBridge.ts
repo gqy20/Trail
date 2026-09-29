@@ -202,31 +202,55 @@ export async function readPageStateForTab(
   return { state: results[0]?.result ?? null };
 }
 
-async function readInitialStateInPage(): Promise<unknown> {
-  // hydration 时间窗：__INITIAL_STATE__ 由 SSR/client bootstrap 异步注入，
-  // 最多重试 4 次、间隔 800ms（opencli user.js 实测的同款坑）。
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const value = (window as { __INITIAL_STATE__?: unknown }).__INITIAL_STATE__;
-    if (value !== undefined && value !== null) return safeClone(value);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-  }
-  return null;
-}
-
-/** 深克隆页面状态：处理循环引用与不可序列化值（Vue 响应式代理常见环引用）。 */
-function safeClone(value: unknown, seen: WeakMap<object, string> = new WeakMap()): unknown {
-  if (value === null || typeof value !== "object") {
-    if (typeof value === "function") return undefined;
-    if (typeof value === "bigint") return String(value);
-    return value;
-  }
-  if (seen.has(value as object)) return "[Circular]";
-  seen.set(value as object, "1");
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map((item) => safeClone(item, seen));
-  const out: Record<string, unknown> = {};
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    out[key] = safeClone((value as Record<string, unknown>)[key], seen);
-  }
-  return out;
+/**
+ * 页面主世界读取 __INITIAL_STATE__。必须完全自包含：chrome.scripting
+ * 只序列化函数本身，模块作用域引用注入后不存在。用迭代克隆替代递归——
+ * 整树深递归会爆栈（实测 RangeError），且 Vue 响应式代理含循环引用与
+ * 抛异常的 getter；深度 14 / 节点 3 万封顶，Pinia Ref 的 _value 包装
+ * 保留原样（提取的递归 walk 可穿透）。
+ */
+function readInitialStateInPage(): Promise<unknown> {
+  return (async () => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const root = (window as { __INITIAL_STATE__?: unknown }).__INITIAL_STATE__;
+      if (root !== undefined && root !== null && typeof root === "object") {
+        const seen = new WeakMap<object, number>();
+        const out: Record<string, unknown> = {};
+        const stack: Array<{ src: Record<string, unknown>; dst: Record<string, unknown>; depth: number }> = [
+          { src: root as Record<string, unknown>, dst: out, depth: 0 }
+        ];
+        let count = 0;
+        while (stack.length > 0) {
+          count += 1;
+          if (count > 30_000) return out;
+          const frame = stack.pop()!;
+          if (!frame.src || typeof frame.src !== "object") continue;
+          for (const key of Object.keys(frame.src)) {
+            let value: unknown;
+            try {
+              value = frame.src[key];
+            } catch {
+              continue;
+            }
+            if (value === null || typeof value !== "object") {
+              if (typeof value === "function") continue;
+              if (typeof value === "bigint") { frame.dst[key] = String(value); continue; }
+              frame.dst[key] = value;
+              continue;
+            }
+            if (seen.has(value as object)) { frame.dst[key] = "[Circular]"; continue; }
+            seen.set(value as object, 1);
+            if (value instanceof Date) { frame.dst[key] = value.toISOString(); continue; }
+            if (frame.depth + 1 > 14) { frame.dst[key] = "[DepthLimit]"; continue; }
+            const child = (Array.isArray(value) ? [] : {}) as Record<string, unknown>;
+            frame.dst[key] = child;
+            stack.push({ src: value as Record<string, unknown>, dst: child, depth: frame.depth + 1 });
+          }
+        }
+        return out;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+    return null;
+  })();
 }
