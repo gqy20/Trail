@@ -12,10 +12,17 @@ import type {
   ResolveLiteratureResourceMessage,
   TriggerLiteratureDownloadMessage
 } from "../literature-queue/types";
-import { executeBrowserTool } from "./executor";
+import { executeBrowserTool, extractPageFields } from "./executor";
+import type { BrowserToolFieldDefinition } from "./contracts";
 
 export function installBrowserToolContentRuntime(): void {
   chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+    if (isExtractDetailsMessage(message)) {
+      extractDetailsOnPage(message)
+        .then(sendResponse)
+        .catch((error: unknown) => sendResponse({ error: error instanceof Error ? error.message : "无法提取详情字段。" }));
+      return true;
+    }
     if (isResolveLiteratureResourceMessage(message)) {
       try {
         sendResponse(resolveLiteratureResource());
@@ -289,10 +296,36 @@ function isNativeExportBatchMessage(value: unknown): value is RunBrowserToolNati
   return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "RUN_BROWSER_TOOL_NATIVE_EXPORT_BATCH");
 }
 
-function isResolveLiteratureResourceMessage(value: unknown): value is ResolveLiteratureResourceMessage {
-  return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "RESOLVE_LITERATURE_RESOURCE");
+function isResolveLiteratureResourceMessage(value: unknown): value is ResolveLiteratureResourceMessage {  return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "RESOLVE_LITERATURE_RESOURCE");
 }
 
 function isTriggerLiteratureDownloadMessage(value: unknown): value is TriggerLiteratureDownloadMessage {
   return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "TRIGGER_LITERATURE_DOWNLOAD");
+}
+
+type ExtractDetailsMessage = {
+  type: "EXTRACT_BROWSER_TOOL_DETAILS";
+  fields: Record<string, BrowserToolFieldDefinition>;
+  waitFor?: string;
+  timeoutMs?: number;
+  blockers?: Array<{ selector?: string; reason: string }>;
+};
+
+/** 详情页提取：先等锚点元素，再检查阻断器，最后按声明取字段。 */
+async function extractDetailsOnPage(message: ExtractDetailsMessage): Promise<{ record?: Record<string, unknown>; blocker?: string }> {
+  if (message.waitFor) {
+    const deadline = Date.now() + (message.timeoutMs || 12_000);
+    while (Date.now() < deadline && !document.querySelector(message.waitFor)) {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    }
+    if (!document.querySelector(message.waitFor)) return { blocker: "详情页未出现预期内容，可能需要登录或被风控拦截。" };
+  }
+  for (const blocker of message.blockers || []) {
+    if (blocker.selector && document.querySelector(blocker.selector)) return { blocker: blocker.reason };
+  }
+  return { record: extractPageFields(message.fields) };
+}
+
+function isExtractDetailsMessage(value: unknown): value is ExtractDetailsMessage {
+  return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "EXTRACT_BROWSER_TOOL_DETAILS");
 }

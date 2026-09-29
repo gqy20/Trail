@@ -1,0 +1,143 @@
+schema_version: 1
+id: xhs-notes
+name: 小红书用户笔记采集
+version: "1.0.0"
+description: 在已登录的小红书会话中读取指定用户的最新笔记并进入详情页提取全文，节奏按风控保守设置。
+match:
+  domains: [www.xiaohongshu.com, xiaohongshu.com]
+feed:
+  collection: notes
+  platform: xhs
+  entry_url: https://www.xiaohongshu.com
+parameters:
+  user:
+    type: string
+    required: true
+    label: 用户 ID
+    presentation: { placement: hidden }
+  notes_per_user:
+    type: number
+    default: 8
+    min: 1
+    max: 12
+    label: 每用户笔记数
+    presentation:
+      placement: primary
+      style: sentence
+      prefix: 每个用户读取
+      suffix: 篇笔记
+batch:
+  navigation:
+    type: fixed_url
+    url: "https://www.xiaohongshu.com/user/profile/{{ parameters.user }}"
+    input_parameter: user
+  max_keywords: 20
+  delay_between_keywords_ms: 15000
+limits:
+  max_records: 60
+  delay_between_actions_ms: 800
+workflow:
+  - action: pause_if_present
+    url_contains: "/login"
+    reason: 小红书登录态失效（页面被重定向到登录页），请重新登录后重试。
+  - action: pause_if_present
+    url_contains: "error_code=3000"
+    reason: 小红书风控拦截（error_code=3000xx），请稍后在页面完成验证后重试。
+  - action: wait_for
+    selector: "section.note-item a[href], a.cover[href*='/explore/'], a[href*='/search_result/']"
+    timeout_ms: 15000
+  - action: repeat
+    max: 6
+    stop_after_records: 8
+    steps:
+      - action: extract
+        collection: notes
+        selector: "section.note-item, li.note-item, div.note-item"
+        dedupe_by: id
+        fields:
+          url:
+            selector: "a[href*='/explore/'], a[href*='/search_result/']"
+            attribute: href
+          id:
+            selector: "a[href*='/explore/'], a[href*='/search_result/']"
+            attribute: href
+            transforms: [{ match: "/(?:explore|search_result)/([0-9a-f]{8,})" }]
+          title:
+            selector: ".title, .note-text, a.title span"
+            transforms: [trim]
+            optional: true
+    between:
+      - action: scroll
+        position: bottom
+      - action: wait
+        duration_ms: 1200
+detail_extract:
+  collection: notes
+  url_field: url
+  wait_for: "#detail-desc, .note-text, #detail-title"
+  timeout_ms: 12000
+  max_items: 8
+  delay_ms: 5000
+  blockers:
+    - url_contains: "error_code=3000"
+      reason: 详情页被风控拦截，请打开页面完成验证后继续。
+    - selector: ".login-container, .login-modal"
+      reason: 详情页要求登录，请处理后继续。
+  fields:
+    title:
+      selector: "#detail-title, .title"
+      transforms: [trim]
+      optional: true
+    text:
+      selector: "#detail-desc, .desc, .note-text"
+      transforms: [normalize_whitespace]
+    author:
+      selector: ".username, .author-wrapper .name"
+      transforms: [trim]
+      optional: true
+    likes:
+      selector: ".interact-container .like-wrapper .count"
+      transforms: [parse_number]
+      optional: true
+    collects:
+      selector: ".interact-container .collect-wrapper .count"
+      transforms: [parse_number]
+      optional: true
+    comments:
+      selector: ".interact-container .chat-wrapper .count"
+      transforms: [parse_number]
+      optional: true
+    media:
+      selector: ".note-image-container img, .swiper-slide img, .media-container img"
+      attribute: src
+      multiple: true
+      optional: true
+presentation:
+  title: 小红书笔记采集
+  source_label: 小红书
+  batch_input:
+    label: 用户 ID
+    placeholder: 每行一个 24 位用户 ID（主页 URL 里 /user/profile/ 后那段）
+    item_label: 用户
+    count_unit: 个
+    import_formats: [txt, csv]
+    csv_headers: [用户ID, user_id, handle]
+  actions:
+    run: 开始采集
+    run_empty: 输入用户 ID 后开始
+    running: 正在采集…
+    single_run: 读取当前打开用户的主页
+  results:
+    title: 本次抓取
+    item_label: 篇
+    count_unit: 篇
+  collections:
+    notes:
+      label: 笔记
+      item_label: 篇
+      count_unit: 篇
+      fields:
+        title: { label: 标题, order: 10, emphasis: primary }
+        text: { label: 正文, order: 20 }
+        likes: { label: 赞, order: 30 }
+        collects: { label: 藏, order: 40 }

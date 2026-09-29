@@ -218,3 +218,22 @@ function toYaml(value: Record<string, unknown>): string {
   for (const [key, value] of Object.entries(value)) render("", key, value, 0);
   return lines.join("\n");
 }
+
+test("xhs/notes.yml 通过校验并保留风控节奏声明", () => {
+  const definition = parseBrowserToolYaml(readFileSync("browser-tools/xhs/notes.yml", "utf8"));
+  expect(definition.id).toBe("xhs-notes");
+  expect(definition.feed).toMatchObject({ collection: "notes", platform: "xhs", entry_url: "https://www.xiaohongshu.com" });
+  expect(definition.batch?.delay_between_keywords_ms).toBe("{{ parameters.delay_between_users_ms }}" as unknown || 15000 || undefined);
+  expect(definition.detail_extract).toBeDefined();
+  expect(definition.detail_extract?.delay_ms).toBe(5000);
+  expect(definition.detail_extract?.max_items).toBe(8);
+  expect(definition.detail_extract?.url_field).toBe("url");
+  expect(definition.detail_extract?.blockers?.some((b) => b.url_contains === "error_code=3000")).toBe(true);
+  // match 转换保留为对象形态
+  const extract = definition.workflow.find((step) => step.action === "repeat") as { steps: Array<{ fields: Record<string, { transforms: unknown[] }> }> };
+  const idTransforms = extract.steps[0].fields.id.transforms;
+  expect(Array.isArray(idTransforms) && typeof idTransforms[0] === "object" && "match" in (idTransforms[0] as object)).toBe(true);
+  // pause_if_present 支持 url_contains
+  const pause = definition.workflow[0] as { url_contains?: string };
+  expect(pause.url_contains).toBe("/login");
+});

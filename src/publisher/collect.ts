@@ -37,7 +37,8 @@ export function recordsToFeedPosts(
       title: record.title,
       text,
       url: record.url || (handle ? buildPostUrl(platform, handle, nativeId) : undefined),
-      created_at: record.created_at,
+      // 部分渠道（如小红书 DOM）拿不到可靠发布时间，回退抓取时间保证可入库。
+      created_at: record.created_at || new Date().toISOString(),
       fetched_at: record.fetched_at || new Date().toISOString(),
       is_repost: isRepost || undefined,
       metrics: Object.keys(metrics).length > 0 ? metrics : undefined,

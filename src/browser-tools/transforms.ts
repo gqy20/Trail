@@ -1,10 +1,14 @@
-import type { BrowserToolTransform } from "./contracts";
+import type { BrowserToolTransform, BrowserToolTransformSpec } from "./contracts";
 
-export function applyBrowserToolTransforms(value: unknown, transforms: BrowserToolTransform[] = []): unknown {
+export function applyBrowserToolTransforms(value: unknown, transforms: BrowserToolTransformSpec[] = []): unknown {
   return transforms.reduce<unknown>((current, transform) => applyTransform(current, transform), value);
 }
 
-function applyTransform(value: unknown, transform: BrowserToolTransform): unknown {
+function applyTransform(value: unknown, transform: BrowserToolTransformSpec): unknown {
+  if (typeof transform === "object") {
+    const match = String(value ?? "").match(transform.match);
+    return match ? (match[1] ?? match[0]) : undefined;
+  }
   switch (transform) {
     case "trim":
       return typeof value === "string" ? value.trim() : value;

@@ -183,6 +183,11 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
       return "continue";
     }
     case "pause_if_present": {
+      if (step.url_contains && location.href.includes(step.url_contains)) {
+        context.warnings.push(step.reason);
+        return "pause";
+      }
+      if (!step.selector) return "continue";
       const selector = resolve(step.selector, context);
       const element = await waitForElement(selector, step.timeout_ms || 1_500);
       if (!element) return "continue";
@@ -279,6 +284,17 @@ function extractCollection(step: BrowserToolExtractStep, context: ExecutionConte
   return true;
 }
 
+/** 详情页字段提取：由 contentRuntime 的详情补全消息调用，选择器作用于整个文档。 */
+export function extractPageFields(fields: Record<string, BrowserToolFieldDefinition>): Record<string, unknown> {
+  const context: ExecutionContext = { definition: { schema_version: 1, id: "detail_extract", name: "detail_extract", version: "0", match: { domains: [] }, workflow: [] }, parameters: {}, values: {}, data: {}, warnings: [], fingerprints: new Map(), recordFingerprints: new Map(), recordIdentities: new Map(), maxRecords: 1 };
+  const record: Record<string, unknown> = {};
+  for (const [name, field] of Object.entries(fields)) {
+    const value = extractField(document.documentElement, field, context);
+    if (value !== undefined) record[name] = value;
+  }
+  return record;
+}
+
 function extractField(root: Element, field: BrowserToolFieldDefinition, context: ExecutionContext): unknown {
   if (field.multiple) {
     const elements = field.selector ? [...root.querySelectorAll(resolve(field.selector, context))] : [root];
@@ -302,6 +318,11 @@ function extractElementValue(element: Element, field: BrowserToolFieldDefinition
     case "href": {
       const rawHref = element.getAttribute("href");
       value = rawHref ? new URL(rawHref, location.href).href : undefined;
+      break;
+    }
+    case "src": {
+      const rawSrc = element.getAttribute("src") || element.getAttribute("data-src");
+      value = rawSrc ? new URL(rawSrc, location.href).href : undefined;
       break;
     }
     case "content":

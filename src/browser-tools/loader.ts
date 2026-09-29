@@ -6,6 +6,7 @@ import type {
   BrowserToolFieldDefinition,
   BrowserToolGraphqlFieldDefinition,
   BrowserToolGraphqlFetchStep,
+  BrowserToolTransformSpec,
   BrowserToolParameterDefinition,
   BrowserToolPresentation,
   BrowserToolStep,
@@ -85,6 +86,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     feed = { collection, platform, entry_url: entryUrl };
   }
   const downloads = root.downloads === undefined ? undefined : validateDownloads(root.downloads);
+  const detailExtract = root.detail_extract === undefined ? undefined : validateDetailExtract(root.detail_extract);
   const nativeExports = root.native_exports === undefined ? undefined : validateNativeExports(root.native_exports);
   let checkin: BrowserToolDefinition["checkin"];
   if (root.checkin !== undefined) {
@@ -116,6 +118,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     workflow,
     presentation,
     feed,
+    detail_extract: detailExtract,
     downloads,
     native_exports: nativeExports,
     batch,
@@ -515,7 +518,8 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
       case "pause_if_present":
         return {
           action,
-          selector: validatedSelector(step.selector, `${path}.selector`),
+          selector: step.selector === undefined ? undefined : validatedSelector(step.selector, `${path}.selector`),
+          url_contains: step.url_contains === undefined ? undefined : readString(step.url_contains, `${path}.url_contains`),
           reason: validateUiText(readString(step.reason, `${path}.reason`), `${path}.reason`, 300),
           timeout_ms: validatedTimeout(step.timeout_ms, `${path}.timeout_ms`)
         };
@@ -528,17 +532,14 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
           if (!COLLECTION_PATTERN.test(fieldName)) throw new Error(`${path}.fields.${fieldName} 名称无效。`);
           const field = asRecord(rawField, `${path}.fields.${fieldName}`);
           const attribute = field.attribute === undefined ? "text" : readString(field.attribute, `${path}.fields.${fieldName}.attribute`);
-          if (!["text", "href", "content", "datetime", "aria_label"].includes(attribute)) {
+          if (!["text", "href", "src", "content", "datetime", "aria_label"].includes(attribute)) {
             throw new Error(`${path}.fields.${fieldName}.attribute 不在白名单内。`);
           }
-          const transforms = field.transforms === undefined ? undefined : readStringArray(field.transforms, `${path}.fields.${fieldName}.transforms`);
-          transforms?.forEach((transform) => {
-            if (!TRANSFORMS.has(transform as BrowserToolTransform)) throw new Error(`未知转换：${transform}`);
-          });
+          const transforms = field.transforms === undefined ? undefined : validateTransforms(field.transforms, `${path}.fields.${fieldName}.transforms`);
           fields[fieldName] = {
             selector: field.selector === undefined ? undefined : validatedSelector(field.selector, `${path}.fields.${fieldName}.selector`),
             attribute: attribute as BrowserToolFieldDefinition["attribute"],
-            transforms: transforms as BrowserToolTransform[] | undefined,
+            transforms,
             optional: readOptionalBoolean(field.optional, `${path}.fields.${fieldName}.optional`),
             multiple: readOptionalBoolean(field.multiple, `${path}.fields.${fieldName}.multiple`)
           };
@@ -654,15 +655,12 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
               if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(fallback)) throw new Error(`${path}.extract.fields.${fieldName}.fallback_paths 含无效路径。`);
             });
             const itemPath = field.item_path === undefined ? undefined : readString(field.item_path, `${path}.extract.fields.${fieldName}.item_path`);
-            const transforms = field.transforms === undefined ? undefined : readStringArray(field.transforms, `${path}.extract.fields.${fieldName}.transforms`);
-            transforms?.forEach((transform) => {
-              if (!TRANSFORMS.has(transform as BrowserToolTransform)) throw new Error(`未知转换：${transform}`);
-            });
+            const transforms = field.transforms === undefined ? undefined : validateTransforms(field.transforms, `${path}.extract.fields.${fieldName}.transforms`);
             fields[fieldName] = {
               path: fieldPath,
               fallback_paths: fallbackPaths,
               item_path: itemPath,
-              transforms: transforms as BrowserToolTransform[] | undefined,
+              transforms,
               optional: readOptionalBoolean(field.optional, `${path}.extract.fields.${fieldName}.optional`)
             };
           }
@@ -703,8 +701,7 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
   });
 }
 
-function validateGraphqlValueMap(value: unknown, path: string): Record<string, unknown> {
-  const source = asRecord(value, path);
+function validateGraphqlValueMap(value: unknown, path: string): Record<string, unknown> {  const source = asRecord(value, path);
   const result: Record<string, unknown> = {};
   for (const [name, raw] of Object.entries(source)) {
     if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name)) throw new Error(`${path}.${name} 名称无效。`);
@@ -812,4 +809,76 @@ function readOptionalBoolean(value: unknown, path: string): boolean | undefined 
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") throw new Error(`${path} 必须是布尔值。`);
   return value;
+}
+
+/** 转换声明：命名转换字符串或 { match: 正则 }（取第一个捕获组）。 */
+function validateTransforms(value: unknown, path: string): BrowserToolTransformSpec[] {
+  const list: unknown[] = Array.isArray(value) ? value : [value];
+  return list.map((item: unknown): BrowserToolTransformSpec => {
+    if (typeof item === "string") {
+      if (!TRANSFORMS.has(item as BrowserToolTransform)) throw new Error(`未知转换：${item}`);
+      return item as BrowserToolTransform;
+    }
+    const record = asRecord(item, path);
+    if (Object.keys(record).length !== 1 || typeof record.match !== "string") {
+      throw new Error(`${path} 只支持命名转换或 { match: 正则 }。`);
+    }
+    try {
+      new RegExp(record.match);
+    } catch {
+      throw new Error(`${path}.match 不是合法正则。`);
+    }
+    return { match: record.match };
+  });
+}
+
+/** 详情页补全段：字段语法与 extract 一致，另声明 URL 字段、节奏与阻断器。 */
+function validateDetailExtract(value: unknown): NonNullable<BrowserToolDefinition["detail_extract"]> {
+  const source = asRecord(value, "detail_extract");
+  const collection = readString(source.collection, "detail_extract.collection");
+  if (!COLLECTION_PATTERN.test(collection)) throw new Error("detail_extract.collection 无效。");
+  const urlField = readString(source.url_field, "detail_extract.url_field");
+  if (!COLLECTION_PATTERN.test(urlField)) throw new Error("detail_extract.url_field 无效。");
+  const fieldsSource = asRecord(source.fields, "detail_extract.fields");
+  const fields: Record<string, BrowserToolFieldDefinition> = {};
+  for (const [fieldName, rawField] of Object.entries(fieldsSource)) {
+    if (!COLLECTION_PATTERN.test(fieldName)) throw new Error(`detail_extract.fields.${fieldName} 名称无效。`);
+    const field = asRecord(rawField, `detail_extract.fields.${fieldName}`);
+    const attribute = field.attribute === undefined ? "text" : readString(field.attribute, `detail_extract.fields.${fieldName}.attribute`);
+    if (!["text", "href", "src", "content", "datetime", "aria_label"].includes(attribute)) {
+      throw new Error(`detail_extract.fields.${fieldName}.attribute 不在白名单内。`);
+    }
+    fields[fieldName] = {
+      selector: validatedSelector(field.selector, `detail_extract.fields.${fieldName}.selector`),
+      attribute: attribute as BrowserToolFieldDefinition["attribute"],
+      transforms: field.transforms === undefined ? undefined : validateTransforms(field.transforms, `detail_extract.fields.${fieldName}.transforms`),
+      optional: readOptionalBoolean(field.optional, `detail_extract.fields.${fieldName}.optional`),
+      multiple: readOptionalBoolean(field.multiple, `detail_extract.fields.${fieldName}.multiple`)
+    };
+  }
+  if (Object.keys(fields).length === 0) throw new Error("detail_extract.fields 不能为空。");
+  const blockers = (source.blockers === undefined ? [] : asArray(source.blockers, "detail_extract.blockers")).map((raw, index) => {
+    const blocker = asRecord(raw, `detail_extract.blockers[${index}]`);
+    const entry: { selector?: string; url_contains?: string; reason: string } = {
+      reason: validateUiText(readString(blocker.reason, `detail_extract.blockers[${index}].reason`), `detail_extract.blockers[${index}].reason`, 300)
+    };
+    if (blocker.selector !== undefined) entry.selector = validatedSelector(blocker.selector, `detail_extract.blockers[${index}].selector`);
+    if (blocker.url_contains !== undefined) entry.url_contains = readString(blocker.url_contains, `detail_extract.blockers[${index}].url_contains`);
+    if (!entry.selector && !entry.url_contains) throw new Error(`detail_extract.blockers[${index}] 必须声明 selector 或 url_contains。`);
+    return entry;
+  });
+  const maxItems = readOptionalNumber(source.max_items, "detail_extract.max_items");
+  if (maxItems !== undefined && (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 50)) throw new Error("detail_extract.max_items 必须是 1-50 的整数。");
+  const delay = readOptionalNumber(source.delay_ms, "detail_extract.delay_ms");
+  if (delay !== undefined && (delay < 0 || delay > 60_000)) throw new Error("detail_extract.delay_ms 超出范围。");
+  return {
+    collection,
+    url_field: urlField,
+    fields,
+    wait_for: source.wait_for === undefined ? undefined : validatedSelector(source.wait_for, "detail_extract.wait_for"),
+    timeout_ms: validatedTimeout(source.timeout_ms, "detail_extract.timeout_ms"),
+    max_items: maxItems,
+    delay_ms: delay,
+    blockers
+  };
 }

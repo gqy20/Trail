@@ -280,7 +280,7 @@ async function continueBatchRun(
           : state.parameters;
         await navigateTab(tabId, nextUrl);
         const readyTab = await chrome.tabs.get(tabId);
-        const result = await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId);
+        const result = await enrichWithDetails(definition, tabId, await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId));
 
         if (result.status === "paused") {
           // 登录墙/验证码：保持游标不变，处理后可从该输入继续。
@@ -537,7 +537,7 @@ export async function runBrowserTool(input: {
   if (!/^https?:/i.test(tab.url)) throw new Error("Browser Tool 只能在普通 HTTP(S) 页面运行。");
   if (!matchesBrowserTool(definition, tab.url)) throw new Error(`工具 ${definition.id} 不适用于当前页面。`);
 
-  const result = await executeBrowserToolOnTab(definition, input.parameters, tab);
+  const result = await enrichWithDetails(definition, tab.id!, await executeBrowserToolOnTab(definition, input.parameters, tab));
   void stageAndMaybePublish(definition, result).catch(() => undefined);
   return persistRunResult(result, definition.name);
 }
@@ -666,4 +666,53 @@ async function getTargetTab(tabId?: number): Promise<chrome.tabs.Tab> {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!activeTab) throw new Error("没有找到当前活动标签页。");
   return activeTab;
+}
+
+/**
+ * 详情页补全：主工作流提取卡片后，由后台串行导航详情页，向内容脚本
+ * 请求字段提取并合并回记录。条目间隔遵守 detail_extract.delay_ms；
+ * 命中阻断器（URL 片段或选择器）时整体转暂停，交还用户处理。
+ */
+async function enrichWithDetails(
+  definition: ReturnType<typeof parseBrowserToolYaml>,
+  tabId: number,
+  result: BrowserToolRunResult
+): Promise<BrowserToolRunResult> {
+  const spec = definition.detail_extract;
+  if (!spec) return result;
+  const records = result.data[spec.collection];
+  if (!records || records.length === 0) return result;
+  const maxItems = Math.min(spec.max_items || records.length, records.length);
+  const delay = spec.delay_ms ?? 0;
+  let enriched = 0;
+
+  for (const record of records.slice(0, maxItems)) {
+    const url = record[spec.url_field];
+    if (typeof url !== "string" || !/^https?:\/\//.test(url)) continue;
+    await navigateTab(tabId, url);
+    const tab = await chrome.tabs.get(tabId);
+    const urlBlocker = (spec.blockers || []).find((blocker) => blocker.url_contains && (tab.url || "").includes(blocker.url_contains));
+    if (urlBlocker) {
+      return { ...result, status: "paused", error: urlBlocker.reason, warnings: [...result.warnings, urlBlocker.reason] };
+    }
+    const response = await chrome.tabs.sendMessage(tabId, {
+      type: "EXTRACT_BROWSER_TOOL_DETAILS",
+      fields: spec.fields,
+      waitFor: spec.wait_for,
+      timeoutMs: spec.timeout_ms,
+      blockers: (spec.blockers || []).filter((blocker) => blocker.selector)
+    }).catch(() => undefined);
+    if (!response || response.error) {
+      result.warnings.push(`[详情] ${response?.error || "无法在详情页提取字段。"}`);
+      continue;
+    }
+    if (response.blocker) {
+      return { ...result, status: "paused", error: response.blocker, warnings: [...result.warnings, response.blocker] };
+    }
+    Object.assign(record, response.record || {});
+    enriched += 1;
+    if (delay > 0 && enriched < maxItems) await sleep(delay);
+  }
+  logInfo("detail", "detail.enrich", "详情页补全完成", { toolId: definition.id, enriched });
+  return result;
 }

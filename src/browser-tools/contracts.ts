@@ -107,11 +107,14 @@ export type BrowserToolNativeExportDefinition = {
 
 export type BrowserToolFieldDefinition = {
   selector?: string;
-  attribute?: "text" | "href" | "content" | "datetime" | "aria_label";
-  transforms?: BrowserToolTransform[];
+  attribute?: "text" | "href" | "src" | "content" | "datetime" | "aria_label";
+  transforms?: BrowserToolTransformSpec[];
   optional?: boolean;
   multiple?: boolean;
 };
+
+/** 命名转换或 { match: 正则 }（取第一个捕获组）。 */
+export type BrowserToolTransformSpec = BrowserToolTransform | { match: string };
 
 export type BrowserToolTransform =
   | "trim"
@@ -202,7 +205,9 @@ export type BrowserToolPauseStep = {
 
 export type BrowserToolPauseIfPresentStep = {
   action: "pause_if_present";
-  selector: string;
+  selector?: string;
+  /** 命中即暂停的 URL 片段，如登录 302 的 /login 或风控 error_code=300017。 */
+  url_contains?: string;
   reason: string;
   timeout_ms?: number;
 };
@@ -214,7 +219,7 @@ export type BrowserToolGraphqlFieldDefinition = {
   fallback_paths?: string[];
   /** path 指向数组时，从每个元素读取的子路径，返回字符串/数字数组。 */
   item_path?: string;
-  transforms?: BrowserToolTransform[];
+  transforms?: BrowserToolTransformSpec[];
   optional?: boolean;
 };
 
@@ -276,6 +281,17 @@ export type BrowserToolDefinition = {
   presentation?: BrowserToolPresentation;
   /** 声明后，成功运行中该集合的记录会自动进入订阅源暂存。 */
   feed?: { collection: string; platform: string; entry_url?: string };
+  /** 主工作流提取卡片后，由后台串行进入详情页补全字段（不经工作流导航）。 */
+  detail_extract?: {
+    collection: string;
+    url_field: string;
+    fields: Record<string, BrowserToolFieldDefinition>;
+    wait_for?: string;
+    timeout_ms?: number;
+    max_items?: number;
+    delay_ms?: number;
+    blockers?: Array<{ selector?: string; url_contains?: string; reason: string }>;
+  };
   downloads?: BrowserToolDownloadDefinition[];
   native_exports?: BrowserToolNativeExportDefinition[];
   batch?: {
