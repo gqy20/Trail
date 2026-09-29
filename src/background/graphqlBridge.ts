@@ -185,11 +185,20 @@ export async function readPageStateForTab(
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("状态读取只支持普通网页。");
   const source = message.source || "__INITIAL_STATE__";
   if (source !== "__INITIAL_STATE__") throw new Error("不支持的状态源。");
-  const results = await chrome.scripting.executeScript({
-    target: { tabId },
-    world: "MAIN",
-    func: readInitialStateInPage
-  });
+  let results: chrome.scripting.InjectionResult<unknown>[];
+  try {
+    results = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: readInitialStateInPage
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (detail.includes("Cannot access contents")) {
+      throw new Error(`扩展缺少 ${parsed.hostname} 的主机权限（manifest host_permissions），请重新加载扩展并确认权限。`);
+    }
+    throw error;
+  }
   return { state: results[0]?.result ?? null };
 }
 

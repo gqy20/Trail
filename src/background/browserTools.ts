@@ -320,11 +320,6 @@ async function continueBatchRun(
             "[" + keyword + "] 冷却重试后仍被拦截，已暂停；请打开页面完成验证后点“继续”重试。", warnings);
         }
 
-        state = {
-          ...advanceBatchRun(state, keyword, (() => { const name = displayNames?.get(keyword); return name ? enrichAuthor(result.data, keyword, name) : result.data; })()),
-          lastPageUrl: result.pageUrl,
-          lastPageTitle: result.pageTitle
-        };
         warnings.push(...result.warnings.map((warning) => `[${keyword}] ${warning}`));
         if (result.status !== "completed") {
           const message = result.error || "提取未完整完成";
@@ -335,10 +330,17 @@ async function continueBatchRun(
             await sleep(5_000);
             continue;
           }
+          // 失败的输入不推进游标（继续/重试时从该输入重新开始），也不计入完成数。
+          state = { ...state, lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
           failed = true;
           warnings.push(`[${keyword}] ${message}`);
           break;
         }
+        state = {
+          ...advanceBatchRun(state, keyword, (() => { const name = displayNames?.get(keyword); return name ? enrichAuthor(result.data, keyword, name) : result.data; })()),
+          lastPageUrl: result.pageUrl,
+          lastPageTitle: result.pageTitle
+        };
         logDebug("batch", "keyword.done", "完成当前输入", {
           keyword,
           index: index + 1,
