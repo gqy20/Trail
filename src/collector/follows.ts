@@ -27,7 +27,10 @@ export async function removeFollow(platform: string, handle: string): Promise<Fo
 export async function importFollows(platform: string, text: string): Promise<FollowsImportResult> {
   const entries = parseFollowsText(platform, text);
   if (entries.length === 0) throw new Error("没有解析到有效账号。");
-  return applyImport(await readAll(), entries);
+  const result = applyImport(await readAll(), entries);
+  // applyImport 是纯函数，这里必须落盘——此前漏掉导致导入计数正常但刷新即丢。
+  await chrome.storage.local.set({ [KEY]: result.entries });
+  return result;
 }
 
 async function mergeFollows(existing: FollowEntry[], incoming: FollowEntry[]): Promise<FollowEntry[]> {
