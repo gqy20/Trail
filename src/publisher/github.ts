@@ -69,31 +69,86 @@ export async function fetchGitHubContent(target: RepoTarget, path: string): Prom
   return { content: fromBase64Utf8(payload.content), sha: payload.sha };
 }
 
-/** 创建或更新仓库文件，返回提交 SHA。sha 为空表示新建。 */
-export async function putGitHubContent(
+/** 单提交发布：Git Data API 把全部文件打包为一次 commit，替代逐文件 PUT。 */
+export async function commitGitHubFiles(
   target: RepoTarget,
-  path: string,
-  content: string,
-  message: string,
-  sha?: string
+  files: Array<{ path: string; content: string }>,
+  message: string
 ): Promise<string> {
-  const response = await githubFetch(
-    `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/contents/${encodePath(path)}`,
+  // 1. 读分支头提交与其树（base_tree 保证未列出的文件原样保留）
+  const refResponse = await githubFetch(
+    `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/git/ref/heads/${encodeURIComponent(target.branch)}`,
+    target.token
+  );
+  if (!refResponse.ok) throw new Error(await describeError(refResponse));
+  const ref = (await refResponse.json()) as { object?: { sha?: string } };
+  const parentSha = ref.object?.sha;
+  if (!parentSha) throw new Error("无法读取分支头提交（仓库可能为空）。");
+  const commitResponse = await githubFetch(
+    `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/git/commits/${parentSha}`,
+    target.token
+  );
+  if (!commitResponse.ok) throw new Error(await describeError(commitResponse));
+  const parentCommit = (await commitResponse.json()) as { tree?: { sha?: string } };
+  const baseTree = parentCommit.tree?.sha;
+  if (!baseTree) throw new Error("无法读取分支头提交的树。");
+
+  // 2. 逐文件建 blob（只创建对象，不产生提交）
+  const tree: Array<{ path: string; mode: "100644"; type: "blob"; sha: string }> = [];
+  for (const file of files) {
+    const blobResponse = await githubFetch(
+      `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/git/blobs`,
+      target.token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: toBase64Utf8(file.content), encoding: "base64" })
+      }
+    );
+    if (!blobResponse.ok) throw new Error(await describeError(blobResponse));
+    const blob = (await blobResponse.json()) as { sha?: string };
+    if (!blob.sha) throw new Error(`创建 blob 失败：${file.path}`);
+    tree.push({ path: file.path, mode: "100644", type: "blob", sha: blob.sha });
+  }
+
+  // 3. 建树 → 提交 → 更新引用（不加 force，被并发移动时 409 报错重试）
+  const treeResponse = await githubFetch(
+    `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/git/trees`,
     target.token,
     {
-      method: "PUT",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message,
-        branch: target.branch,
-        content: toBase64Utf8(content),
-        ...(sha ? { sha } : {})
-      })
+      body: JSON.stringify({ base_tree: baseTree, tree })
     }
   );
-  if (!response.ok) throw new Error(await describeError(response));
-  const payload = (await response.json()) as { commit?: { sha?: string } };
-  return payload.commit?.sha || "";
+  if (!treeResponse.ok) throw new Error(await describeError(treeResponse));
+  const newTree = (await treeResponse.json()) as { sha?: string };
+  if (!newTree.sha) throw new Error("创建树失败。");
+
+  const commitCreated = await githubFetch(
+    `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/git/commits`,
+    target.token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, tree: newTree.sha, parents: [parentSha] })
+    }
+  );
+  if (!commitCreated.ok) throw new Error(await describeError(commitCreated));
+  const newCommit = (await commitCreated.json()) as { sha?: string };
+  if (!newCommit.sha) throw new Error("创建提交失败。");
+
+  const refUpdate = await githubFetch(
+    `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/git/refs/heads/${encodeURIComponent(target.branch)}`,
+    target.token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sha: newCommit.sha })
+    }
+  );
+  if (!refUpdate.ok) throw new Error(await describeError(refUpdate));
+  return newCommit.sha;
 }
 
 /** 校验 token 与仓库可访问性，供设置页“测试连接”。 */

@@ -1,4 +1,4 @@
-import { fetchGitHubContent, probeGitHubRepo, putGitHubContent } from "./github";
+import { commitGitHubFiles, fetchGitHubContent, probeGitHubRepo } from "./github";
 import { buildFeedMetaFile, buildFeedPostsFile, mergeFeedPosts, normalizeFeedPost } from "./merge";
 import { planFeedFiles } from "./rss";
 import { clearStagedPosts, getStagedPosts, patchFeedState, requireFeedConfig } from "./storage";
@@ -19,35 +19,24 @@ export async function publishFeed(): Promise<FeedPublishResult> {
 
   const { posts, newCount } = mergeFeedPosts(existing, staged, config.maxPosts);
   const publishedAt = new Date().toISOString();
-  const written: string[] = [];
 
-  await putGitHubContent(
-    config,
-    FEED_POSTS_PATH,
-    `${JSON.stringify(buildFeedPostsFile(posts, publishedAt), null, 2)}\n`,
-    `trail: 发布 ${newCount} 条新记录，共 ${posts.length} 条`,
-    currentFile?.sha
-  );
-  written.push(FEED_POSTS_PATH);
-
-  const currentMeta = await fetchGitHubContent(config, FEED_META_PATH);
-  await putGitHubContent(
-    config,
-    FEED_META_PATH,
-    `${JSON.stringify(buildFeedMetaFile(posts, publishedAt), null, 2)}\n`,
-    "trail: 更新发布元数据",
-    currentMeta?.sha
-  );
-  written.push(FEED_META_PATH);
-
-  for (const file of planFeedFiles(posts, config)) {
-    const current = await fetchGitHubContent(config, file.path);
-    await putGitHubContent(config, file.path, file.content, `trail: 更新 ${file.path}`, current?.sha);
-    written.push(file.path);
-  }
+  // 单提交包含本轮完整一致状态：数据、元数据与全部 RSS 一次写入。
+  const files = [
+    { path: FEED_POSTS_PATH, content: `${JSON.stringify(buildFeedPostsFile(posts, publishedAt), null, 2)}\n` },
+    { path: FEED_META_PATH, content: `${JSON.stringify(buildFeedMetaFile(posts, publishedAt), null, 2)}\n` },
+    ...planFeedFiles(posts, config)
+  ];
+  await commitGitHubFiles(config, files, `trail: 发布 ${newCount} 条新记录，共 ${posts.length} 条（${files.length} 个文件）`);
 
   await clearStagedPosts();
-  return { publishedAt, files: written, totalPosts: posts.length, newPosts: newCount };
+  await patchFeedState({
+    lastPublishAt: publishedAt,
+    totalPosts: posts.length,
+    lastNewPosts: newCount,
+    lastFiles: files.map((file) => file.path),
+    lastError: undefined
+  }).catch(() => undefined);
+  return { publishedAt, files: files.map((file) => file.path), totalPosts: posts.length, newPosts: newCount };
 }
 
 function parseRemotePosts(content: string): FeedPost[] {
