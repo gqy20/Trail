@@ -100,7 +100,6 @@ textarea:focus-visible {
 .tools-header {
   min-height: 42px;
   padding-bottom: 10px;
-  border-bottom: 1px solid var(--trail-border-soft);
 }
 
 .tools-header .brand {
@@ -384,9 +383,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 13px 0;
-  border-top: 1px solid var(--trail-border-soft);
-  border-bottom: 1px solid var(--trail-border-soft);
+  padding: 4px 0;
 }
 
 .primary-parameters {
@@ -525,8 +522,7 @@ textarea:focus-visible {
 }
 
 .settings-section {
-  padding: 16px 0 18px;
-  border-bottom: 1px solid var(--trail-border-soft);
+  padding: 4px 0 10px;
 }
 
 .settings-target-row {
@@ -647,7 +643,7 @@ textarea:focus-visible {
   min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--trail-border-soft);
-  border-radius: 7px;
+  border-radius: 12px;
   background: rgba(255, 253, 248, 0.48);
 }
 
@@ -983,7 +979,6 @@ textarea:focus-visible {
 }
 
 .run-history-item {
-  border-top: 1px solid var(--trail-border-soft);
   padding-top: 10px;
 }
 
@@ -1074,8 +1069,6 @@ textarea:focus-visible {
   display: grid;
   max-height: 174px;
   overflow-y: auto;
-  border-top: 1px solid var(--trail-border-soft);
-  border-bottom: 1px solid var(--trail-border-soft);
 }
 
 .download-candidate-list label {
@@ -1192,8 +1185,7 @@ textarea:focus-visible {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--trail-border-soft);
+  padding-bottom: 2px;
 }
 
 .queue-heading h2 {
@@ -1288,10 +1280,9 @@ textarea:focus-visible {
 
 .queue-list {
   display: grid;
+  gap: 4px;
   max-height: 420px;
   overflow-y: auto;
-  border-top: 1px solid var(--trail-border-soft);
-  border-bottom: 1px solid var(--trail-border-soft);
 }
 
 .queue-row {
@@ -1299,12 +1290,11 @@ textarea:focus-visible {
   grid-template-columns: 52px minmax(0, 1fr) 30px;
   align-items: center;
   gap: 9px;
-  min-height: 58px;
-  padding: 8px 2px;
-  border-bottom: 1px solid var(--trail-border-soft);
+  min-height: 54px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(127,127,127,.045);
 }
-
-.queue-row:last-of-type { border-bottom: 0; }
 
 .queue-row-main {
   display: grid;
@@ -1835,9 +1825,9 @@ textarea:focus-visible {
 
 .panel,
 .card {
-  border: 1px solid var(--trail-border);
-  border-radius: 8px;
-  background: rgba(255, 253, 248, 0.78);
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.92);
   box-shadow: none;
   transition:
     border-color 180ms ease,
@@ -2636,7 +2626,7 @@ button.session-card:hover {
 .checkin-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .checkin-schedule, .checkin-actions { display: flex; align-items: center; gap: 10px; }
 .checkin-schedule label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
-.checkin-schedule input[type="time"] { font: inherit; padding: 4px 6px; border: 1px solid #d7d7d7; border-radius: 6px; background: transparent; color: inherit; }
+.checkin-schedule input[type="time"] { font: inherit; padding: 4px 6px; border: 1px solid #d7d7d7; border-radius: 10px; background: transparent; color: inherit; }
 
 /* 订阅源发布 */
 .feed-view { align-content: start; }
@@ -2647,7 +2637,7 @@ button.session-card:hover {
 .feed-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
 .feed-config-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--trail-muted); min-width: 0; }
 .feed-config-grid label.feed-config-wide { grid-column: 1 / -1; }
-.feed-config-grid input { font: inherit; font-size: 13px; color: inherit; padding: 6px 8px; border: 1px solid #d7d7d7; border-radius: 6px; background: transparent; width: 100%; }
+.feed-config-grid input { font: inherit; font-size: 13px; color: inherit; padding: 6px 10px; border: 1px solid #d7d7d7; border-radius: 10px; background: transparent; width: 100%; }
 .feed-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .feed-actions .button { display: inline-flex; align-items: center; gap: 6px; }
 
@@ -2666,11 +2656,11 @@ button.session-card:hover {
 .logs-view > p { margin: 0; }
 .logs-view .view-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .logs-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.logs-toolbar .input { padding: 6px 8px; font-size: 13px; border: 1px solid #d7d7d7; border-radius: 6px; background: transparent; color: inherit; width: auto; }
+.logs-toolbar .input { padding: 6px 8px; font-size: 13px; border: 1px solid #d7d7d7; border-radius: 10px; background: transparent; color: inherit; width: auto; }
 .logs-search { flex: 1; min-width: 160px; }
 .logs-toolbar .button { display: inline-flex; align-items: center; gap: 6px; }
 .logs-list { display: flex; flex-direction: column; gap: 8px; }
-.log-entry { border: 1px solid rgba(127,127,127,.2); border-radius: 8px; padding: 8px 12px; background: rgba(127,127,127,.05); }
+.log-entry { border-radius: 12px; padding: 9px 13px; background: rgba(127,127,127,.055); }
 /* 级别由彩色字母区分，条目边框不再按级别重复着色。 */
 .log-entry header { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
 .log-entry time { margin-left: auto; color: var(--trail-muted, #888); font-variant-numeric: tabular-nums; }
@@ -2683,7 +2673,7 @@ button.session-card:hover {
 .log-scope { color: var(--trail-muted, #888); }
 .log-event { font-size: 11px; opacity: .8; }
 .log-entry details summary { cursor: pointer; font-size: 12px; color: var(--trail-muted, #888); margin-top: 4px; }
-.log-entry pre { margin: 6px 0 0; font-size: 12px; overflow-x: auto; background: rgba(127,127,127,.08); border-radius: 6px; padding: 8px; }
+.log-entry pre { margin: 6px 0 0; font-size: 12px; overflow-x: auto; background: rgba(127,127,127,.08); border-radius: 10px; padding: 8px; }
 .logs-empty { text-align: center; padding: 24px 0; }
 
 /* 代码字体：Source Code Pro Medium */
