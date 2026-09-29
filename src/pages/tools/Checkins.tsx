@@ -70,14 +70,16 @@ function CheckinCard({ item, busy, onRun, onOpen, onSave }: {
     </div>
     {meta ? <p className="checkin-meta muted text-small">{meta}</p> : null}
     {job.status === "needs_user" || job.status === "failed" ? (job.message ? <p className="error-text text-small">{job.message}</p> : null) : null}
-    <div className="checkin-schedule">
-      <label><input type="checkbox" checked={job.enabled} disabled={busy || running} onChange={(e) => onSave(e.target.checked, time)} /> 自动</label>
-      <input type="time" aria-label={`${item.name}签到时间`} value={time} disabled={busy || running} onChange={(e) => setTime(e.target.value)} />
-      {time !== job.time ? <button className="button secondary" disabled={busy || !time} onClick={() => onSave(job.enabled, time)}>保存</button> : null}
-    </div>
-    <div className="checkin-actions">
-      <button className="button primary" disabled={busy || running || today} onClick={onRun}><Play size={15} />{running ? "签到中…" : job.status === "needs_user" ? "重试" : "签到"}</button>
-      <button className="button secondary" disabled={busy} onClick={onOpen}><ExternalLink size={15} />打开</button>
+    <div className="checkin-controls">
+      <div className="checkin-schedule">
+        <label><input type="checkbox" checked={job.enabled} disabled={busy || running} onChange={(e) => onSave(e.target.checked, time)} /> 自动</label>
+        <input type="time" aria-label={`${item.name}签到时间`} value={time} disabled={busy || running} onChange={(e) => setTime(e.target.value)} />
+        {time !== job.time ? <button className="button secondary" disabled={busy || !time} onClick={() => onSave(job.enabled, time)}>保存</button> : null}
+      </div>
+      <div className="checkin-actions">
+        <button className="button primary" disabled={busy || running || today} onClick={onRun}><Play size={15} />{running ? "签到中…" : job.status === "needs_user" ? "重试" : "签到"}</button>
+        <button className="button secondary" disabled={busy} onClick={onOpen}><ExternalLink size={15} />打开</button>
+      </div>
     </div>
   </article>;
 }

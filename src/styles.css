@@ -2636,7 +2636,8 @@ button.session-card:hover {
 .checkin-title { font-size: 15px; font-weight: 600; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
 .checkin-title:hover { text-decoration: underline; }
 .checkin-meta { overflow-wrap: anywhere; }
-.checkin-schedule, .checkin-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.checkin-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.checkin-schedule, .checkin-actions { display: flex; align-items: center; gap: 10px; }
 .checkin-schedule label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .checkin-schedule input[type="time"] { font: inherit; padding: 4px 6px; border: 1px solid #d7d7d7; border-radius: 6px; background: transparent; color: inherit; }
 
