@@ -7,12 +7,18 @@ import {
   stageFeedPosts
 } from "../publisher/storage";
 import { stageFeedFromRun } from "../publisher/collect";
-import { logError, logInfo } from "../logging/logger";
+import { logError, logInfo, logWarn } from "../logging/logger";
 import type { BrowserToolDefinition, BrowserToolRunResult } from "../browser-tools/contracts";
 import type { FeedPublisherConfig, FeedPublishResult, FeedRepoProbe } from "../publisher/types";
 
+const PUBLISH_DEBOUNCE_ALARM = "trail.feed.publishDebounce";
+/** 多渠道合并窗口：防抖时长内如有其他渠道暂存，重置计时器，最终一次发布。 */
+const PUBLISH_DEBOUNCE_MINUTES = 3;
+
 /**
- * 暂存采集结果；当配置开启“采集后自动发布”时紧接一轮发布。
+ * 暂存采集结果；当配置开启"自动发布"时不再立即推送，而是排定一个
+ * 防抖窗口——窗口内其他渠道（X / 小红书等）完成采集会重置计时器，
+ * 最终所有暂存记录合并为一次单提交发布。
  * 发布失败只写入状态不抛出，避免影响采集本身的收尾。
  */
 export async function stageAndMaybePublish(definition: BrowserToolDefinition, result: BrowserToolRunResult): Promise<void> {
@@ -28,14 +34,24 @@ export async function stageAndMaybePublish(definition: BrowserToolDefinition, re
   if (staged === 0 && dropped === 0) return;
   const { config } = await getFeedPublisherSnapshot();
   if (!config?.autoPublish) return;
-  logInfo("feed", "publish.autoStart", "自动发布开始", { staged });
+
+  await chrome.alarms.clear(PUBLISH_DEBOUNCE_ALARM);
+  await chrome.alarms.create(PUBLISH_DEBOUNCE_ALARM, { delayInMinutes: PUBLISH_DEBOUNCE_MINUTES });
+  logInfo("feed", "publish.scheduled", `延迟发布已排定（${PUBLISH_DEBOUNCE_MINUTES} 分钟合并窗口）`, { staged, toolId: definition.id });
+}
+
+/** 防抖闹钟到期：合并发布全部暂存记录。 */
+export async function publishFromDebounce(): Promise<void> {
   try {
-    const published = await publishFeed();
-    logInfo("feed", "publish.done", "自动发布完成", { newPosts: published.newPosts, totalPosts: published.totalPosts, files: published.files.length });
+    const result = await publishFeed();
+    logInfo("feed", "publish.done", "防抖窗口到期，自动发布完成", { newPosts: result.newPosts, totalPosts: result.totalPosts, files: result.files.length });
   } catch (error) {
-    const message = `${new Date().toLocaleString("zh-CN")} 自动发布失败：${error instanceof Error ? error.message : "未知错误"}`;
-    logError("feed", "publish.fail", "自动发布失败", { detail: error instanceof Error ? error.message : "未知错误" });
-    await patchFeedState({ lastError: message }).catch(() => undefined);
+    const message = error instanceof Error ? error.message : "未知错误";
+    // 暂存可能已被手动发布清空——这是正常路径，不记为错误
+    if (!message.includes("没有待发布的新记录")) {
+      logError("feed", "publish.fail", "防抖发布失败", { detail: message });
+      await patchFeedState({ lastError: `${new Date().toLocaleString("zh-CN")} 防抖发布失败：${message}` }).catch(() => undefined);
+    }
   }
 }
 
@@ -48,7 +64,7 @@ export async function clearStagedFeed(): Promise<{ cleared: number }> {
   return { cleared };
 }
 
-export async function getFeedState(): Promise<ReturnType<typeof getFeedPublisherSnapshot>> {
+export async function getFeedState() {
   return getFeedPublisherSnapshot();
 }
 
@@ -78,4 +94,13 @@ export async function publishStagedFeed(): Promise<FeedPublishResult> {
     await patchFeedState({ lastError: `${new Date().toLocaleString("zh-CN")} ${message}` });
     throw error;
   }
+}
+
+/** 注册发布相关的闹钟监听（在 background/index.ts 调用一次）。 */
+export function registerFeedPublisher(): void {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === PUBLISH_DEBOUNCE_ALARM) {
+      void publishFromDebounce();
+    }
+  });
 }

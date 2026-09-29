@@ -41,7 +41,7 @@ import {
   runCollector
 } from "./collectors";
 import { addFollow, getFollows, importFollows, removeFollow } from "../collector/follows";
-import { getFeedState, probeFeedConnection, publishStagedFeed, saveFeedPublisherConfig, stagePosts, clearStagedFeed } from "./feed";
+import { getFeedState, probeFeedConnection, publishStagedFeed, registerFeedPublisher, saveFeedPublisherConfig, stagePosts, clearStagedFeed } from "./feed";
 import { fetchGraphqlPageForTab, readPageStateForTab, resolveGraphqlQueryIdForTab } from "./graphqlBridge";
 import { clearLogEntries, getLogEntries } from "../logging/logger";
 import { restoreBundledBrowserTool } from "../browser-tools/bundled";
