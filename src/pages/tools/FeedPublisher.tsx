@@ -107,10 +107,12 @@ export function FeedPublisherView() {
         <label>分支<input ref={branchRef} value={draft.branch} disabled={busy} onChange={(e) => setDraft({ ...draft, branch: e.target.value })} placeholder="main" /></label>
         <label className="feed-config-wide" title="只授予该仓库 Contents 读写权限">token<input ref={tokenRef} type="text" autoComplete="off" spellCheck={false} value={draft.token} disabled={busy} onChange={(e) => setDraft({ ...draft, token: e.target.value })} placeholder="github_pat_…" /></label>
         <label className="feed-config-wide" title="留空则默认 https://<owner>.github.io/<repo>/">Pages 地址<input ref={pagesRef} value={draft.pagesBaseUrl || ""} disabled={busy} onChange={(e) => setDraft({ ...draft, pagesBaseUrl: e.target.value })} placeholder="https://gqy20.github.io/feed/" /></label>
-        <label className="feed-config-toggle feed-config-wide"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 采集成功后自动发布（无需手动点“立即发布”）</label>
-        <label className="feed-config-toggle feed-config-wide"><input type="checkbox" checked={draft.excludeRetweets === true} disabled={busy} onChange={(e) => setDraft({ ...draft, excludeRetweets: e.target.checked })} /> 订阅源不收录转推/转发</label>
-        <label>历史封顶<input type="number" min={100} max={20000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
-        <label>每源条数<input type="number" min={10} max={500} value={draft.itemsPerFeed} disabled={busy} onChange={(e) => setDraft({ ...draft, itemsPerFeed: Number(e.target.value) })} /></label>
+        <div className="feed-config-wide feed-config-inline">
+          <label>封顶<input type="number" min={100} max={20000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
+          <label>每源<input type="number" min={10} max={500} value={draft.itemsPerFeed} disabled={busy} onChange={(e) => setDraft({ ...draft, itemsPerFeed: Number(e.target.value) })} /></label>
+          <label className="feed-config-toggle" title="采集成功后自动推送，无需手动点发布"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 自动发布</label>
+          <label className="feed-config-toggle"><input type="checkbox" checked={draft.excludeRetweets === true} disabled={busy} onChange={(e) => setDraft({ ...draft, excludeRetweets: e.target.checked })} /> 不收录转推</label>
+        </div>
       </div>
       <div className="feed-actions">
         <button className="button secondary" disabled={busy} onClick={() => void act("save", async () => {
