@@ -6,7 +6,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const hooksDir = resolve(root, ".git", "hooks");
 
 if (!existsSync(resolve(root, ".git"))) {
-  console.error("未找到 .git 目录，请在仓库根目录运行 npm run install-hooks。");
+  console.error("未找到 .git 目录，请在仓库根目录运行 pnpm run install-hooks。");
   process.exit(1);
 }
 

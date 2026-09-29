@@ -3,16 +3,18 @@
   "version": "0.2.0",
   "description": "Trail Chrome extension for recording research sessions from tab groups.",
   "private": true,
+  "packageManager": "pnpm@10.13.1",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "npm run version:check && tsc --noEmit && vite build && vite build --config vite.content.config.ts",
+    "build": "pnpm run version:check && tsc --noEmit && vite build && vite build --config vite.content.config.ts",
     "version:check": "node scripts/version.mjs check",
     "version:sync": "node scripts/version.mjs sync",
-    "version": "npm run version:sync",
-    "check": "npm run build",
-    "test:checkin": "npm run build && playwright test",
+    "version": "pnpm run version:sync",
+    "check": "pnpm run build",
+    "test:checkin": "pnpm run build && playwright test",
     "install-hooks": "node scripts/install-hooks.mjs",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "knip": "knip"
   },
   "keywords": [],
   "author": "",
@@ -33,6 +35,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "knip": "6.37.0",
     "typescript": "^7.0.2",
     "vite": "^8.1.3"
   }

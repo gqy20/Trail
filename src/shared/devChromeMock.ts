@@ -17,6 +17,7 @@ const sampleTabs: chrome.tabs.Tab[] = [
     autoDiscardable: true,
     groupId: 12,
     windowId: 1,
+    lastAccessed: now,
     title: "Playwright Browser Extension 文档",
     url: "https://playwright.dev/docs/chrome-extensions",
     favIconUrl: ""
@@ -34,6 +35,7 @@ const sampleTabs: chrome.tabs.Tab[] = [
     autoDiscardable: true,
     groupId: 12,
     windowId: 1,
+    lastAccessed: now,
     title: "Chrome Extensions Manifest V3",
     url: "https://developer.chrome.com/docs/extensions/mv3/intro",
     favIconUrl: ""
@@ -51,6 +53,7 @@ const sampleTabs: chrome.tabs.Tab[] = [
     autoDiscardable: true,
     groupId: 12,
     windowId: 1,
+    lastAccessed: now,
     title: "GitHub - microsoft/playwright",
     url: "https://github.com/microsoft/playwright",
     favIconUrl: ""
