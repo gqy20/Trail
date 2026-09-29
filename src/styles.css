@@ -30,7 +30,7 @@ body {
   font-family:
     "Noto Serif SC Variable", "Source Han Serif SC", "Noto Serif SC", "SimSun", serif;
   font-size: var(--trail-font-md);
-  line-height: 1.5;
+  line-height: 1.55;
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
 }
@@ -77,7 +77,7 @@ textarea:focus-visible {
 
 .tools-page {
   max-width: 760px;
-  gap: 18px;
+  gap: 20px;
 }
 
 .tools-shell {
@@ -89,7 +89,7 @@ textarea:focus-visible {
   font-family: "Noto Serif SC Variable", "Source Han Serif SC", "Noto Serif SC", "SimSun", serif;
   font-size: var(--trail-font-md);
   font-weight: 400;
-  line-height: 1.65;
+  line-height: 1.6;
   font-synthesis: none;
 }
 
@@ -103,7 +103,7 @@ textarea:focus-visible {
 }
 
 .tools-header .brand {
-  gap: 9px;
+  gap: 8px;
 }
 
 .tools-header .brand-mark {
@@ -113,7 +113,7 @@ textarea:focus-visible {
 }
 
 .tools-header .page-title {
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -128,9 +128,9 @@ textarea:focus-visible {
   display: inline-flex;
   min-height: 32px;
   align-items: center;
-  gap: 5px;
-  border-radius: 6px;
-  padding: 6px 9px;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 6px 10px;
   background: transparent;
   color: var(--trail-muted);
   font-size: 12px;
@@ -155,7 +155,7 @@ textarea:focus-visible {
 .connection-line {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   margin-bottom: 22px;
   color: var(--trail-muted);
   font-size: 12px;
@@ -173,7 +173,7 @@ textarea:focus-visible {
 
 .keyword-section {
   display: grid;
-  gap: 9px;
+  gap: 8px;
 }
 
 .field-heading,
@@ -200,7 +200,7 @@ textarea:focus-visible {
 .text-button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   padding: 3px 0;
   background: transparent;
   color: var(--trail-accent);
@@ -226,13 +226,13 @@ textarea:focus-visible {
   background: rgba(255, 255, 255, 0.58);
   font-family: inherit;
   font-size: 14px !important;
-  line-height: 1.65;
+  line-height: 1.6;
 }
 
 .input-mode-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px;
+  gap: 4px;
   padding: 3px;
   border: 1px solid var(--trail-border-soft);
   border-radius: 8px;
@@ -271,7 +271,7 @@ textarea:focus-visible {
 .composer-toolbar > label {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   color: var(--trail-muted);
   font-size: 12px;
 }
@@ -294,7 +294,7 @@ textarea:focus-visible {
   display: grid;
   gap: 6px;
   min-width: 0;
-  padding: 9px;
+  padding: 8px;
   border: 1px solid var(--trail-border-soft);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.48);
@@ -315,18 +315,18 @@ textarea:focus-visible {
 
 .composer-group-input {
   min-height: 88px;
-  padding: 8px 9px;
+  padding: 8px 10px;
   resize: vertical;
   background: var(--trail-surface);
   font-family: inherit;
   font-size: 13px !important;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .composer-preview {
   display: grid;
-  gap: 7px;
-  padding: 10px 11px;
+  gap: 8px;
+  padding: 10px 12px;
   border: 1px solid var(--trail-border-soft);
   border-radius: 8px;
   background: var(--trail-surface-muted);
@@ -352,7 +352,7 @@ textarea:focus-visible {
 
 .composer-preview p {
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .composer-preview ol {
@@ -382,7 +382,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 20px;
   padding: 4px 0;
 }
 
@@ -463,7 +463,7 @@ textarea:focus-visible {
 
 .execution-progress-steps {
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 
 .execution-progress-steps > div {
@@ -511,7 +511,7 @@ textarea:focus-visible {
 
 .view-heading h2 {
   margin: 0 0 3px;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -584,7 +584,7 @@ textarea:focus-visible {
 
 .tool-select-button small {
   color: var(--trail-muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .yaml-settings > summary {
@@ -678,13 +678,13 @@ textarea:focus-visible {
 .tools-grid {
   display: grid;
   grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
-  gap: 14px;
+  gap: 16px;
   align-items: start;
 }
 
 .tool-list {
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 
 .bundled-tools-row {
@@ -692,7 +692,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 11px;
+  padding: 10px 12px;
   border: 1px solid var(--trail-border-soft);
   border-radius: 10px;
   background: var(--trail-surface-muted);
@@ -727,7 +727,7 @@ textarea:focus-visible {
   gap: 10px;
   width: 100%;
   min-height: 40px;
-  padding: 8px 9px;
+  padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
@@ -832,7 +832,7 @@ textarea:focus-visible {
 .batch-output-options {
   display: grid;
   justify-items: end;
-  gap: 7px;
+  gap: 8px;
 }
 
 .native-export-option {
@@ -855,8 +855,8 @@ textarea:focus-visible {
 
 .native-export-summary {
   display: grid;
-  gap: 7px;
-  padding: 11px 12px;
+  gap: 8px;
+  padding: 12px;
   border: 1px solid var(--trail-border-soft);
   border-radius: 8px;
   background: var(--trail-surface-muted);
@@ -944,7 +944,7 @@ textarea:focus-visible {
 }
 
 .tool-runner {
-  gap: 14px;
+  gap: 16px;
   padding: 16px;
 }
 
@@ -1119,7 +1119,7 @@ textarea:focus-visible {
 
 .download-summary > span {
   color: var(--trail-muted);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .download-summary ul {
@@ -1133,7 +1133,7 @@ textarea:focus-visible {
 .download-summary li {
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr);
-  gap: 7px;
+  gap: 8px;
 }
 
 .download-summary li span:last-child {
@@ -1217,7 +1217,7 @@ textarea:focus-visible {
 .queue-stat {
   display: grid;
   gap: 1px;
-  padding: 10px 11px;
+  padding: 10px 12px;
   border: 1px solid var(--trail-border-soft);
   border-radius: 8px;
   background: var(--trail-surface-muted);
@@ -1289,7 +1289,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr) 30px;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   min-height: 54px;
   padding: 8px 10px;
   border-radius: 12px;
@@ -1332,7 +1332,7 @@ textarea:focus-visible {
   padding: 2px 5px;
   background: var(--trail-surface-muted);
   color: var(--trail-muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 550;
   white-space: nowrap;
 }
@@ -1341,7 +1341,7 @@ textarea:focus-visible {
 
 .queue-list-note {
   margin: 0;
-  padding: 9px;
+  padding: 8px;
   color: var(--trail-muted);
   font-size: var(--trail-font-xs);
   text-align: center;
@@ -1349,8 +1349,8 @@ textarea:focus-visible {
 
 .queue-progress {
   display: grid;
-  gap: 7px;
-  padding: 11px 12px;
+  gap: 8px;
+  padding: 12px;
   border: 1px solid #cde5df;
   border-radius: 8px;
   background: var(--trail-accent-soft);
@@ -1379,7 +1379,7 @@ textarea:focus-visible {
 .queue-progress-metrics {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px 12px;
+  gap: 6px 12px;
   color: var(--trail-muted);
   font-size: var(--trail-font-xs);
   font-variant-numeric: tabular-nums;
@@ -1566,7 +1566,7 @@ textarea:focus-visible {
   }
 
   .tools-header .page-title {
-    font-size: 17px;
+    font-size: 16px;
   }
 
   .tools-nav-item {
@@ -1578,7 +1578,7 @@ textarea:focus-visible {
   }
 
   .target-tab-panel {
-    padding: 8px 9px;
+    padding: 8px 10px;
   }
 
   .yaml-editor {
@@ -1837,7 +1837,7 @@ textarea:focus-visible {
 }
 
 .panel {
-  padding: 14px;
+  padding: 14px 16px;
 }
 
 .disclosure-panel {
@@ -1883,7 +1883,7 @@ textarea:focus-visible {
   width: 100%;
   border: 1px solid var(--trail-border);
   border-radius: 8px;
-  padding: 10px 11px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.68);
   color: var(--trail-text);
   outline: none;
@@ -1903,7 +1903,7 @@ textarea:focus-visible {
 .goal-input {
   min-height: 76px;
   resize: vertical;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .button {
@@ -1912,8 +1912,8 @@ textarea:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-radius: 8px;
-  padding: 8px 12px;
+  border-radius: 10px;
+  padding: 8px 14px;
   border: 1px solid var(--trail-border);
   background: rgba(255, 253, 248, 0.78);
   color: var(--trail-text);
@@ -2049,7 +2049,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
-  gap: 14px;
+  gap: 16px;
 }
 
 .recording-title {
@@ -2091,7 +2091,7 @@ textarea:focus-visible {
   border: 1px solid transparent;
   border-bottom-color: var(--trail-border-soft);
   border-radius: 8px;
-  padding: 9px 8px;
+  padding: 8px 10px;
   background: transparent;
   color: inherit;
   text-decoration: none;
@@ -2162,7 +2162,7 @@ textarea:focus-visible {
   color: #293443;
   font-family: inherit;
   font-size: 14px;
-  line-height: 1.72;
+  line-height: 1.6;
   box-shadow: none;
 }
 
@@ -2180,7 +2180,7 @@ textarea:focus-visible {
   color: #293443;
   font-family: "Source Code Pro Variable", "Source Code Pro", Consolas, "Liberation Mono", monospace;
   font-size: 13px;
-  line-height: 1.72;
+  line-height: 1.6;
   outline: none;
 }
 
@@ -2202,7 +2202,7 @@ textarea:focus-visible {
 .markdown-preview h3 {
   margin: 1.45em 0 0.55em;
   color: var(--trail-text);
-  line-height: 1.22;
+  line-height: 1.3;
   letter-spacing: 0;
 }
 
@@ -2211,7 +2211,7 @@ textarea:focus-visible {
 }
 
 .markdown-preview h2 {
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .markdown-preview h3 {
@@ -2329,7 +2329,7 @@ button.session-card:hover {
 
 .session-main {
   display: grid;
-  gap: 9px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -2337,7 +2337,7 @@ button.session-card:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .session-actions {
@@ -2613,7 +2613,7 @@ button.session-card:hover {
     width: 100%;
   }
 }
-.checkin-card { gap: 8px; }
+.checkin-card { gap: 10px; }
 .checkins-view { align-content: start; }
 .checkins-view > p { margin: 0; }
 .checkins-view .view-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -2634,7 +2634,7 @@ button.session-card:hover {
 .feed-view .view-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .feed-view .panel p { margin: 0; }
 .feed-view .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.feed-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.feed-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
 .feed-config-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--trail-muted); min-width: 0; }
 .feed-config-grid label.feed-config-wide { grid-column: 1 / -1; }
 .feed-config-grid input { font: inherit; font-size: 13px; color: inherit; padding: 6px 10px; border: 1px solid #d7d7d7; border-radius: 10px; background: transparent; width: 100%; }
@@ -2660,7 +2660,7 @@ button.session-card:hover {
 .logs-search { flex: 1; min-width: 160px; }
 .logs-toolbar .button { display: inline-flex; align-items: center; gap: 6px; }
 .logs-list { display: flex; flex-direction: column; gap: 8px; }
-.log-entry { border-radius: 12px; padding: 9px 13px; background: rgba(127,127,127,.055); }
+.log-entry { border-radius: 12px; padding: 10px 14px; background: rgba(127,127,127,.055); }
 /* 级别由彩色字母区分，条目边框不再按级别重复着色。 */
 .log-entry header { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
 .log-entry time { margin-left: auto; color: var(--trail-muted, #888); font-variant-numeric: tabular-nums; }
@@ -2683,4 +2683,4 @@ code, pre, kbd, samp, .code-textarea {
 .queue-status { display: inline-flex; align-items: center; justify-content: center; }
 
 /* 订阅源表单：身份三字段一行（三列子网格），数值/开关两列对齐 */
-.feed-config-identity { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
+.feed-config-identity { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; }
