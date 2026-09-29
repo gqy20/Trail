@@ -67,8 +67,6 @@ workflow:
 detail_extract:
   collection: notes
   url_field: url
-  id_field: id
-  back_selector: ".close-circle, .close, button[aria-label='关闭']"
   wait_for: "#detail-desc, .note-text, #detail-title"
   timeout_ms: 12000
   max_items: 3

@@ -714,72 +714,39 @@ async function enrichWithDetails(
   if (!records || records.length === 0) return result;
   const maxItems = Math.min(spec.max_items || records.length, records.length);
   const delay = spec.delay_ms ?? 0;
-  const listUrl = (await chrome.tabs.get(tabId)).url || "";
   let enriched = 0;
-
-  // 点击式补全：虚拟滚动的列表会把视野外的卡片卸载，先回滚顶部让首批卡片挂载。
-  await chrome.tabs.sendMessage(tabId, { type: "BROWSER_TOOL_SCROLL", position: "top" }).catch(() => undefined);
-  await sleep(500);
 
   for (const record of records.slice(0, maxItems)) {
     const url = record[spec.url_field];
     if (typeof url !== "string" || !/^https?:\/\//.test(url)) continue;
-    const noteId = String(record[spec.id_field || "id"] || "").trim();
-    if (!noteId) continue;
-
     const detailBudget = await recordActivity("detail");
     if (!detailBudget.allowed) {
       result.warnings.push("[详情] 今日详情访问预算已用尽（" + detailBudget.used + "/" + detailBudget.limit + "），本轮只保留列表字段。");
       logWarn("detail", "budget.exhausted", "详情访问预算耗尽，停止补全", { used: detailBudget.used, limit: detailBudget.limit });
       break;
     }
-
-    // 点击真实卡片触发站点自身的 SPA 跳转；找不到时回滚顶部重试一次。
-    const cardSelector = `a[href*="${cssEscape(noteId)}"]`;
-    let clicked = await humanizedClickOnTab(tabId, cardSelector);
-    if (!clicked) {
-      await chrome.tabs.sendMessage(tabId, { type: "BROWSER_TOOL_SCROLL", position: "top" }).catch(() => undefined);
-      await sleep(600);
-      clicked = await humanizedClickOnTab(tabId, cardSelector);
-    }
-    if (!clicked) {
-      result.warnings.push("[详情] 卡片已不在页面（虚拟滚动卸载），跳过该条。");
-      continue;
+    await navigateTab(tabId, url);
+    const tab = await chrome.tabs.get(tabId);
+    const urlBlocker = (spec.blockers || []).find((blocker) => blocker.url_contains && (tab.url || "").includes(blocker.url_contains));
+    if (urlBlocker) {
+      return { ...result, status: "paused", error: urlBlocker.reason, warnings: [...result.warnings, urlBlocker.reason] };
     }
     const detail = await extractDetailsOnTab(tabId, spec);
     if (detail.paused) return detail.paused;
-    if (detail.warning) { result.warnings.push(`[详情] ${detail.warning}`); continue; }
+    if (detail.warning) { result.warnings.push("[详情] " + detail.warning); continue; }
     Object.assign(record, detail.record || {});
     enriched += 1;
-    if (spec.back_selector) await humanizedClickOnTab(tabId, spec.back_selector);
-    await sleep(600);
-    const current = await chrome.tabs.get(tabId).catch(() => undefined);
-    if (!current?.url || !current.url.startsWith(new URL(listUrl).origin)) {
-      await navigateTab(tabId, listUrl).catch(() => undefined);
-    }
-    // 用户已请求暂停/停止时提前结束补全，账号边界立即生效。
     const peeked = peekControlRequest();
     if (peeked.pause || peeked.stop) break;
     if (delay > 0 && enriched < maxItems) await sleep(delay);
   }
   if (enriched === 0 && records.length > 0) {
-    // 卡片全在但详情全失败：多半是登录墙/风控浮层拦截了点击，继续跑只是白跑。
     const reason = "详情补全全部失败（页面可能要求登录或验证），已暂停；完成验证后点继续将从该账号重试。";
     logWarn("detail", "detail.allFailed", "详情补全全部失败，运行转暂停", { toolId: definition.id, records: records.length });
     return { ...result, status: "paused", error: reason, warnings: [...result.warnings, reason] };
   }
   logInfo("detail", "detail.enrich", "详情页补全完成", { toolId: definition.id, enriched });
   return result;
-}
-
-/** 请求内容脚本执行人性化点击；返回是否点到了元素。 */
-async function humanizedClickOnTab(tabId: number, selector: string): Promise<boolean> {
-  const response = await chrome.tabs.sendMessage(tabId, {
-    type: "BROWSER_TOOL_HUMANIZED_CLICK",
-    selector,
-    timeoutMs: 5000
-  }).catch(() => undefined);
-  return Boolean(response?.clicked);
 }
 
 /** 详情页字段提取 + 阻断检测；命中阻断时返回暂停结果，提取异常返回 warning。 */
@@ -803,10 +770,6 @@ async function extractDetailsOnTab(
   return { record: response.record };
 }
 
-/** CSS.escape 的最小实现（属性选择器值转义）。 */
-function cssEscape(value: string): string {
-  return value.replace(/["\\\]]/g, "\\$&");
-}
 
 /** 批量合并时给记录补充可读的账号名（详情页没提取到 author 时兜底）。 */
 function enrichAuthor(
