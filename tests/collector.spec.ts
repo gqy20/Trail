@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { parseBrowserToolYaml } from "../src/browser-tools/loader";
 import { applyImport, normalizeFollow, parseFollowsText } from "../src/collector/follows";
 import { clampIntervalHours, isCollectorDue } from "../src/collector/schedule";
+import { pruneAndCheck } from "../src/collector/budget";
+import { pickRotation } from "../src/collector/rotation";
 import type { CollectorJob, FollowEntry } from "../src/collector/types";
 
 function job(overrides: Partial<CollectorJob> = {}): CollectorJob {
@@ -65,4 +67,24 @@ test("isCollectorDue 间隔、运行中、待处理与重试上限", () => {
 test("twitter/timeline.yml 声明采集入口并通过校验", () => {
   const definition = parseBrowserToolYaml(readFileSync("browser-tools/twitter/timeline.yml", "utf8"));
   expect(definition.feed).toMatchObject({ collection: "tweets", platform: "twitter", entry_url: "https://x.com/home" });
+});
+
+test("pruneAndCheck 滚动窗口裁剪与限额判定", () => {
+  const now = Date.now();
+  const day = 24 * 60 * 60_000;
+  const timestamps = [now - day - 1000, now - day + 1000, now - 3600_000, now - 60_000];
+  const check = pruneAndCheck(timestamps, now, 3);
+  expect(check.used).toBe(3); // 最旧一条过期裁掉
+  expect(check.kept).toHaveLength(3);
+  expect(check.allowed).toBe(false); // 3 + 1 > 3
+  expect(pruneAndCheck(check.kept, now, 4).allowed).toBe(true);
+});
+
+test("pickRotation 循环切片与回绕", () => {
+  const items = ["a", "b", "c", "d", "e"];
+  expect(pickRotation(items, 0, 2)).toEqual(["a", "b"]);
+  expect(pickRotation(items, 4, 2)).toEqual(["e", "a"]); // 回绕
+  expect(pickRotation(items, 7, 3)).toEqual(["c", "d", "e"]); // 游标取模
+  expect(pickRotation(items, 0, 8)).toEqual(items); // 超总量取全部
+  expect(pickRotation([], 3, 2)).toEqual([]);
 });

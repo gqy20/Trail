@@ -16,6 +16,8 @@ export type CollectorJob = {
   message?: string;
   lastSuccessAt?: number;
   lastAttemptAt?: number;
+  /** 定时采集的账号轮换游标（每轮只取部分账号，降低单账号访问密度）。 */
+  rotationCursor?: number;
   attemptDay?: string;
   attempts?: number;
   tabId?: number;

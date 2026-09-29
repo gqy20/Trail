@@ -71,7 +71,7 @@ detail_extract:
   back_selector: ".close-circle, .close, button[aria-label='关闭']"
   wait_for: "#detail-desc, .note-text, #detail-title"
   timeout_ms: 12000
-  max_items: 8
+  max_items: 3
   delay_ms: 5000
   blockers:
     - url_contains: "error_code=3000"

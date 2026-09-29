@@ -15,6 +15,7 @@ import { resolveTemplate } from "../browser-tools/template";
 import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
 import { getFollows } from "../collector/follows";
+import { recordActivity } from "../collector/budget";
 import {
   deleteStoredBrowserTool,
   getBrowserToolRuns,
@@ -234,6 +235,7 @@ async function continueBatchRun(
   let state = initial;
   let failed = false;
   let retriedIndex = -1;
+  let cooldownRetriedIndex = -1;
   const runStartedAt = Date.now();
   const displayNames = definition.feed ? new Map((await getFollows(definition.feed.platform)).filter((entry) => entry.displayName).map((entry) => [entry.handle, entry.displayName!])) : undefined;
   logInfo("batch", "batch.start", "批量运行开始", { toolId: definition.id, runId: initial.runId, total: initial.keywords.length, fromIndex: initial.nextIndex });
@@ -262,6 +264,12 @@ async function continueBatchRun(
 
       const keyword = state.keywords[state.nextIndex];
       const index = state.nextIndex;
+      const budget = await recordActivity("profile");
+      if (!budget.allowed) {
+        const reason = "今日主页访问预算已用尽（" + budget.used + "/" + budget.limit + "），24 小时滚动窗口自动恢复；已暂停保存进度。";
+        logWarn("batch", "budget.exhausted", "主页访问预算耗尽", { used: budget.used, limit: budget.limit });
+        return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined }, "paused", reason, warnings);
+      }
       try {
         emitProgress({
           type: "BROWSER_TOOL_PROGRESS_UPDATE",
@@ -289,13 +297,27 @@ async function continueBatchRun(
         const result = await enrichWithDetails(definition, tabId, await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId));
 
         if (result.status === "paused") {
-          // 登录墙/验证码：保持游标不变，处理后可从该输入继续。
-          logWarn("batch", "batch.paused", "需要人工处理，运行转暂停", { keyword, detail: result.error || "登录或验证码" });
-          warnings.push(`[${keyword}] 需要人工处理：${result.error || "登录或验证码"}`);
+          // 软封锁自动冷却：15 分钟后自动重试一次（可被停止打断），再失败转人工。
+          if (cooldownRetriedIndex !== index) {
+            cooldownRetriedIndex = index;
+            const reason = result.error || "需要登录或验证";
+            logWarn("batch", "cooldown.start", "软封锁，15 分钟后自动重试一次", { keyword, detail: reason });
+            warnings.push("[" + keyword + "] " + reason + "；15 分钟后自动重试。");
+            const cooled = await sleepInterruptible(15 * 60_000);
+            if (cooled === "stop") {
+              return await finalizeBatchRun(definition, { ...state, status: "stopped", pendingControl: undefined }, "partial", "已手动停止：完成 " + state.completedKeywords + "/" + state.keywords.length + " 个输入。", warnings);
+            }
+            if (cooled === "pause") {
+              return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined }, "paused", "冷却期间收到暂停请求：完成 " + state.completedKeywords + "/" + state.keywords.length + " 个输入。", warnings);
+            }
+            continue; // 重试当前输入（游标未推进）
+          }
+          logWarn("batch", "batch.paused", "冷却重试仍被拦截，转人工处理", { keyword, detail: result.error || "登录或验证码" });
+          warnings.push("[" + keyword + "] 需要人工处理：" + (result.error || "登录或验证码"));
           const pausedState = { ...state, status: "paused" as const, pendingControl: undefined, updatedAt: Date.now(), lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
           await saveBatchRunState(pausedState);
           return await finalizeBatchRun(definition, { ...pausedState, pendingControl: undefined }, "paused",
-            `[${keyword}] 需要人工处理，运行已暂停；处理后点“继续”将从这个输入重试。`, warnings);
+            "[" + keyword + "] 冷却重试后仍被拦截，已暂停；请打开页面完成验证后点“继续”重试。", warnings);
         }
 
         state = {
@@ -703,6 +725,13 @@ async function enrichWithDetails(
     const noteId = String(record[spec.id_field || "id"] || "").trim();
     if (!noteId) continue;
 
+    const detailBudget = await recordActivity("detail");
+    if (!detailBudget.allowed) {
+      result.warnings.push("[详情] 今日详情访问预算已用尽（" + detailBudget.used + "/" + detailBudget.limit + "），本轮只保留列表字段。");
+      logWarn("detail", "budget.exhausted", "详情访问预算耗尽，停止补全", { used: detailBudget.used, limit: detailBudget.limit });
+      break;
+    }
+
     // 点击真实卡片触发站点自身的 SPA 跳转；找不到时回滚顶部重试一次。
     const cardSelector = `a[href*="${cssEscape(noteId)}"]`;
     let clicked = await humanizedClickOnTab(tabId, cardSelector);
@@ -787,4 +816,17 @@ function enrichAuthor(
     collection,
     records.map((record) => ({ _query: keyword, author: displayName, ...record }))
   ]));
+}
+
+/** 分片睡眠，期间响应暂停/停止请求；返回超时结束或收到的控制请求。 */
+function sleepInterruptible(totalMs: number, sliceMs = 5_000): Promise<"done" | "pause" | "stop"> {
+  return new Promise((resolvePromise) => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      const peeked = peekControlRequest();
+      if (peeked.stop) { clearInterval(timer); resolvePromise("stop"); return; }
+      if (peeked.pause) { clearInterval(timer); resolvePromise("pause"); return; }
+      if (Date.now() - startedAt >= totalMs) { clearInterval(timer); resolvePromise("done"); }
+    }, sliceMs);
+  });
 }

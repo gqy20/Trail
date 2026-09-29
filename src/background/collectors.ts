@@ -4,6 +4,7 @@ import { matchesBrowserTool } from "../browser-tools/matcher";
 import { executeAuthorizedCollectorBatch, importBundledBrowserTools } from "./browserTools";
 import { clampIntervalHours, isCollectorDue } from "../collector/schedule";
 import { getFollows } from "../collector/follows";
+import { pickRotation } from "../collector/rotation";
 import type { CollectorJob, CollectorState } from "../collector/types";
 import { logError, logInfo, logWarn } from "../logging/logger";
 
@@ -99,11 +100,13 @@ async function runOne(toolId: string, automatic: boolean): Promise<CollectorStat
       return getCollectorState();
     }
   }
-  const follows = await getFollows(feed.platform);
-  if (follows.length === 0) {
+  const allFollows = await getFollows(feed.platform);
+  if (allFollows.length === 0) {
     await patchJob(toolId, { status: "failed", message: "关注列表为空。" });
     return getCollectorState();
   }
+  // 定时采集账号轮换：每轮只取 2 个（从游标起），降低单账号访问密度；手动运行取全部。
+  const follows = automatic ? pickRotation(allFollows, job.rotationCursor || 0, 2) : allFollows;
 
   const day = new Date(now).toLocaleDateString("sv-SE");
   await patchJob(toolId, {
@@ -138,6 +141,7 @@ async function runOne(toolId: string, automatic: boolean): Promise<CollectorStat
       status: ok ? "ok" : "failed",
       result,
       lastSuccessAt: ok ? Date.now() : job.lastSuccessAt,
+      rotationCursor: ok ? ((job.rotationCursor || 0) + follows.length) % allFollows.length : job.rotationCursor,
       message: ok
         ? `完成 ${result.status === "partial" ? "（部分）" : ""}：${records} 条记录`
         : result.error || "采集失败。"
