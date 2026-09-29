@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import "@fontsource-variable/noto-sans-sc/wght.css";
+import "@fontsource-variable/noto-serif-sc/wght.css";
+import "@fontsource-variable/source-code-pro/wght.css";
 import { Download, ExternalLink, FileJson, FileUp, History, Pause, Play, Plus, RefreshCw, Rss, Settings2, Square, Trash2, Wrench, X } from "lucide-react";
 import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
