@@ -40,7 +40,7 @@ export function CheckinsView() {
       onSave={(enabled, time) => void act(item.toolId, () => sendMessage({ type: "CONFIGURE_CHECKIN", toolId: item.toolId, enabled, time }))}
     />)}
     {state?.items.length === 0 ? <div className="panel stack"><p>还没有签到工具。</p>
-      <button className="button secondary" disabled={busy !== undefined} onClick={() => void act("sync", () => sendMessage({ type: "IMPORT_BUNDLED_BROWSER_TOOLS" }))}><RefreshCw size={15} /> 同步内置工具</button>
+      <button className="button secondary" title="同步内置签到工具" disabled={busy !== undefined} onClick={() => void act("sync", () => sendMessage({ type: "IMPORT_BUNDLED_BROWSER_TOOLS" }))}><RefreshCw size={15} /> 同步</button>
     </div> : null}
   </section>;
 }

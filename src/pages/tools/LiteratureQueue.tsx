@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Download, ExternalLink, FileUp, Pause, Play, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, Circle, Download, ExternalLink, FileUp, LoaderCircle, Pause, Play, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { parseLiteratureCsv } from "../../literature-queue/csv";
 import {
   clearLiteratureQueue,
@@ -232,8 +232,8 @@ export function LiteratureQueueView() {
       </div>
 
       <div className="queue-footer">
-        <button className="button secondary" disabled={busy || summary.needsUser + summary.failed === 0} onClick={() => void resetFailures()}><RotateCcw size={15} /> 重置失败项</button>
-        <button className="button secondary" disabled={busy} onClick={() => exportQueue(queue)}><Download size={15} /> 导出报告</button>
+        <button className="button secondary" title="把失败/需处理项重置为待处理" disabled={busy || summary.needsUser + summary.failed === 0} onClick={() => void resetFailures()}><RotateCcw size={15} /> 重置</button>
+        <button className="button secondary" title="导出 CSV 报告" disabled={busy} onClick={() => exportQueue(queue)}><Download size={15} /> 导出</button>
         <button className="button primary queue-start" disabled={busy || runnableItems.length === 0} onClick={() => void startDownload()}>
           <Download size={16} /> {busy ? "正在处理…" : `处理 ${runnableItems.length} 篇`}
         </button>
@@ -247,7 +247,7 @@ function QueueRow({ item }: { item: LiteratureQueueItem }) {
   const openUrl = item.resolverUrl || (item.doi ? `https://doi.org/${item.doi}` : buildSearchUrl(item.title));
   return (
     <article className="queue-row">
-      <span className={`queue-status status-${item.status}`}>{statusLabel(item.status)}</span>
+      <span className={`queue-status status-${item.status}`} title={statusLabel(item.status)} aria-label={statusLabel(item.status)}>{statusIcon(item.status)}</span>
       <div className="queue-row-main">
         <strong title={item.title}>{stripTags(item.title)}</strong>
         <span>{item.doi || routeLabel(item)}{item.sourceRows > 1 ? ` · 合并 ${item.sourceRows} 条` : ""}</span>
@@ -289,9 +289,20 @@ function statusLabel(status: LiteratureQueueStatus): string {
   }
 }
 
+function statusIcon(status: LiteratureQueueStatus, size = 13) {
+  switch (status) {
+    case "pending": return <Circle size={size} />;
+    case "resolving": return <LoaderCircle size={size} />;
+    case "completed": return <Check size={size} />;
+    case "needs_search": return <Search size={size} />;
+    case "needs_user": return <AlertTriangle size={size} />;
+    case "failed": return <X size={size} />;
+  }
+}
+
 function routeLabel(item: LiteratureQueueItem): string {
-  if (item.downloadUrl || item.pdfUrl) return "已有全文入口";
-  return "按题名检索";
+  if (item.downloadUrl || item.pdfUrl) return "有全文";
+  return "按题名";
 }
 
 function buildSearchUrl(title: string): string {

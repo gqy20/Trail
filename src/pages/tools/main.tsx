@@ -493,7 +493,7 @@ function BrowserToolsApp() {
               <section className="empty-tools-state">
                 <Wrench size={24} />
                 <strong>尚未配置采集工具</strong>
-                <button className="button secondary" onClick={() => setActiveView("settings")}>前往设置</button>
+                <button className="button secondary" onClick={() => setActiveView("settings")}>去设置</button>
               </section>
             )}
           </section>
@@ -578,7 +578,7 @@ function BrowserToolsApp() {
                         <span className={matched ? "tool-state available" : "tool-state"}>{matched ? "当前可用" : "其他页面"}</span>
                       </button>
                       <div className="tool-settings-actions">
-                        {!bundled && availableVersion ? <button className="button secondary compact-button" disabled={busy} title="保留自定义备份并恢复内置规则" onClick={() => void restoreBundled(tool.id)}>使用内置版</button> : null}
+                        {!bundled && availableVersion ? <button className="button secondary compact-button" disabled={busy} title="保留自定义备份并恢复内置规则" onClick={() => void restoreBundled(tool.id)}>用内置</button> : null}
                         <button className="icon-button danger" aria-label={`删除${tool.definition.name}`} onClick={() => void deleteTool(tool)}><Trash2 size={15} /></button>
                       </div>
                     </div>
@@ -600,7 +600,7 @@ function BrowserToolsApp() {
               <input ref={fileInputRef} className="visually-hidden" type="file" accept=".yml,.yaml,text/yaml,application/yaml" onChange={(event) => void loadFile(event.target.files?.[0])} />
               <div className="toolbar">
                 <button className="button secondary" onClick={() => fileInputRef.current?.click()}><FileUp size={16} /> 选择文件</button>
-                <button className="button primary" disabled={busy || !yamlDraft.trim()} onClick={() => void importTool()}>导入或更新</button>
+                <button className="button primary" disabled={busy || !yamlDraft.trim()} onClick={() => void importTool()}>导入</button>
               </div>
             </details>
           </section>
@@ -631,7 +631,7 @@ function BatchRunControlBar({ run, busy, onPause, onResume, onStop }: {
     </div>
     <div className="batch-run-actions">
       {paused
-        ? <button className="button primary" disabled={busy} onClick={onResume}><Play size={15} />继续（剩余 {total - done} 个）</button>
+        ? <button className="button primary" title={`剩余 ${total - done} 个输入`} disabled={busy} onClick={onResume}><Play size={15} />继续</button>
         : <button className="button secondary" disabled={busy} onClick={onPause}><Pause size={15} />暂停</button>}
       <button className="button secondary" disabled={busy} onClick={onStop}><Square size={15} />停止</button>
     </div>

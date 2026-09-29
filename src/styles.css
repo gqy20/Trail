@@ -2694,3 +2694,4 @@ button.session-card:hover {
 code, pre, kbd, samp, .code-textarea {
   font-weight: 500;
 }
+.queue-status { display: inline-flex; align-items: center; justify-content: center; }

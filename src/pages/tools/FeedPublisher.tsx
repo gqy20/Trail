@@ -116,12 +116,12 @@ export function FeedPublisherView() {
         <button className="button secondary" disabled={busy} onClick={() => void act("save", async () => {
           await sendMessage({ type: "SAVE_FEED_CONFIG", config: currentDraft() });
           return "配置已保存。";
-        })}>保存配置</button>
-        <button className="button secondary" disabled={busy} onClick={() => void act("probe", async () => {
+        })}>保存</button>
+        <button className="button secondary" title="保存当前表单并探测仓库连通性" disabled={busy} onClick={() => void act("probe", async () => {
           await sendMessage({ type: "SAVE_FEED_CONFIG", config: currentDraft() });
           const probe = await sendMessage({ type: "PROBE_FEED_REPO" });
           return `配置已保存。连接成功：仓库为${probe.repoPrivate ? "私有" : "公共"}，默认分支 ${probe.defaultBranch}。`;
-        })}><PlugZap size={15} />保存并测试</button>
+        })}><PlugZap size={15} />测试</button>
       </div>
     </article>
 
@@ -129,13 +129,13 @@ export function FeedPublisherView() {
       <div className="section-heading"><strong>待发布</strong><span className="muted text-small">{snapshot ? `${snapshot.stagedCount} 条` : "…"}</span></div>
       <p className="muted text-small">发布失败时暂存保留，下次重试。</p>
       <div className="feed-actions">
-        <button className="button secondary" disabled={busy} onClick={() => void act("sample", () =>
+        <button className="button secondary" title="暂存两条示例记录，用于验证发布链路" disabled={busy} onClick={() => void act("sample", () =>
           sendMessage({ type: "STAGE_FEED_POSTS", posts: SAMPLE_POSTS }).then((result) => `已暂存 ${result.staged} 条（含示例数据）。`)
-        )}><UploadCloud size={15} />暂存示例数据</button>
-        <button className="button secondary" disabled={busy || snapshot?.stagedCount === 0} onClick={() => void act("clear", () => {
+        )}><UploadCloud size={15} />示例</button>
+        <button className="button secondary" title="清空全部暂存记录" disabled={busy || snapshot?.stagedCount === 0} onClick={() => void act("clear", () => {
           if (!window.confirm(`清空全部 ${snapshot?.stagedCount ?? 0} 条暂存记录？此操作不可撤销。`)) return Promise.resolve(undefined);
           return sendMessage({ type: "CLEAR_STAGED_FEED" }).then((result) => `已清空 ${result.cleared} 条暂存记录。`);
-        })}><Trash2 size={15} />清空暂存</button>
+        })}><Trash2 size={15} />清空</button>
         <button className="button primary" disabled={busy || snapshot?.stagedCount === 0} onClick={() => void act("publish", () =>
           sendMessage({ type: "PUBLISH_FEED" }).then((result) =>
             `发布成功：新增 ${result.newPosts} 条，共 ${result.totalPosts} 条，写入 ${result.files.length} 个文件。`)

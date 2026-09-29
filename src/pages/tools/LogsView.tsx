@@ -4,6 +4,7 @@ import { sendMessage } from "../../shared/runtime";
 import { formatLogEntriesText, LOG_STORE_KEY, type LogEntry, type LogLevel } from "../../logging/logger";
 
 const LEVEL_WEIGHT: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+const LEVEL_LETTER: Record<LogLevel, string> = { debug: "D", info: "I", warn: "W", error: "E" };
 const LEVEL_LABEL: Record<LogLevel, string> = { debug: "调试", info: "信息", warn: "警告", error: "错误" };
 
 export function LogsView() {
@@ -92,7 +93,7 @@ export function LogsView() {
     <div className="logs-list">
       {filtered.map((entry) => <article className={`log-entry log-${entry.level}`} key={`${entry.ts}-${entry.event}`}>
         <header>
-          <span className={`log-level log-level-${entry.level}`}>{LEVEL_LABEL[entry.level]}</span>
+          <span className={`log-level log-level-${entry.level}`} title={LEVEL_LABEL[entry.level]}>{LEVEL_LETTER[entry.level]}</span>
           <span className="log-scope">{entry.scope}</span>
           <code className="log-event">{entry.event}</code>
           <time>{new Date(entry.ts).toLocaleTimeString("zh-CN", { hour12: false })}</time>
