@@ -1,7 +1,7 @@
 import { fetchGitHubContent, probeGitHubRepo, putGitHubContent } from "./github";
 import { buildFeedMetaFile, buildFeedPostsFile, mergeFeedPosts, normalizeFeedPost } from "./merge";
 import { planFeedFiles } from "./rss";
-import { clearStagedPosts, getStagedPosts, requireFeedConfig } from "./storage";
+import { clearStagedPosts, getStagedPosts, patchFeedState, requireFeedConfig } from "./storage";
 import type { FeedPost, FeedPublishResult, FeedRepoProbe } from "./types";
 import { FEED_META_PATH, FEED_POSTS_PATH } from "./types";
 
