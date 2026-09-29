@@ -1,5 +1,6 @@
 import { probeFeedRepo, publishFeed } from "../publisher/publish";
 import {
+  clearStagedPosts,
   getFeedPublisherSnapshot,
   patchFeedState,
   saveFeedConfig,
@@ -14,8 +15,13 @@ import type { FeedPublisherConfig, FeedPublishResult, FeedRepoProbe } from "../p
  * 发布失败只写入状态不抛出，避免影响采集本身的收尾。
  */
 export async function stageAndMaybePublish(definition: BrowserToolDefinition, result: BrowserToolRunResult): Promise<void> {
-  const staged = await stageFeedFromRun(definition, result);
-  if (staged === 0) return;
+  const { staged, dropped } = await stageFeedFromRun(definition, result);
+  if (dropped > 0) {
+    await patchFeedState({
+      lastNotice: `${new Date().toLocaleString("zh-CN")} 暂存已达上限（2000 条），丢弃了 ${dropped} 条最旧记录，请尽快发布。`
+    }).catch(() => undefined);
+  }
+  if (staged === 0 && dropped === 0) return;
   const { config } = await getFeedPublisherSnapshot();
   if (!config?.autoPublish) return;
   try {
@@ -24,6 +30,14 @@ export async function stageAndMaybePublish(definition: BrowserToolDefinition, re
     const message = `${new Date().toLocaleString("zh-CN")} 自动发布失败：${error instanceof Error ? error.message : "未知错误"}`;
     await patchFeedState({ lastError: message }).catch(() => undefined);
   }
+}
+
+/** 清空订阅源暂存（用于发布前清理示例或过期数据）。 */
+export async function clearStagedFeed(): Promise<{ cleared: number }> {
+  const snapshot = await getFeedPublisherSnapshot();
+  const cleared = snapshot.stagedCount;
+  await clearStagedPosts();
+  return { cleared };
 }
 
 export async function getFeedState(): Promise<ReturnType<typeof getFeedPublisherSnapshot>> {
@@ -36,7 +50,8 @@ export async function saveFeedPublisherConfig(config: FeedPublisherConfig) {
 }
 
 export async function stagePosts(posts: unknown[]): Promise<{ staged: number }> {
-  return { staged: await stageFeedPosts(posts) };
+  const { kept } = await stageFeedPosts(posts);
+  return { staged: kept };
 }
 
 export async function probeFeedConnection(): Promise<FeedRepoProbe> {

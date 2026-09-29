@@ -31,6 +31,25 @@ const STALE_RUNNING_MS = 120_000;
 type ControlRequest = { pause: boolean; stop: boolean };
 let controlRequest: ControlRequest = { pause: false, stop: false };
 
+/**
+ * 判断批量错误是否为瞬时网络类（页面导航中断、连接抖动等）。
+ * 这类错误值得对当前输入重试一次；限流、登录态失效则必须立即停止。
+ */
+const TRANSIENT_ERROR_PATTERNS: RegExp[] = [
+  /failed to fetch/i,
+  /页面内请求失败/,
+  /networkerror/i,
+  /net::err/i,
+  /err_connection/i,
+  /err_timed_out/i,
+  /请求超时/,
+  /等待元素超时/
+];
+
+export function isTransientBatchError(message: string): boolean {
+  return TRANSIENT_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+}
+
 export async function getBatchRunState(): Promise<BatchRunState | null> {
   const result = await chrome.storage.session.get(STATE_KEY);
   const state = result[STATE_KEY] as BatchRunState | undefined;

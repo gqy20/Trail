@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { advanceBatchRun, describeBatchRun, buildBatchRunResultFromState, type BatchRunState } from "../src/background/runControl";
+import { advanceBatchRun, describeBatchRun, buildBatchRunResultFromState, isTransientBatchError, type BatchRunState } from "../src/background/runControl";
 
 function sampleState(overrides: Partial<BatchRunState> = {}): BatchRunState {
   return {
@@ -58,4 +58,15 @@ test("buildBatchRunResultFromState 保留数据与状态语义", () => {
   expect(result.status).toBe("paused");
   expect(result.data).toBe(state.data);
   expect(result.error).toContain("1/3");
+});
+
+test("isTransientBatchError 只把瞬时网络错误判为可重试", () => {
+  expect(isTransientBatchError("页面内请求失败：Failed to fetch")).toBe(true);
+  expect(isTransientBatchError("TypeError: Failed to fetch")).toBe(true);
+  expect(isTransientBatchError("net::ERR_CONNECTION_RESET")).toBe(true);
+  expect(isTransientBatchError("等待元素超时：.checkin-btn")).toBe(true);
+  // 限流与登录态问题不能靠重试解决，必须立即停止
+  expect(isTransientBatchError("x.com 返回 429 限流，请降低抓取频率并稍后重试。")).toBe(false);
+  expect(isTransientBatchError("x.com 拒绝了请求（HTTP 401），登录态可能已过期。")).toBe(false);
+  expect(isTransientBatchError("无法解析 UserTweets 的 queryId。")).toBe(false);
 });

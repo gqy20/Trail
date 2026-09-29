@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PlugZap, Rss, Send, UploadCloud } from "lucide-react";
+import { PlugZap, Rss, Send, Trash2, UploadCloud } from "lucide-react";
 import { sendMessage } from "../../shared/runtime";
 import type { FeedPublisherConfig, FeedPublisherSnapshot } from "../../publisher/types";
 
@@ -133,6 +133,10 @@ export function FeedPublisherView() {
         <button className="button secondary" disabled={busy} onClick={() => void act("sample", () =>
           sendMessage({ type: "STAGE_FEED_POSTS", posts: SAMPLE_POSTS }).then((result) => `已暂存 ${result.staged} 条（含示例数据）。`)
         )}><UploadCloud size={15} />暂存示例数据</button>
+        <button className="button secondary" disabled={busy || snapshot?.stagedCount === 0} onClick={() => void act("clear", () => {
+          if (!window.confirm(`清空全部 ${snapshot?.stagedCount ?? 0} 条暂存记录？此操作不可撤销。`)) return Promise.resolve(undefined);
+          return sendMessage({ type: "CLEAR_STAGED_FEED" }).then((result) => `已清空 ${result.cleared} 条暂存记录。`);
+        })}><Trash2 size={15} />清空暂存</button>
         <button className="button primary" disabled={busy || snapshot?.stagedCount === 0} onClick={() => void act("publish", () =>
           sendMessage({ type: "PUBLISH_FEED" }).then((result) =>
             `发布成功：新增 ${result.newPosts} 条，共 ${result.totalPosts} 条，写入 ${result.files.length} 个文件。`)
@@ -149,6 +153,7 @@ export function FeedPublisherView() {
           <div><dt>上次新增</dt><dd>{state.lastNewPosts ?? "—"}</dd></div>
         </dl>
         : <p className="muted text-small">还没有发布过。</p>}
+      {state?.lastNotice ? <p className="text-small">{state.lastNotice}</p> : null}
       {state?.lastError ? <p className="error-text text-small">{state.lastError}</p> : null}
     </article>
   </section>;

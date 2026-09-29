@@ -57,16 +57,20 @@ function buildPostUrl(platform: string, handle: string, nativeId: string): strin
 /**
  * 工具声明了 feed 段时，成功或部分完成的运行会把该集合的记录
  * 自动暂存到订阅源。失败/暂停的运行不暂存，保持人工可见。
- * 返回暂存条数。
+ * 返回暂存数与触顶丢弃数。
  */
-export async function stageFeedFromRun(definition: BrowserToolDefinition, result: BrowserToolRunResult): Promise<number> {
+export async function stageFeedFromRun(
+  definition: BrowserToolDefinition,
+  result: BrowserToolRunResult
+): Promise<{ staged: number; dropped: number }> {
   const feed = definition.feed;
-  if (!feed) return 0;
-  if (result.status === "failed" || result.status === "paused") return 0;
+  if (!feed) return { staged: 0, dropped: 0 };
+  if (result.status === "failed" || result.status === "paused") return { staged: 0, dropped: 0 };
   const records = result.data[feed.collection];
-  if (!records || records.length === 0) return 0;
+  if (!records || records.length === 0) return { staged: 0, dropped: 0 };
   const { config } = await getFeedPublisherSnapshot();
   const posts = recordsToFeedPosts(records, feed.platform, undefined, { excludeRetweets: config?.excludeRetweets });
-  if (posts.length === 0) return 0;
-  return stageFeedPosts(posts);
+  if (posts.length === 0) return { staged: 0, dropped: 0 };
+  const { kept, dropped } = await stageFeedPosts(posts);
+  return { staged: kept, dropped };
 }

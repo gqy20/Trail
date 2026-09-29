@@ -29,6 +29,7 @@ type RuntimeResponseMap = {
   PAUSE_BATCH_RUN: { requested: boolean };
   RESUME_BATCH_RUN: BrowserToolRunResult;
   STOP_BATCH_RUN: { requested: boolean; finalized: boolean };
+  CLEAR_STAGED_FEED: { cleared: number };
   GET_POPUP_STATE: PopupState;
   GET_INTERACTION_SETTINGS: TrailInteractionSettings;
   UPDATE_INTERACTION_SETTINGS: TrailInteractionSettings;

@@ -242,6 +242,7 @@ export type RuntimeMessage =
   | { type: "PAUSE_BATCH_RUN" }
   | { type: "RESUME_BATCH_RUN"; tabId?: number; userInitiated?: boolean }
   | { type: "STOP_BATCH_RUN" }
+  | { type: "CLEAR_STAGED_FEED" }
   | { type: "GET_POPUP_STATE" }
   | { type: "GET_INTERACTION_SETTINGS" }
   | { type: "UPDATE_INTERACTION_SETTINGS"; settings: Partial<TrailInteractionSettings> }

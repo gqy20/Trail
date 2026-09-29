@@ -27,6 +27,7 @@ import {
   clearControlRequest,
   consumeControlRequest,
   getBatchRunState,
+  isTransientBatchError,
   requestPauseBatchRun,
   requestStopBatchRun,
   saveBatchRunState,
@@ -199,6 +200,7 @@ async function continueBatchRun(
   const nativeExports: NonNullable<BrowserToolRunResult["nativeExports"]> = [];
   let state = initial;
   let failed = false;
+  let retriedIndex = -1;
 
   const heartbeat = setInterval(() => {
     state = { ...state, updatedAt: Date.now() };
@@ -261,8 +263,15 @@ async function continueBatchRun(
         };
         warnings.push(...result.warnings.map((warning) => `[${keyword}] ${warning}`));
         if (result.status !== "completed") {
+          const message = result.error || "提取未完整完成";
+          if (retriedIndex !== index && isTransientBatchError(message)) {
+            retriedIndex = index;
+            warnings.push(`[${keyword}] ${message}；5 秒后重试一次。`);
+            await sleep(5_000);
+            continue;
+          }
           failed = true;
-          warnings.push(`[${keyword}] ${result.error || "提取未完整完成"}`);
+          warnings.push(`[${keyword}] ${message}`);
           break;
         }
         if (nativeExport) {
@@ -274,8 +283,15 @@ async function continueBatchRun(
         }
         await saveBatchRunState(state);
       } catch (error) {
+        const message = error instanceof Error ? error.message : "批量检索失败";
+        if (retriedIndex !== index && isTransientBatchError(message)) {
+          retriedIndex = index;
+          warnings.push(`[${keyword}] ${message}；5 秒后重试一次。`);
+          await sleep(5_000);
+          continue;
+        }
         failed = true;
-        warnings.push(`[${keyword}] ${error instanceof Error ? error.message : "批量检索失败"}`);
+        warnings.push(`[${keyword}] ${message}`);
         break;
       }
 

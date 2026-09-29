@@ -46,6 +46,8 @@ export type FeedPublishState = {
   lastNewPosts?: number;
   lastFiles?: string[];
   lastError?: string;
+  /** 非错误的运行提示，例如暂存触顶丢弃。 */
+  lastNotice?: string;
 };
 
 export type FeedPublisherSnapshot = {

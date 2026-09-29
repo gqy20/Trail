@@ -2,7 +2,7 @@ import { normalizeFeedPost } from "./merge";
 import type { FeedPost, FeedPublisherConfig, FeedPublisherSnapshot, FeedPublishState } from "./types";
 
 const STORE_KEY = "trail.feedPublisher.v1";
-const MAX_STAGED_POSTS = 500;
+const MAX_STAGED_POSTS = 2000;
 
 type FeedStore = {
   config?: FeedPublisherConfig;
@@ -66,8 +66,8 @@ export async function requireFeedConfig(): Promise<FeedPublisherConfig> {
   return store.config;
 }
 
-/** 暂存待发布记录；同 id 覆盖，总量封顶后丢弃最旧。返回暂存总数。 */
-export async function stageFeedPosts(posts: unknown[]): Promise<number> {
+/** 暂存待发布记录；同 id 覆盖，总量封顶后丢弃最旧。返回保留数与丢弃数。 */
+export async function stageFeedPosts(posts: unknown[]): Promise<{ kept: number; dropped: number }> {
   const store = await readStore();
   const byId = new Map<string, FeedPost>();
   for (const post of store.staged || []) byId.set(post.id, post);
@@ -75,11 +75,10 @@ export async function stageFeedPosts(posts: unknown[]): Promise<number> {
     const post = normalizeFeedPost(input);
     if (post) byId.set(post.id, post);
   }
-  const staged = [...byId.values()]
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
-    .slice(0, MAX_STAGED_POSTS);
-  await writeStore({ ...store, staged });
-  return staged.length;
+  const ordered = [...byId.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  const kept = ordered.slice(0, MAX_STAGED_POSTS);
+  await writeStore({ ...store, staged: kept });
+  return { kept: kept.length, dropped: ordered.length - kept.length };
 }
 
 export async function getStagedPosts(): Promise<FeedPost[]> {
