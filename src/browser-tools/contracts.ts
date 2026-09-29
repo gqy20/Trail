@@ -290,6 +290,12 @@ export type BrowserToolDefinition = {
     timeout_ms?: number;
     max_items?: number;
     delay_ms?: number;
+    /** url=直跳整页加载；click=在列表页点击真实卡片（SPA 跳转，更像真人）。 */
+    navigate?: 'url' | 'click';
+    /** click 模式下记录中取笔记 id 的字段，用于定位 a[href*=id] 卡片。 */
+    id_field?: string;
+    /** click 模式下详情页的返回按钮选择器。 */
+    back_selector?: string;
     blockers?: Array<{ selector?: string; url_contains?: string; reason: string }>;
   };
   downloads?: BrowserToolDownloadDefinition[];

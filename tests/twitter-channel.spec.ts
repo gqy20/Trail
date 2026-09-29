@@ -229,6 +229,9 @@ test("xhs/notes.yml 通过校验并保留风控节奏声明", () => {
   expect(definition.detail_extract?.max_items).toBe(8);
   expect(definition.detail_extract?.url_field).toBe("url");
   expect(definition.detail_extract?.blockers?.some((b) => b.url_contains === "error_code=3000")).toBe(true);
+  expect(definition.detail_extract?.navigate).toBe("click");
+  expect(definition.detail_extract?.back_selector).toBeDefined();
+  expect(definition.detail_extract?.id_field).toBe("id");
   // match 转换保留为对象形态
   const extract = definition.workflow.find((step) => step.action === "repeat") as { steps: Array<{ fields: Record<string, { transforms: unknown[] }> }> };
   const idTransforms = extract.steps[0].fields.id.transforms;

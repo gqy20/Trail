@@ -17,6 +17,12 @@ import type { BrowserToolFieldDefinition } from "./contracts";
 
 export function installBrowserToolContentRuntime(): void {
   chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+    if (isHumanizedClickMessage(message)) {
+      humanizedClick(message.selector, message.timeoutMs)
+        .then(sendResponse)
+        .catch((error: unknown) => sendResponse({ error: error instanceof Error ? error.message : '点击失败。' }));
+      return true;
+    }
     if (isExtractDetailsMessage(message)) {
       extractDetailsOnPage(message)
         .then(sendResponse)
@@ -328,4 +334,49 @@ async function extractDetailsOnPage(message: ExtractDetailsMessage): Promise<{ r
 
 function isExtractDetailsMessage(value: unknown): value is ExtractDetailsMessage {
   return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "EXTRACT_BROWSER_TOOL_DETAILS");
+}
+
+type HumanizedClickMessage = {
+  type: "BROWSER_TOOL_HUMANIZED_CLICK";
+  selector: string;
+  timeoutMs?: number;
+};
+
+/**
+ * 人性化点击：先沿抖动路径派发 mousemove 预热，再 mousedown/mouseup 点击。
+ * content script 事件 isTrusted=false 是平台限制（真事件需 CDP），但坐标
+ * 轨迹与随之而来的 SPA 跳转足以让流量模式接近真人。
+ */
+async function humanizedClick(selector: string, timeoutMs = 5000): Promise<{ clicked: boolean }> {
+  const deadline = Date.now() + timeoutMs;
+  let element = document.querySelector(selector);
+  while (!element && Date.now() < deadline) {
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    element = document.querySelector(selector);
+  }
+  if (!(element instanceof HTMLElement)) return { clicked: false };
+  element.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
+  await new Promise((resolve) => window.setTimeout(resolve, 120));
+  const rect = element.getBoundingClientRect();
+  const targetX = rect.left + rect.width / 2 + (Math.random() - 0.5) * Math.min(rect.width * 0.5, 30);
+  const targetY = rect.top + rect.height / 2 + (Math.random() - 0.5) * Math.min(rect.height * 0.5, 20);
+  const startX = targetX + (Math.random() - 0.5) * 160;
+  const startY = targetY - 40 - Math.random() * 120;
+  const steps = 6 + Math.floor(Math.random() * 4);
+  for (let index = 0; index <= steps; index += 1) {
+    const progress = index / steps;
+    const eased = progress * progress * (3 - 2 * progress);
+    const x = startX + (targetX - startX) * eased + (Math.random() - 0.5) * 6;
+    const y = startY + (targetY - startY) * eased + (Math.random() - 0.5) * 6;
+    element.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, cancelable: true, clientX: x, clientY: y, view: window }));
+    await new Promise((resolve) => window.setTimeout(resolve, 25 + Math.random() * 45));
+  }
+  for (const type of ["mouseover", "mousedown", "mouseup", "click"] as const) {
+    element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: targetX, clientY: targetY, button: 0, view: window }));
+  }
+  return { clicked: true };
+}
+
+function isHumanizedClickMessage(value: unknown): value is HumanizedClickMessage {
+  return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "BROWSER_TOOL_HUMANIZED_CLICK");
 }

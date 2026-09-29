@@ -684,35 +684,85 @@ async function enrichWithDetails(
   if (!records || records.length === 0) return result;
   const maxItems = Math.min(spec.max_items || records.length, records.length);
   const delay = spec.delay_ms ?? 0;
+  const useClick = spec.navigate === "click";
+  const listUrl = (await chrome.tabs.get(tabId)).url || "";
   let enriched = 0;
 
   for (const record of records.slice(0, maxItems)) {
     const url = record[spec.url_field];
     if (typeof url !== "string" || !/^https?:\/\//.test(url)) continue;
-    await navigateTab(tabId, url);
-    const tab = await chrome.tabs.get(tabId);
-    const urlBlocker = (spec.blockers || []).find((blocker) => blocker.url_contains && (tab.url || "").includes(blocker.url_contains));
-    if (urlBlocker) {
-      return { ...result, status: "paused", error: urlBlocker.reason, warnings: [...result.warnings, urlBlocker.reason] };
+
+    if (useClick) {
+      const noteId = String(record[spec.id_field || "id"] || "").trim();
+      if (!noteId) continue;
+      // 点击模式：点真实卡片触发 SPA 跳转，完成后点返回按钮回列表。
+      const clicked = await humanizedClickOnTab(tabId, `a[href*="${cssEscape(noteId)}"]`);
+      if (!clicked) {
+        result.warnings.push("[详情] 未找到可点击的卡片，跳过该条。");
+        continue;
+      }
+      const detail = await extractDetailsOnTab(tabId, spec);
+      if (detail.paused) return detail.paused;
+      if (detail.warning) { result.warnings.push(`[详情] ${detail.warning}`); continue; }
+      Object.assign(record, detail.record || {});
+      enriched += 1;
+      if (spec.back_selector) await humanizedClickOnTab(tabId, spec.back_selector);
+      await sleep(600);
+      const current = await chrome.tabs.get(tabId).catch(() => undefined);
+      if (!current?.url || !current.url.startsWith(new URL(listUrl).origin)) {
+        await navigateTab(tabId, listUrl).catch(() => undefined);
+      }
+    } else {
+      await navigateTab(tabId, url);
+      const tab = await chrome.tabs.get(tabId);
+      const urlBlocker = (spec.blockers || []).find((blocker) => blocker.url_contains && (tab.url || "").includes(blocker.url_contains));
+      if (urlBlocker) {
+        return { ...result, status: "paused", error: urlBlocker.reason, warnings: [...result.warnings, urlBlocker.reason] };
+      }
+      const detail = await extractDetailsOnTab(tabId, spec);
+      if (detail.paused) return detail.paused;
+      if (detail.warning) { result.warnings.push(`[详情] ${detail.warning}`); continue; }
+      Object.assign(record, detail.record || {});
+      enriched += 1;
     }
-    const response = await chrome.tabs.sendMessage(tabId, {
-      type: "EXTRACT_BROWSER_TOOL_DETAILS",
-      fields: spec.fields,
-      waitFor: spec.wait_for,
-      timeoutMs: spec.timeout_ms,
-      blockers: (spec.blockers || []).filter((blocker) => blocker.selector)
-    }).catch(() => undefined);
-    if (!response || response.error) {
-      result.warnings.push(`[详情] ${response?.error || "无法在详情页提取字段。"}`);
-      continue;
-    }
-    if (response.blocker) {
-      return { ...result, status: "paused", error: response.blocker, warnings: [...result.warnings, response.blocker] };
-    }
-    Object.assign(record, response.record || {});
-    enriched += 1;
     if (delay > 0 && enriched < maxItems) await sleep(delay);
   }
-  logInfo("detail", "detail.enrich", "详情页补全完成", { toolId: definition.id, enriched });
+  logInfo("detail", "detail.enrich", "详情页补全完成", { toolId: definition.id, enriched, navigate: useClick ? "click" : "url" });
   return result;
+}
+
+/** 请求内容脚本执行人性化点击；返回是否点到了元素。 */
+async function humanizedClickOnTab(tabId: number, selector: string): Promise<boolean> {
+  const response = await chrome.tabs.sendMessage(tabId, {
+    type: "BROWSER_TOOL_HUMANIZED_CLICK",
+    selector,
+    timeoutMs: 5000
+  }).catch(() => undefined);
+  return Boolean(response?.clicked);
+}
+
+/** 详情页字段提取 + 阻断检测；命中阻断时返回暂停结果，提取异常返回 warning。 */
+async function extractDetailsOnTab(
+  tabId: number,
+  spec: NonNullable<ReturnType<typeof parseBrowserToolYaml>["detail_extract"]>
+): Promise<{ record?: Record<string, unknown>; warning?: string; paused?: BrowserToolRunResult }> {
+  const response = await chrome.tabs.sendMessage(tabId, {
+    type: "EXTRACT_BROWSER_TOOL_DETAILS",
+    fields: spec.fields,
+    waitFor: spec.wait_for,
+    timeoutMs: spec.timeout_ms,
+    blockers: (spec.blockers || []).filter((blocker) => blocker.selector)
+  }).catch(() => undefined);
+  if (!response || response.error) {
+    return { warning: response?.error || "无法在详情页提取字段。" };
+  }
+  if (response.blocker) {
+    return { paused: { status: "paused", error: response.blocker, warnings: [response.blocker] } as BrowserToolRunResult };
+  }
+  return { record: response.record };
+}
+
+/** CSS.escape 的最小实现（属性选择器值转义）。 */
+function cssEscape(value: string): string {
+  return value.replace(/["\\\]]/g, "\\$&");
 }

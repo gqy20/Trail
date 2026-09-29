@@ -867,6 +867,9 @@ function validateDetailExtract(value: unknown): NonNullable<BrowserToolDefinitio
     if (!entry.selector && !entry.url_contains) throw new Error(`detail_extract.blockers[${index}] 必须声明 selector 或 url_contains。`);
     return entry;
   });
+  const navigate = source.navigate === undefined ? undefined : readString(source.navigate, "detail_extract.navigate");
+  if (navigate !== undefined && navigate !== "url" && navigate !== "click") throw new Error("detail_extract.navigate 只支持 url 或 click。");
+  if (navigate === "click" && source.back_selector === undefined) throw new Error("click 模式必须声明 detail_extract.back_selector。");
   const maxItems = readOptionalNumber(source.max_items, "detail_extract.max_items");
   if (maxItems !== undefined && (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 50)) throw new Error("detail_extract.max_items 必须是 1-50 的整数。");
   const delay = readOptionalNumber(source.delay_ms, "detail_extract.delay_ms");
@@ -874,6 +877,9 @@ function validateDetailExtract(value: unknown): NonNullable<BrowserToolDefinitio
   return {
     collection,
     url_field: urlField,
+    id_field: source.id_field === undefined ? undefined : readString(source.id_field, "detail_extract.id_field"),
+    navigate: navigate as "url" | "click" | undefined,
+    back_selector: source.back_selector === undefined ? undefined : validatedSelector(source.back_selector, "detail_extract.back_selector"),
     fields,
     wait_for: source.wait_for === undefined ? undefined : validatedSelector(source.wait_for, "detail_extract.wait_for"),
     timeout_ms: validatedTimeout(source.timeout_ms, "detail_extract.timeout_ms"),
