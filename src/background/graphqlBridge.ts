@@ -202,12 +202,31 @@ export async function readPageStateForTab(
   return { state: results[0]?.result ?? null };
 }
 
-function readInitialStateInPage(): unknown {
-  try {
+async function readInitialStateInPage(): Promise<unknown> {
+  // hydration 时间窗：__INITIAL_STATE__ 由 SSR/client bootstrap 异步注入，
+  // 最多重试 4 次、间隔 800ms（opencli user.js 实测的同款坑）。
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     const value = (window as { __INITIAL_STATE__?: unknown }).__INITIAL_STATE__;
-    if (value === undefined || value === null) return null;
-    return JSON.parse(JSON.stringify(value));
-  } catch {
-    return null;
+    if (value !== undefined && value !== null) return safeClone(value);
+    await new Promise((resolve) => setTimeout(resolve, 800));
   }
+  return null;
+}
+
+/** 深克隆页面状态：处理循环引用与不可序列化值（Vue 响应式代理常见环引用）。 */
+function safeClone(value: unknown, seen: WeakMap<object, string> = new WeakMap()): unknown {
+  if (value === null || typeof value !== "object") {
+    if (typeof value === "function") return undefined;
+    if (typeof value === "bigint") return String(value);
+    return value;
+  }
+  if (seen.has(value as object)) return "[Circular]";
+  seen.set(value as object, "1");
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map((item) => safeClone(item, seen));
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    out[key] = safeClone((value as Record<string, unknown>)[key], seen);
+  }
+  return out;
 }
