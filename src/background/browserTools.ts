@@ -12,6 +12,7 @@ import { importBundledBrowserTools, getBundledToolVersions } from "../browser-to
 import { parseBrowserToolYaml } from "../browser-tools/loader";
 import { matchesBrowserTool } from "../browser-tools/matcher";
 import { resolveTemplate } from "../browser-tools/template";
+import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
 import {
   deleteStoredBrowserTool,
@@ -155,6 +156,7 @@ export async function resumeBrowserToolBatch(input: { tabId?: number; userInitia
   clearControlRequest();
   const resumed: BatchRunState = { ...state, status: "running", tabId: tab.id, updatedAt: Date.now() };
   await saveBatchRunState(resumed);
+  logInfo("batch", "batch.resume", "恢复已暂停的批量运行", { toolId: state.toolId, fromIndex: state.nextIndex, remaining: state.keywords.length - state.nextIndex });
   return continueBatchRun(definition, resumed, tab.id);
 }
 
@@ -201,6 +203,8 @@ async function continueBatchRun(
   let state = initial;
   let failed = false;
   let retriedIndex = -1;
+  const runStartedAt = Date.now();
+  logInfo("batch", "batch.start", "批量运行开始", { toolId: definition.id, runId: initial.runId, total: initial.keywords.length, fromIndex: initial.nextIndex });
 
   const heartbeat = setInterval(() => {
     state = { ...state, updatedAt: Date.now() };
@@ -211,10 +215,12 @@ async function continueBatchRun(
     while (state.nextIndex < state.keywords.length) {
       const control = consumeControlRequest();
       if (control.stop) {
+        logInfo("batch", "batch.control", "收到停止请求，在当前输入边界收尾", { completed: state.completedKeywords, total: state.keywords.length });
         return await finalizeBatchRun(definition, { ...state, status: "stopped" }, "partial",
           `已手动停止：完成 ${state.completedKeywords}/${state.keywords.length} 个输入。`, warnings);
       }
       if (control.pause) {
+        logInfo("batch", "batch.control", "收到暂停请求，在当前输入边界挂起", { completed: state.completedKeywords, total: state.keywords.length });
         return await finalizeBatchRun(definition, { ...state, status: "paused" }, "paused",
           `已暂停：完成 ${state.completedKeywords}/${state.keywords.length} 个输入，可稍后继续。`, warnings);
       }
@@ -249,6 +255,7 @@ async function continueBatchRun(
 
         if (result.status === "paused") {
           // 登录墙/验证码：保持游标不变，处理后可从该输入继续。
+          logWarn("batch", "batch.paused", "需要人工处理，运行转暂停", { keyword, detail: result.error || "登录或验证码" });
           warnings.push(`[${keyword}] 需要人工处理：${result.error || "登录或验证码"}`);
           const pausedState = { ...state, status: "paused" as const, updatedAt: Date.now(), lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
           await saveBatchRunState(pausedState);
@@ -266,6 +273,7 @@ async function continueBatchRun(
           const message = result.error || "提取未完整完成";
           if (retriedIndex !== index && isTransientBatchError(message)) {
             retriedIndex = index;
+            logWarn("batch", "keyword.retry", "瞬时错误，5 秒后重试当前输入", { keyword, error: message });
             warnings.push(`[${keyword}] ${message}；5 秒后重试一次。`);
             await sleep(5_000);
             continue;
@@ -274,6 +282,11 @@ async function continueBatchRun(
           warnings.push(`[${keyword}] ${message}`);
           break;
         }
+        logDebug("batch", "keyword.done", "完成当前输入", {
+          keyword,
+          index: index + 1,
+          records: Object.values(result.data).reduce((total, records) => total + records.length, 0)
+        });
         if (nativeExport) {
           const exportDefinition = definition.native_exports?.find((item) => item.id === nativeExport?.definitionId);
           if (!exportDefinition) throw new Error("工具没有对应的原生导出定义。");
@@ -286,6 +299,7 @@ async function continueBatchRun(
         const message = error instanceof Error ? error.message : "批量检索失败";
         if (retriedIndex !== index && isTransientBatchError(message)) {
           retriedIndex = index;
+          logWarn("batch", "keyword.retry", "瞬时异常，5 秒后重试当前输入", { keyword, error: message });
           warnings.push(`[${keyword}] ${message}；5 秒后重试一次。`);
           await sleep(5_000);
           continue;
@@ -327,6 +341,14 @@ async function continueBatchRun(
   };
   void stageAndMaybePublish(definition, result).catch(() => undefined);
   await clearBatchRunState();
+  logInfo("batch", "batch.done", "批量运行结束", {
+    toolId: definition.id,
+    status,
+    completed: state.completedKeywords,
+    total: state.keywords.length,
+    records: countBatchRecords(state),
+    durationMs: Date.now() - runStartedAt
+  });
   return persistRunResult(result, `${state.toolName} · 批量`);
 }
 
@@ -529,6 +551,11 @@ function emitProgress(progress: BrowserToolExecutionProgress): void {
 async function persistRunResult(result: BrowserToolRunResult, toolName: string): Promise<BrowserToolRunResult> {
   try {
     await saveBrowserToolRun(result, toolName);
+    logDebug("run", "run.persisted", "运行结果已写入历史", {
+      toolId: result.toolId,
+      status: result.status,
+      records: Object.values(result.data).reduce((total, records) => total + records.length, 0)
+    });
     return result;
   } catch {
     return {

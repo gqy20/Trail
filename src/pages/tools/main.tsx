@@ -9,6 +9,7 @@ import { formatDateTime } from "../../shared/time";
 import { LiteratureQueueView } from "./LiteratureQueue";
 import { CheckinsView } from "./Checkins";
 import { FeedPublisherView } from "./FeedPublisher";
+import { LogsView } from "./LogsView";
 import { describeBatchRun, type BatchRunState } from "../../background/runControl";
 import { TRAIL_VERSION } from "../../shared/version";
 import type {
@@ -43,7 +44,7 @@ function BrowserToolsApp() {
   const [nativeExportLimit, setNativeExportLimit] = useState(1000);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
-  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "history" | "settings" | "checkins" | "feed">("collect");
+  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "history" | "settings" | "checkins" | "feed" | "logs">("collect");
   const [error, setError] = useState("");
   const [catalogNotice, setCatalogNotice] = useState("");
   const [executionProgress, setExecutionProgress] = useState<Record<string, BrowserToolExecutionProgress>>({});
@@ -76,7 +77,7 @@ function BrowserToolsApp() {
   const nativeExportDefinition = selectedTool?.definition.native_exports?.[0];
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
   const toolUi = resolveToolUi(selectedTool?.definition);
-  const pageTitle = activeView === "checkins" ? "每日签到" : activeView === "feed" ? "订阅源发布" : toolUi.title;
+  const pageTitle = activeView === "checkins" ? "每日签到" : activeView === "feed" ? "订阅源发布" : activeView === "logs" ? "运行日志" : toolUi.title;
   const directBatchKeywords = useMemo(
     () => parseBatchInput(keywordDraft, selectedTool?.definition.presentation?.batch_input?.csv_headers),
     [keywordDraft, selectedTool?.updatedAt]
@@ -325,6 +326,7 @@ function BrowserToolsApp() {
           <nav className="tools-nav" aria-label={`${toolUi.title}导航`}>
             <button className={activeView === "checkins" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("checkins")}>签到</button>
             <button className={activeView === "feed" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("feed")}>订阅源</button>
+            <button className={activeView === "logs" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("logs")}>日志</button>
             <button className={activeView === "collect" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collect")}>运行</button>
             {lastResult ? <button className={activeView === "results" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("results")}>结果</button> : null}
             <button className={activeView === "queue" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("queue")}>
@@ -505,6 +507,7 @@ function BrowserToolsApp() {
         {activeView === "queue" ? <LiteratureQueueView /> : null}
         {activeView === "checkins" ? <CheckinsView /> : null}
         {activeView === "feed" ? <FeedPublisherView /> : null}
+        {activeView === "logs" ? <LogsView /> : null}
 
         {activeView === "history" ? (
           <section className="history-view stack">

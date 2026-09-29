@@ -2663,3 +2663,29 @@ button.session-card:hover {
 .batch-run-actions .button { display: inline-flex; align-items: center; gap: 6px; }
 .batch-run-bar p { margin: 0; }
 .feed-config-grid label.feed-config-toggle { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: inherit; }
+
+/* 运行日志 */
+.logs-view { align-content: start; }
+.logs-view > p { margin: 0; }
+.logs-view .view-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.logs-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.logs-toolbar .input { padding: 6px 8px; font-size: 13px; border: 1px solid #d7d7d7; border-radius: 6px; background: transparent; color: inherit; width: auto; }
+.logs-search { flex: 1; min-width: 160px; }
+.logs-toolbar .button { display: inline-flex; align-items: center; gap: 6px; }
+.logs-list { display: flex; flex-direction: column; gap: 8px; }
+.log-entry { border: 1px solid rgba(127,127,127,.2); border-radius: 8px; padding: 8px 12px; background: rgba(127,127,127,.05); }
+.log-entry.log-error { border-color: rgba(205,32,50,.45); }
+.log-entry.log-warn { border-color: rgba(191,144,0,.45); }
+.log-entry header { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+.log-entry time { margin-left: auto; color: var(--trail-muted, #888); font-variant-numeric: tabular-nums; }
+.log-entry p { margin: 4px 0 0; font-size: 13px; }
+.log-level { border-radius: 5px; padding: 0 6px; font-size: 11px; border: 1px solid currentColor; }
+.log-level-debug { color: #6e7781; }
+.log-level-info { color: #0969da; }
+.log-level-warn { color: #9a6700; }
+.log-level-error { color: #cf222e; }
+.log-scope { color: var(--trail-muted, #888); }
+.log-event { font-size: 11px; opacity: .8; }
+.log-entry details summary { cursor: pointer; font-size: 12px; color: var(--trail-muted, #888); margin-top: 4px; }
+.log-entry pre { margin: 6px 0 0; font-size: 12px; overflow-x: auto; background: rgba(127,127,127,.08); border-radius: 6px; padding: 8px; }
+.logs-empty { text-align: center; padding: 24px 0; }
