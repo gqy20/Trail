@@ -147,11 +147,11 @@ export function FeedPublisherView() {
     <article className="panel stack">
       <div className="section-heading"><strong>发布状态</strong></div>
       {state?.lastPublishAt
-        ? <dl className="checkin-stats">
-          <div><dt>最近发布</dt><dd>{new Date(state.lastPublishAt).toLocaleString("zh-CN")}</dd></div>
-          <div><dt>累计记录</dt><dd>{state.totalPosts ?? "—"}</dd></div>
-          <div><dt>上次新增</dt><dd>{state.lastNewPosts ?? "—"}</dd></div>
-        </dl>
+        ? <p className="checkin-meta muted text-small">{[
+          formatTime(state.lastPublishAt),
+          state.totalPosts !== undefined ? `共 ${state.totalPosts} 条` : null,
+          state.lastNewPosts !== undefined ? `上次新增 ${state.lastNewPosts}` : null
+        ].filter(Boolean).join(" · ")}</p>
         : <p className="muted text-small">还没有发布过。</p>}
       {state?.lastNotice ? <p className="text-small">{state.lastNotice}</p> : null}
       {state?.lastError ? <p className="error-text text-small">{state.lastError}</p> : null}
@@ -164,3 +164,10 @@ function defaultConfig(): FeedPublisherConfig {
 }
 
 function errorText(error: unknown): string { return error instanceof Error ? error.message : "操作失败，请重试。"; }
+
+function formatTime(iso: string): string {
+  const date = new Date(iso);
+  return date.toDateString() === new Date().toDateString()
+    ? date.toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
