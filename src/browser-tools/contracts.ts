@@ -307,6 +307,8 @@ export type BrowserToolDefinition = {
   presentation?: BrowserToolPresentation;
   /** 声明后，成功运行中该集合的记录会自动进入订阅源暂存。 */
   feed?: { collection: string; platform: string; entry_url?: string };
+  /** 增量采集：记录中发布时间字段与首次回填窗口（天）；声明后按 平台+账号 水位线过滤。 */
+  since?: { field: string; lookback_days?: number };
   /** 主工作流提取卡片后，由后台串行进入详情页补全字段（不经工作流导航）。 */
   detail_extract?: {
     collection: string;

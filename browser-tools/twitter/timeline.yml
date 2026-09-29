@@ -9,6 +9,9 @@ feed:
   collection: tweets
   platform: twitter
   entry_url: https://x.com/home
+since:
+  field: created_at
+  lookback_days: 7
 parameters:
   username:
     type: string

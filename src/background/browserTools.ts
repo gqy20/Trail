@@ -16,6 +16,7 @@ import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
 import { getFollows } from "../collector/follows";
 import { recordActivity } from "../collector/budget";
+import { filterSinceRecords, getWatermark, setWatermark } from "../collector/watermarks";
 import {
   deleteStoredBrowserTool,
   getBrowserToolRuns,
@@ -294,7 +295,8 @@ async function continueBatchRun(
           : state.parameters;
         await navigateTab(tabId, nextUrl);
         const readyTab = await chrome.tabs.get(tabId);
-        const result = await enrichWithDetails(definition, tabId, await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId));
+        const raw = await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId);
+        const result = await enrichWithDetails(definition, tabId, await applySinceFilter(definition, keyword, raw));
 
         if (result.status === "paused") {
           // 软封锁自动冷却：15 分钟后自动重试一次（可被停止打断），再失败转人工。
@@ -341,6 +343,7 @@ async function continueBatchRun(
           lastPageUrl: result.pageUrl,
           lastPageTitle: result.pageTitle
         };
+        await advanceWatermark(definition, keyword, result.data);
         logDebug("batch", "keyword.done", "完成当前输入", {
           keyword,
           index: index + 1,
@@ -794,4 +797,42 @@ function sleepInterruptible(totalMs: number, sliceMs = 5_000): Promise<"done" | 
       if (Date.now() - startedAt >= totalMs) { clearInterval(timer); resolvePromise("done"); }
     }, sliceMs);
   });
+}
+
+/** 增量过滤：按 平台+账号 水位线裁剪 feed 集合（首次用回填窗口），详情补全与暂存都只处理新记录。 */
+async function applySinceFilter(
+  definition: ReturnType<typeof parseBrowserToolYaml>,
+  keyword: string,
+  result: BrowserToolRunResult
+): Promise<BrowserToolRunResult> {
+  const since = definition.since;
+  const feed = definition.feed;
+  if (!since || !feed) return result;
+  const records = result.data[feed.collection];
+  if (!records || records.length === 0) return result;
+  const watermark = await getWatermark(feed.platform, keyword);
+  const { kept } = filterSinceRecords(records, since.field, watermark, since.lookback_days || 7);
+  if (kept.length < records.length) {
+    logInfo("collector", "since.filtered", "按水位线跳过已采集记录", {
+      toolId: definition.id, keyword, total: records.length, kept: kept.length,
+      mode: watermark ? "incremental" : "backfill"
+    });
+    result.data[feed.collection] = kept;
+  }
+  return result;
+}
+
+/** 关键词成功后推进水位线为本批最新发布时间（只增不减）。 */
+async function advanceWatermark(
+  definition: ReturnType<typeof parseBrowserToolYaml>,
+  keyword: string,
+  data: BrowserToolRunResult["data"]
+): Promise<void> {
+  const since = definition.since;
+  const feed = definition.feed;
+  if (!since || !feed) return;
+  const records = data[feed.collection];
+  if (!records || records.length === 0) return;
+  const { newestIso } = filterSinceRecords(records, since.field, undefined, 90);
+  if (newestIso) await setWatermark(feed.platform, keyword, newestIso);
 }

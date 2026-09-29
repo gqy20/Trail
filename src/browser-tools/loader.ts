@@ -69,6 +69,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
   }
   const presentation = root.presentation === undefined ? undefined : validatePresentation(root.presentation);
   let feed: BrowserToolDefinition["feed"];
+  let since: BrowserToolDefinition["since"];
   if (root.feed !== undefined) {
     const source = asRecord(root.feed, "feed");
     const collection = readString(source.collection, "feed.collection");
@@ -83,6 +84,16 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
       if (!matchesBrowserTool({ match: { domains, urls: match.urls as string[] | undefined } } as BrowserToolDefinition, entryUrl)) {
         throw new Error("feed.entry_url 必须匹配工具的域名和 URL。");
       }
+    }
+    if (source.since !== undefined) {
+      const sinceSource = asRecord(source.since, "feed.since");
+      const field = readString(sinceSource.field, "feed.since.field");
+      if (!COLLECTION_PATTERN.test(field)) throw new Error("feed.since.field 无效。");
+      const lookback = readOptionalNumber(sinceSource.lookback_days, "feed.since.lookback_days");
+      if (lookback !== undefined && (!Number.isInteger(lookback) || lookback < 1 || lookback > 90)) {
+        throw new Error("feed.since.lookback_days 必须是 1-90 的整数。");
+      }
+      since = { field, lookback_days: lookback };
     }
     feed = { collection, platform, entry_url: entryUrl };
   }
@@ -119,6 +130,7 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
     workflow,
     presentation,
     feed,
+    since,
     detail_extract: detailExtract,
     downloads,
     native_exports: nativeExports,

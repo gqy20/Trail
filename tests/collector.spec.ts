@@ -5,6 +5,7 @@ import { applyImport, normalizeFollow, parseFollowsText } from "../src/collector
 import { clampIntervalHours, isCollectorDue } from "../src/collector/schedule";
 import { pruneAndCheck } from "../src/collector/budget";
 import { pickRotation } from "../src/collector/rotation";
+import { filterSinceRecords } from "../src/collector/watermarks";
 import type { CollectorJob, FollowEntry } from "../src/collector/types";
 
 function job(overrides: Partial<CollectorJob> = {}): CollectorJob {
@@ -87,4 +88,33 @@ test("pickRotation 循环切片与回绕", () => {
   expect(pickRotation(items, 7, 3)).toEqual(["c", "d", "e"]); // 游标取模
   expect(pickRotation(items, 0, 8)).toEqual(items); // 超总量取全部
   expect(pickRotation([], 3, 2)).toEqual([]);
+});
+
+test("filterSinceRecords 首次回填窗口与增量水位线", () => {
+  const now = Date.parse("2026-09-29T12:00:00.000Z");
+  const day = 24 * 60 * 60_000;
+  const records = [
+    { id: "1", created_at: new Date(now - 1 * 3_600_000).toISOString() },  // 1 小时前
+    { id: "2", created_at: new Date(now - 3 * day).toISOString() },        // 3 天前
+    { id: "3", created_at: new Date(now - 9 * day).toISOString() },        // 9 天前（超回填窗口）
+    { id: "4" }                                                            // 无时间，保留由去重兜底
+  ];
+  // 首次（无水位线）：7 天回填窗口
+  const first = filterSinceRecords(records, "created_at", undefined, 7, now);
+  expect(first.kept.map((r) => r.id)).toEqual(["1", "2", "4"]);
+  expect(first.newestIso).toBe(records[0].created_at);
+  // 增量：水位线 = 3 天前那条 → 只有更新的保留
+  const second = filterSinceRecords(records, "created_at", records[1].created_at, 7, now);
+  expect(second.kept.map((r) => r.id)).toEqual(["1", "4"]);
+  // 全部旧于水位线
+  const none = filterSinceRecords([records[2]], "created_at", records[1].created_at, 7, now);
+  expect(none.kept).toHaveLength(0);
+  expect(none.newestIso).toBeUndefined();
+});
+
+test("xhs/twitter YAML 声明增量采集", () => {
+  const xhs = parseBrowserToolYaml(readFileSync("browser-tools/xhs/notes.yml", "utf8"));
+  expect(xhs.since).toMatchObject({ field: "created_at", lookback_days: 7 });
+  const twitter = parseBrowserToolYaml(readFileSync("browser-tools/twitter/timeline.yml", "utf8"));
+  expect(twitter.since).toMatchObject({ field: "created_at" });
 });

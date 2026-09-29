@@ -9,6 +9,9 @@ feed:
   collection: notes
   platform: xhs
   entry_url: https://www.xiaohongshu.com
+since:
+  field: created_at
+  lookback_days: 7
 parameters:
   user:
     type: string
