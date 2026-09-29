@@ -29,7 +29,7 @@ export function CollectorsView() {
   const items = state?.items || [];
   return <section className="collectors-view stack">
     <div className="view-heading"><h2>采集</h2><Antenna size={20} /></div>
-    <p className="muted text-small">各渠道账号名单与定时集中管理；立即采集会自动打开工作页面，无需先进入对应网站。名单持久保存，导入一次即可。</p>
+    <p className="muted text-small">名单持久保存，导入一次即可；采集自动打开工作页面。</p>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
     {!state ? <p className="muted">正在读取渠道…</p> : null}
     {items.map((item) => (
