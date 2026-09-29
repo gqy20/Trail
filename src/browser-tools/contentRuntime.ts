@@ -17,6 +17,15 @@ import type { BrowserToolFieldDefinition } from "./contracts";
 
 export function installBrowserToolContentRuntime(): void {
   chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+    if (isScrollMessage(message)) {
+      try {
+        window.scrollTo({ top: message.position === 'top' ? 0 : document.documentElement.scrollHeight, behavior: 'instant' as ScrollBehavior });
+        sendResponse({ scrolled: true });
+      } catch (error) {
+        sendResponse({ error: error instanceof Error ? error.message : '滚动失败。' });
+      }
+      return undefined;
+    }
     if (isHumanizedClickMessage(message)) {
       humanizedClick(message.selector, message.timeoutMs)
         .then(sendResponse)
@@ -379,4 +388,13 @@ async function humanizedClick(selector: string, timeoutMs = 5000): Promise<{ cli
 
 function isHumanizedClickMessage(value: unknown): value is HumanizedClickMessage {
   return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "BROWSER_TOOL_HUMANIZED_CLICK");
+}
+
+type ScrollMessage = {
+  type: "BROWSER_TOOL_SCROLL";
+  position: "top" | "bottom";
+};
+
+function isScrollMessage(value: unknown): value is ScrollMessage {
+  return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "BROWSER_TOOL_SCROLL");
 }

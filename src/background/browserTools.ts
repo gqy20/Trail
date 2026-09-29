@@ -684,50 +684,45 @@ async function enrichWithDetails(
   if (!records || records.length === 0) return result;
   const maxItems = Math.min(spec.max_items || records.length, records.length);
   const delay = spec.delay_ms ?? 0;
-  const useClick = spec.navigate === "click";
   const listUrl = (await chrome.tabs.get(tabId)).url || "";
   let enriched = 0;
+
+  // 点击式补全：虚拟滚动的列表会把视野外的卡片卸载，先回滚顶部让首批卡片挂载。
+  await chrome.tabs.sendMessage(tabId, { type: "BROWSER_TOOL_SCROLL", position: "top" }).catch(() => undefined);
+  await sleep(500);
 
   for (const record of records.slice(0, maxItems)) {
     const url = record[spec.url_field];
     if (typeof url !== "string" || !/^https?:\/\//.test(url)) continue;
+    const noteId = String(record[spec.id_field || "id"] || "").trim();
+    if (!noteId) continue;
 
-    if (useClick) {
-      const noteId = String(record[spec.id_field || "id"] || "").trim();
-      if (!noteId) continue;
-      // 点击模式：点真实卡片触发 SPA 跳转，完成后点返回按钮回列表。
-      const clicked = await humanizedClickOnTab(tabId, `a[href*="${cssEscape(noteId)}"]`);
-      if (!clicked) {
-        result.warnings.push("[详情] 未找到可点击的卡片，跳过该条。");
-        continue;
-      }
-      const detail = await extractDetailsOnTab(tabId, spec);
-      if (detail.paused) return detail.paused;
-      if (detail.warning) { result.warnings.push(`[详情] ${detail.warning}`); continue; }
-      Object.assign(record, detail.record || {});
-      enriched += 1;
-      if (spec.back_selector) await humanizedClickOnTab(tabId, spec.back_selector);
+    // 点击真实卡片触发站点自身的 SPA 跳转；找不到时回滚顶部重试一次。
+    const cardSelector = `a[href*="${cssEscape(noteId)}"]`;
+    let clicked = await humanizedClickOnTab(tabId, cardSelector);
+    if (!clicked) {
+      await chrome.tabs.sendMessage(tabId, { type: "BROWSER_TOOL_SCROLL", position: "top" }).catch(() => undefined);
       await sleep(600);
-      const current = await chrome.tabs.get(tabId).catch(() => undefined);
-      if (!current?.url || !current.url.startsWith(new URL(listUrl).origin)) {
-        await navigateTab(tabId, listUrl).catch(() => undefined);
-      }
-    } else {
-      await navigateTab(tabId, url);
-      const tab = await chrome.tabs.get(tabId);
-      const urlBlocker = (spec.blockers || []).find((blocker) => blocker.url_contains && (tab.url || "").includes(blocker.url_contains));
-      if (urlBlocker) {
-        return { ...result, status: "paused", error: urlBlocker.reason, warnings: [...result.warnings, urlBlocker.reason] };
-      }
-      const detail = await extractDetailsOnTab(tabId, spec);
-      if (detail.paused) return detail.paused;
-      if (detail.warning) { result.warnings.push(`[详情] ${detail.warning}`); continue; }
-      Object.assign(record, detail.record || {});
-      enriched += 1;
+      clicked = await humanizedClickOnTab(tabId, cardSelector);
+    }
+    if (!clicked) {
+      result.warnings.push("[详情] 卡片已不在页面（虚拟滚动卸载），跳过该条。");
+      continue;
+    }
+    const detail = await extractDetailsOnTab(tabId, spec);
+    if (detail.paused) return detail.paused;
+    if (detail.warning) { result.warnings.push(`[详情] ${detail.warning}`); continue; }
+    Object.assign(record, detail.record || {});
+    enriched += 1;
+    if (spec.back_selector) await humanizedClickOnTab(tabId, spec.back_selector);
+    await sleep(600);
+    const current = await chrome.tabs.get(tabId).catch(() => undefined);
+    if (!current?.url || !current.url.startsWith(new URL(listUrl).origin)) {
+      await navigateTab(tabId, listUrl).catch(() => undefined);
     }
     if (delay > 0 && enriched < maxItems) await sleep(delay);
   }
-  logInfo("detail", "detail.enrich", "详情页补全完成", { toolId: definition.id, enriched, navigate: useClick ? "click" : "url" });
+  logInfo("detail", "detail.enrich", "详情页补全完成", { toolId: definition.id, enriched });
   return result;
 }
 

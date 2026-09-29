@@ -637,8 +637,8 @@ function BatchRunControlBar({ run, busy, onPause, onResume, onStop }: {
     <div className="batch-run-actions">
       {paused
         ? <button className="button primary" title={`剩余 ${total - done} 个输入`} disabled={busy} onClick={onResume}><Play size={15} />继续</button>
-        : <button className="button secondary" disabled={busy} onClick={onPause}><Pause size={15} />暂停</button>}
-      <button className="button secondary" disabled={busy} onClick={onStop}><Square size={15} />停止</button>
+        : <button className="button secondary" onClick={onPause}><Pause size={15} />暂停</button>}
+      <button className="button secondary" onClick={onStop}><Square size={15} />停止</button>
     </div>
     <p className="muted text-small" title="关闭浏览器会话后运行状态清空">{records} 条已保存 · 暂停在当前输入完成后生效</p>
   </div>;
