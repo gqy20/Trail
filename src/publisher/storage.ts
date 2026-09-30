@@ -48,7 +48,7 @@ export function normalizeFeedConfig(input: FeedPublisherConfig): FeedPublisherCo
     branch,
     token,
     maxPosts: clamp(input.maxPosts, 100, 20000, 5000),
-    itemsPerFeed: clamp(input.itemsPerFeed, 10, 500, 150),
+    itemsPerFeed: clamp(input.itemsPerFeed, 10, 5000, 2000),
     pagesBaseUrl,
     autoPublish: input.autoPublish === true,
     excludeRetweets: input.excludeRetweets === true

@@ -173,7 +173,7 @@ export function FeedPublisherView() {
 }
 
 function defaultConfig(): FeedPublisherConfig {
-  return { owner: "", repo: "feed", branch: "main", token: "", maxPosts: 5000, itemsPerFeed: 150, autoPublish: false, autoPublishHours: 12, excludeRetweets: false };
+  return { owner: "", repo: "feed", branch: "main", token: "", maxPosts: 5000, itemsPerFeed: 2000, autoPublish: false, autoPublishHours: 12, excludeRetweets: false };
 }
 
 function errorText(error: unknown): string { return error instanceof Error ? error.message : "操作失败，请重试。"; }
