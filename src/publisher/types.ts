@@ -72,7 +72,19 @@ export type FeedRepoProbe = { repoPrivate: boolean; defaultBranch: string };
 
 export const FEED_POSTS_PATH = "data/posts.json";
 export const FEED_META_PATH = "data/meta.json";
+export const FEED_FOLLOWS_PATH = "data/follows.json";
 export const FEED_ALL_RSS_PATH = "rss/all.xml";
+
+export type FeedFollowsFile = {
+  schema: 1;
+  updated_at: string;
+  accounts: Array<{
+    platform: string;
+    handle: string;
+    name?: string;
+    priority?: number;
+  }>;
+};
 
 export const PLATFORM_LABELS: Record<string, string> = {
   twitter: "X / Twitter",

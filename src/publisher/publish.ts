@@ -2,8 +2,9 @@ import { commitGitHubFiles, fetchGitHubContent, probeGitHubRepo } from "./github
 import { buildFeedMetaFile, buildFeedPostsFile, mergeFeedPosts, normalizeFeedPost } from "./merge";
 import { planFeedFiles } from "./rss";
 import { clearStagedPosts, getStagedPosts, patchFeedState, requireFeedConfig, saveFeedConnection } from "./storage";
-import type { FeedPost, FeedPublishResult, FeedRepoProbe } from "./types";
-import { FEED_META_PATH, FEED_POSTS_PATH } from "./types";
+import { getFollows } from "../collector/follows";
+import type { FeedFollowsFile, FeedPost, FeedPublishResult, FeedRepoProbe } from "./types";
+import { FEED_FOLLOWS_PATH, FEED_META_PATH, FEED_POSTS_PATH } from "./types";
 
 export async function probeFeedRepo(): Promise<FeedRepoProbe> {
   const config = await requireFeedConfig();
@@ -28,10 +29,12 @@ export async function publishFeed(): Promise<FeedPublishResult> {
   const { posts, newCount } = mergeFeedPosts(existing, staged, config.maxPosts);
   const publishedAt = new Date().toISOString();
 
-  // 单提交包含本轮完整一致状态：数据、元数据与全部 RSS 一次写入。
+  // 单提交包含本轮完整一致状态：数据、元数据、关注列表与全部 RSS。
+  const followsFile = await buildFollowsFile(publishedAt);
   const files = [
     { path: FEED_POSTS_PATH, content: `${JSON.stringify(buildFeedPostsFile(posts, publishedAt), null, 2)}\n` },
     { path: FEED_META_PATH, content: `${JSON.stringify(buildFeedMetaFile(posts, publishedAt), null, 2)}\n` },
+    { path: FEED_FOLLOWS_PATH, content: `${JSON.stringify(followsFile, null, 2)}\n` },
     ...planFeedFiles(posts, config)
   ];
   await commitGitHubFiles(config, files, `trail: 发布 ${newCount} 条新记录，共 ${posts.length} 条（${files.length} 个文件）`);
@@ -59,4 +62,19 @@ function parseRemotePosts(content: string): FeedPost[] {
   return posts
     .map((post) => normalizeFeedPost(post))
     .filter((post): post is FeedPost => post !== null);
+}
+
+/** 每次发布都写入当前关注列表（权威来源，含显示名和优先级）。 */
+async function buildFollowsFile(publishedAt: string): Promise<FeedFollowsFile> {
+  const follows = await getFollows();
+  return {
+    schema: 1,
+    updated_at: publishedAt,
+    accounts: follows.map((entry) => ({
+      platform: entry.platform,
+      handle: entry.handle,
+      ...(entry.displayName ? { name: entry.displayName } : {}),
+      ...(entry.priority !== undefined ? { priority: entry.priority } : {})
+    }))
+  };
 }
