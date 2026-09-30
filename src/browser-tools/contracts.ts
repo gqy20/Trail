@@ -383,6 +383,8 @@ export type BrowserToolDownloadResolution = {
 export type BrowserToolRunStatus = "completed" | "partial" | "paused" | "cancelled" | "failed";
 
 export type BrowserToolRunResult = {
+  /** 预算暂停不属于登录/验证拦截，不触发冷却重试。 */
+  pauseReason?: "budget";
   outcome?: "success" | "already_done";
   message?: string;
   toolId: string;

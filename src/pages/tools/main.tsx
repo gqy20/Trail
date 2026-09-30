@@ -12,6 +12,7 @@ import { FeedPublisherView } from "./FeedPublisher";
 import { LogsView } from "./LogsView";
 import { CollectorsView } from "./CollectorsView";
 import { ResearchRecorder } from "../../popup/ResearchRecorder";
+import { BudgetSettings } from "./BudgetSettings";
 import { describeBatchRun, type BatchRunState } from "../../background/runControl";
 import { TRAIL_VERSION } from "../../shared/version";
 import { parseBrowserToolYaml } from "../../browser-tools/loader";
@@ -619,6 +620,7 @@ function BrowserToolsApp() {
                 <button className="button primary" disabled={busy || !yamlPreview?.definition} onClick={() => void importTool()}>{importAction}</button>
               </div>
             </details>
+            <BudgetSettings />
             {state?.backups?.length ? <details className="settings-section stack yaml-settings">
               <summary><strong>规则备份</strong><span className="muted text-small">{state.backups.length} 份</span></summary>
               <p className="muted text-small">备份不参与运行或自动任务；导出后可通过 YAML 入口重新添加。</p>

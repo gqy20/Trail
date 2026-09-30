@@ -15,7 +15,7 @@ import { resolveParameterDefaults, resolveTemplate } from "../browser-tools/temp
 import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
 import { getFollows } from "../collector/follows";
-import { recordActivity } from "../collector/budget";
+import { getBudgetUsage, budgetPauseReason, recordActivity, releaseActivity } from "../collector/budget";
 import { filterSinceRecords, getWatermark, setWatermark } from "../collector/watermarks";
 import {
   deleteStoredBrowserTool,
@@ -271,12 +271,6 @@ async function continueBatchRun(
 
       const keyword = state.keywords[state.nextIndex];
       const index = state.nextIndex;
-      const budget = await recordActivity("profile");
-      if (!budget.allowed) {
-        const reason = "今日主页访问预算已用尽（" + budget.used + "/" + budget.limit + "），24 小时滚动窗口自动恢复；已暂停保存进度。";
-        logWarn("batch", "budget.exhausted", "主页访问预算耗尽", { used: budget.used, limit: budget.limit });
-        return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined }, "paused", reason, warnings);
-      }
       try {
         emitProgress({
           type: "BROWSER_TOOL_PROGRESS_UPDATE",
@@ -296,6 +290,18 @@ async function continueBatchRun(
           ? buildBatchUrl(currentTab.url, navigation.parameter, keyword)
           : resolveBatchFixedUrl(navigation.url, definition, state.parameters, keyword);
         if (!matchesBrowserTool(definition, nextUrl)) throw new Error(`工具 ${definition.id} 的批量导航地址不在适用范围内。`);
+        if (definition.feed) {
+          const budget = await recordActivity(definition.feed.platform, "profile");
+          if (!budget.allowed) {
+            logWarn("batch", "budget.exhausted", "平台采集预算不足", { platform: budget.platform, used: budget.used, limit: budget.limit });
+            return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined }, "paused", budgetPauseReason(budget), warnings);
+          }
+          const wait = await sleepInterruptible(budget.delayMs);
+          if (wait !== "done") {
+            await releaseActivity(budget, "profile");
+            return await finalizeBatchRun(definition, { ...state, status: wait === "stop" ? "stopped" : "paused", pendingControl: undefined }, wait === "stop" ? "partial" : "paused", "等待访问间隔时已" + (wait === "stop" ? "停止" : "暂停") + "，进度已保存。", warnings);
+          }
+        }
         const runParameters = navigation.type === "fixed_url"
           ? { ...state.parameters, [navigation.input_parameter]: keyword }
           : state.parameters;
@@ -305,11 +311,15 @@ async function continueBatchRun(
         const result = await enrichWithDetails(definition, tabId, await applySinceFilter(definition, keyword, raw));
 
         if (result.status === "paused") {
+          if (result.pauseReason === "budget") {
+            warnings.push(...result.warnings);
+            return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined, lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle }, "paused", result.error || "平台预算不足，进度已保存。", warnings);
+          }
           // 软封锁自动冷却：15 分钟后自动重试一次（可被停止打断），再失败转人工。
           if (cooldownRetriedIndex !== index) {
             cooldownRetriedIndex = index;
             const reason = result.error || "需要登录或验证";
-            logWarn("batch", "cooldown.start", "软封锁，15 分钟后自动重试一次", { keyword, detail: reason });
+            logWarn("batch", "cooldown.start", "软封锁，15 分钟后自动重试一次", { platform: definition.feed?.platform, toolId: definition.id, runId: state.runId, keyword, detail: reason });
             warnings.push("[" + keyword + "] " + reason + "；15 分钟后自动重试。");
             const cooled = await sleepInterruptible(15 * 60_000);
             if (cooled === "stop") {
@@ -320,7 +330,7 @@ async function continueBatchRun(
             }
             continue; // 重试当前输入（游标未推进）
           }
-          logWarn("batch", "batch.paused", "冷却重试仍被拦截，转人工处理", { keyword, detail: result.error || "登录或验证码" });
+          logWarn("batch", "batch.paused", "冷却重试仍被拦截，转人工处理", { platform: definition.feed?.platform, toolId: definition.id, runId: state.runId, keyword, detail: result.error || "登录或验证码" });
           warnings.push("[" + keyword + "] 需要人工处理：" + (result.error || "登录或验证码"));
           const pausedState = { ...state, status: "paused" as const, pendingControl: undefined, updatedAt: Date.now(), lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
           await saveBatchRunState(pausedState);
@@ -333,7 +343,7 @@ async function continueBatchRun(
           const message = result.error || "提取未完整完成";
           if (retriedIndex !== index && isTransientBatchError(message)) {
             retriedIndex = index;
-            logWarn("batch", "keyword.retry", "瞬时错误，5 秒后重试当前输入", { keyword, error: message });
+            logWarn("batch", "keyword.retry", "瞬时错误，5 秒后重试当前输入", { platform: definition.feed?.platform, toolId: definition.id, runId: state.runId, keyword, error: message });
             warnings.push(`[${keyword}] ${message}；5 秒后重试一次。`);
             await sleep(5_000);
             continue;
@@ -367,7 +377,7 @@ async function continueBatchRun(
         const message = error instanceof Error ? error.message : "批量检索失败";
         if (retriedIndex !== index && isTransientBatchError(message)) {
           retriedIndex = index;
-          logWarn("batch", "keyword.retry", "瞬时异常，5 秒后重试当前输入", { keyword, error: message });
+          logWarn("batch", "keyword.retry", "瞬时异常，5 秒后重试当前输入", { platform: definition.feed?.platform, toolId: definition.id, runId: state.runId, keyword, error: message });
           warnings.push(`[${keyword}] ${message}；5 秒后重试一次。`);
           await sleep(5_000);
           continue;
@@ -576,6 +586,16 @@ export async function runBrowserTool(input: {
   if (!/^https?:/i.test(tab.url)) throw new Error("Browser Tool 只能在普通 HTTP(S) 页面运行。");
   if (!matchesBrowserTool(definition, tab.url)) throw new Error(`工具 ${definition.id} 不适用于当前页面。`);
 
+  if (definition.feed) {
+    const budget = await recordActivity(definition.feed.platform, "profile");
+    if (!budget.allowed) {
+      const now = Date.now();
+      return persistRunResult({ toolId: definition.id, runId: createBackgroundRunId(), pageUrl: tab.url, pageTitle: tab.title || tab.url,
+        startedAt: now, finishedAt: now, status: "paused", pauseReason: "budget", data: {}, warnings: [],
+        error: budgetPauseReason(budget).replace("进度已保存，额度恢复或调整预算后请点继续。", "额度恢复或调整预算后请重新运行。") }, definition.name);
+    }
+    if (budget.delayMs > 0) await sleep(budget.delayMs);
+  }
   const result = await enrichWithDetails(definition, tab.id!, await executeBrowserToolOnTab(definition, input.parameters, tab));
   void stageAndMaybePublish(definition, result).catch(() => undefined);
   return persistRunResult(result, definition.name);
@@ -607,9 +627,20 @@ async function executeBrowserToolOnTab(
     parameters,
     progressId
   };
-  const response = await sendToolMessageWithRetry(tab.id, message);
-  if (response && "error" in response && !("status" in response)) throw new Error(response.error);
-  return response as BrowserToolRunResult;
+  const startedAt = Date.now();
+  const context = definition.feed ? (await getBudgetUsage([definition.feed.platform]))[0] : undefined;
+  try {
+    const response = await sendToolMessageWithRetry(tab.id, message);
+    if (response && "error" in response && !("status" in response)) throw new Error(response.error);
+    const result = response as BrowserToolRunResult;
+    const data = { platform: definition.feed?.platform, toolId: definition.id, runId: progressId, kind: "profile", durationMs: Date.now() - startedAt, status: result.status, reason: result.error, records: Object.values(result.data || {}).reduce((sum, rows) => sum + rows.length, 0), config: context?.config, used: context?.used, limit: context?.limit };
+    if (result.status === "paused" || result.status === "failed") logWarn("activity", "activity.result", "平台访问暂停或失败", data);
+    else logInfo("activity", "activity.result", "平台访问完成", data);
+    return result;
+  } catch (error) {
+    logWarn("activity", "activity.failed", "平台访问异常", { platform: definition.feed?.platform, toolId: definition.id, runId: progressId, kind: "profile", durationMs: Date.now() - startedAt, reason: error instanceof Error ? error.message : String(error), config: context?.config });
+    throw error;
+  }
 }
 
 function emitProgress(progress: BrowserToolExecutionProgress): void {
@@ -728,19 +759,27 @@ async function enrichWithDetails(
   for (const record of records.slice(0, maxItems)) {
     const url = record[spec.url_field];
     if (typeof url !== "string" || !/^https?:\/\//.test(url)) continue;
-    const detailBudget = await recordActivity("detail");
-    if (!detailBudget.allowed) {
-      result.warnings.push("[详情] 今日详情访问预算已用尽（" + detailBudget.used + "/" + detailBudget.limit + "），本轮只保留列表字段。");
-      logWarn("detail", "budget.exhausted", "详情访问预算耗尽，停止补全", { used: detailBudget.used, limit: detailBudget.limit });
-      break;
+    if (definition.feed) {
+      const detailBudget = await recordActivity(definition.feed.platform, "detail");
+      if (!detailBudget.allowed) {
+        logWarn("detail", "budget.exhausted", "平台详情预算不足，停止补全", { platform: detailBudget.platform, used: detailBudget.used, limit: detailBudget.limit });
+        return { ...result, status: "paused", pauseReason: "budget", error: budgetPauseReason(detailBudget) };
+      }
+      if (await sleepInterruptible(detailBudget.delayMs) !== "done") { await releaseActivity(detailBudget, "detail"); break; }
     }
+    const detailStartedAt = Date.now();
     await navigateTab(tabId, url);
     const tab = await chrome.tabs.get(tabId);
     const urlBlocker = (spec.blockers || []).find((blocker) => blocker.url_contains && (tab.url || "").includes(blocker.url_contains));
     if (urlBlocker) {
+      logWarn("activity", "detail.blocked", "详情页触发规则拦截", { platform: definition.feed?.platform, toolId: definition.id, kind: "detail", reason: urlBlocker.reason, durationMs: Date.now() - detailStartedAt });
       return { ...result, status: "paused", error: urlBlocker.reason, warnings: [...result.warnings, urlBlocker.reason] };
     }
     const detail = await extractDetailsOnTab(tabId, spec);
+    const detailUsage = definition.feed ? (await getBudgetUsage([definition.feed.platform]))[0] : undefined;
+    const detailLog = { platform: definition.feed?.platform, toolId: definition.id, kind: "detail", config: detailUsage?.config, used: detailUsage?.used, durationMs: Date.now() - detailStartedAt, reason: detail.paused?.error || detail.warning };
+    if (detail.paused || detail.warning) logWarn("activity", "detail.result", "详情访问暂停或失败", detailLog);
+    else logInfo("activity", "detail.result", "详情访问完成", detailLog);
     if (detail.paused) return detail.paused;
     if (detail.warning) { result.warnings.push("[详情] " + detail.warning); continue; }
     Object.assign(record, detail.record || {});
@@ -749,12 +788,12 @@ async function enrichWithDetails(
     if (peeked.pause || peeked.stop) break;
     if (delay > 0 && enriched < maxItems) await sleep(delay);
   }
-  if (enriched === 0 && records.length > 0) {
+  if (enriched === 0 && records.length > 0 && !peekControlRequest().pause && !peekControlRequest().stop) {
     const reason = "详情补全全部失败（页面可能要求登录或验证），已暂停；完成验证后点继续将从该账号重试。";
-    logWarn("detail", "detail.allFailed", "详情补全全部失败，运行转暂停", { toolId: definition.id, records: records.length });
+    logWarn("detail", "detail.allFailed", "详情补全全部失败，运行转暂停", { platform: definition.feed?.platform, toolId: definition.id, records: records.length });
     return { ...result, status: "paused", error: reason, warnings: [...result.warnings, reason] };
   }
-  logInfo("detail", "detail.enrich", "详情页补全完成", { toolId: definition.id, enriched });
+  logInfo("detail", "detail.enrich", "详情页补全完成", { platform: definition.feed?.platform, toolId: definition.id, enriched });
   return result;
 }
 
@@ -794,6 +833,7 @@ function enrichAuthor(
 
 /** 分片睡眠，期间响应暂停/停止请求；返回超时结束或收到的控制请求。 */
 function sleepInterruptible(totalMs: number, sliceMs = 5_000): Promise<"done" | "pause" | "stop"> {
+  if (totalMs <= 0) return Promise.resolve("done");
   return new Promise((resolvePromise) => {
     const startedAt = Date.now();
     const timer = setInterval(() => {
@@ -801,7 +841,7 @@ function sleepInterruptible(totalMs: number, sliceMs = 5_000): Promise<"done" | 
       if (peeked.stop) { clearInterval(timer); resolvePromise("stop"); return; }
       if (peeked.pause) { clearInterval(timer); resolvePromise("pause"); return; }
       if (Date.now() - startedAt >= totalMs) { clearInterval(timer); resolvePromise("done"); }
-    }, sliceMs);
+    }, Math.min(sliceMs, totalMs));
   });
 }
 

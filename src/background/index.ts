@@ -46,6 +46,8 @@ import { fetchGraphqlPageForTab, readPageStateForTab, resolveGraphqlQueryIdForTa
 import { clearLogEntries, getLogEntries } from "../logging/logger";
 import { restoreBundledBrowserTool } from "../browser-tools/bundled";
 import { getStoredBrowserTool, saveStoredBrowserTool } from "../browser-tools/storage";
+import { getStoredBrowserTools } from "../browser-tools/storage";
+import { getBudgetUsage, saveBudgetConfig } from "../collector/budget";
 
 void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((error: unknown) => {
   console.error("Trail 无法设置边栏入口。", error);
@@ -76,6 +78,12 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
     if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(extensionUrl)) throw new Error("此操作只能从 Trail 界面发起。");
   }
   switch (message.type) {
+    case "GET_ACTIVITY_BUDGET": return getBudgetUsage((await getStoredBrowserTools()).flatMap((tool) => tool.definition.feed ? [tool.definition.feed.platform] : []));
+    case "SAVE_ACTIVITY_BUDGET": {
+      if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL(""))) throw new Error("只能从 Trail 界面修改预算。");
+      await saveBudgetConfig(message.platform, message.config);
+      return undefined;
+    }
     case "RESTORE_BUNDLED_BROWSER_TOOL": return restoreBundledBrowserTool(message.toolId);
     case "GET_CHECKIN_STATE": return getCheckinState();
     case "CONFIGURE_CHECKIN": return configureCheckin(message.toolId, message.enabled, message.time);

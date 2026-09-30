@@ -23,7 +23,7 @@ test("工作区：规则预览、参数归属和窄屏布局", async ({}, testIn
     page.on("pageerror", (error) => errors.push(error.message));
     await expect(page.locator("#workspace-tool option")).toHaveCount(5);
     await page.getByRole("button", { name: "设置", exact: true }).click();
-    await expect(page.locator(".settings-view input[type=number]")).toHaveCount(0);
+    await expect(page.locator(".settings-view .yaml-settings input[type=number]")).toHaveCount(0);
     await page.locator(".yaml-settings summary").click();
     await page.locator(".yaml-editor").fill("schema_version: 999");
     await expect(page.locator(".yaml-settings .error-text")).toBeVisible();

@@ -43,6 +43,8 @@ type RuntimeResponseMap = {
   REMOVE_FOLLOWS: import("../collector/types").FollowEntry[];
   IMPORT_FOLLOWS: import("../collector/types").FollowsImportResult;
   GET_POPUP_STATE: PopupState;
+  GET_ACTIVITY_BUDGET: import("../collector/budget").BudgetState[];
+  SAVE_ACTIVITY_BUDGET: undefined;
   GET_INTERACTION_SETTINGS: TrailInteractionSettings;
   UPDATE_INTERACTION_SETTINGS: TrailInteractionSettings;
   START_GROUP_RECORDING: TrailSession;

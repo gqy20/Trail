@@ -257,6 +257,8 @@ export type RuntimeMessage =
   | { type: "REMOVE_FOLLOWS"; platform: string; handles: string[] }
   | { type: "IMPORT_FOLLOWS"; platform: string; text: string }
   | { type: "GET_POPUP_STATE" }
+  | { type: "GET_ACTIVITY_BUDGET" }
+  | { type: "SAVE_ACTIVITY_BUDGET"; platform: string; config: import("../collector/budget").BudgetConfig }
   | { type: "GET_INTERACTION_SETTINGS" }
   | { type: "UPDATE_INTERACTION_SETTINGS"; settings: Partial<TrailInteractionSettings> }
   | { type: "START_GROUP_RECORDING"; name?: string }

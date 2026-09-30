@@ -18,7 +18,7 @@ export type LogEntry = {
 };
 
 export const LOG_STORE_KEY = "trail.logs.v1";
-const MAX_LOG_ENTRIES = 600;
+const MAX_LOG_ENTRIES = 5000;
 const MAX_DATA_TEXT = 400;
 const SENSITIVE_KEY_PATTERN = /token|cookie|authorization|csrf|ct0|password|secret|bearer/i;
 
@@ -49,12 +49,14 @@ export function logError(scope: string, event: string, message: string, data?: R
 }
 
 export async function getLogEntries(): Promise<LogEntry[]> {
+  await writeChain;
   const result = await chrome.storage.local.get(LOG_STORE_KEY);
   return (result[LOG_STORE_KEY] as LogEntry[] | undefined) || [];
 }
 
 export async function clearLogEntries(): Promise<void> {
-  await chrome.storage.local.remove(LOG_STORE_KEY);
+  writeChain = writeChain.then(() => chrome.storage.local.remove(LOG_STORE_KEY));
+  await writeChain;
 }
 
 /** 追加日志并裁剪到上限（串行化写入，避免读-改-写竞争）。 */
@@ -86,8 +88,9 @@ function clampLogValue(value: unknown): unknown {
   if (typeof value === "string") return value.length > MAX_DATA_TEXT ? `${value.slice(0, MAX_DATA_TEXT)}…` : value;
   if (value === null || value === undefined || typeof value !== "object") return value;
   try {
-    const serialized = JSON.stringify(value);
-    return serialized.length > MAX_DATA_TEXT ? `${serialized.slice(0, MAX_DATA_TEXT)}…` : value;
+    const safe = Array.isArray(value) ? value.map(clampLogValue) : redactLogData(value as Record<string, unknown>);
+    const serialized = JSON.stringify(safe);
+    return serialized.length > MAX_DATA_TEXT ? `${serialized.slice(0, MAX_DATA_TEXT)}…` : safe;
   } catch {
     return "[不可序列化]";
   }

@@ -2235,6 +2235,13 @@ textarea:focus-visible {
 .record-clips blockquote p { white-space: pre-wrap; font-size: 13px; margin-bottom: 4px; }
 .interaction-settings { border-top: 1px solid var(--trail-border-soft); padding-top: 10px; }
 .interaction-settings[open] summary { margin-bottom: 10px; }
+.budget-settings summary { cursor: pointer; font-size: 13px; }
+.budget-settings p { margin: 0; }
+.budget-config-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.budget-config-row label { display: inline-flex; align-items: center; white-space: nowrap; gap: 6px; font-size: 12px; }
+.budget-config-row .input { width: 58px; padding: 4px 6px; text-align: center; }
+.budget-row { border-bottom: 1px solid var(--trail-border-soft); padding-bottom: 10px; min-width: 0; }
+.budget-row .section-heading { flex-wrap: wrap; justify-content: flex-start; gap: 6px 12px; }
 .tools-shell .research-recorder strong, .tools-shell .research-recorder .source-title {
   font-family: "Trail Heading Sans", "Source Han Sans SC", "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
 }

@@ -1,4 +1,5 @@
 import type { RuntimeMessage } from "../shared/types";
+import { getBudgetUsage } from "../collector/budget";
 import { logDebug, logError, logInfo, logWarn } from "../logging/logger";
 
 /**
@@ -25,7 +26,7 @@ export async function resolveGraphqlQueryIdForTab(
   const cacheKey = `${origin}:${message.operation}`;
   const cached = queryIdCache.get(cacheKey);
   if (cached && Date.now() - cached.at < QUERY_ID_TTL_MS) {
-    logDebug("graphql", "queryId.cache", "使用缓存的 queryId", { operation: message.operation });
+    logDebug("graphql", "queryId.cache", "使用缓存的 queryId", { platform: "twitter", operation: message.operation });
     return { queryId: cached.queryId };
   }
 
@@ -38,10 +39,10 @@ export async function resolveGraphqlQueryIdForTab(
   const found = (results[0]?.result as { queryId?: unknown } | undefined)?.queryId;
   if (typeof found === "string" && QUERY_ID_PATTERN.test(found)) {
     queryIdCache.set(cacheKey, { queryId: found, at: Date.now() });
-    logInfo("graphql", "queryId.resolved", "从页面 bundle 解析到 queryId", { operation: message.operation, queryId: found });
+    logInfo("graphql", "queryId.resolved", "从页面 bundle 解析到 queryId", { platform: "twitter", operation: message.operation, queryId: found });
     return { queryId: found };
   }
-  logWarn("graphql", "queryId.miss", "bundle 扫描未命中 queryId，回退到工具兜底值", { operation: message.operation });
+  logWarn("graphql", "queryId.miss", "bundle 扫描未命中 queryId，回退到工具兜底值", { platform: "twitter", operation: message.operation });
   return { queryId: null };
 }
 
@@ -67,6 +68,8 @@ export async function fetchGraphqlPageForTab(
   if (parsed.protocol !== "https:" || !parsed.pathname.startsWith("/i/api/graphql/")) {
     throw new Error("GraphQL 请求地址不在允许范围内。");
   }
+  const budget = (await getBudgetUsage(["twitter"]))[0];
+  const activityContext = { platform: "twitter", kind: "api", config: budget.config, used: budget.used, profile: budget.profile, detail: budget.detail };
   const startedAt = Date.now();
 
   const results = await chrome.scripting.executeScript({
@@ -78,24 +81,24 @@ export async function fetchGraphqlPageForTab(
   const result = results[0]?.result as { status: number; ok: boolean; json: unknown; error?: string } | undefined;
   const elapsedMs = Date.now() - startedAt;
   if (!result) {
-    logError("graphql", "fetch.noResult", "页面内 GraphQL 请求没有返回结果", { operation: message.operation });
+    logError("graphql", "fetch.noResult", "页面内 GraphQL 请求没有返回结果", { ...activityContext, operation: message.operation });
     throw new Error("页面内 GraphQL 请求没有返回结果。");
   }
   if (result.error) {
-    logError("graphql", "fetch.error", "页面内请求失败", { operation: message.operation, detail: result.error, elapsedMs });
+    logError("graphql", "fetch.error", "页面内请求失败", { ...activityContext, operation: message.operation, detail: result.error, elapsedMs });
     throw new Error(`页面内请求失败：${result.error}`);
   }
-  logDebug("graphql", "fetch", "GraphQL 请求完成", { operation: message.operation, status: result.status, elapsedMs });
+  logDebug("graphql", "fetch", "GraphQL 请求完成", { ...activityContext, operation: message.operation, status: result.status, elapsedMs });
   if (result.status === 401 || result.status === 403) {
-    logError("graphql", "fetch.auth", "登录态被拒绝", { operation: message.operation, status: result.status });
+    logError("graphql", "fetch.auth", "登录态被拒绝", { ...activityContext, operation: message.operation, status: result.status });
     throw new Error(`x.com 拒绝了请求（HTTP ${result.status}），登录态可能已过期，请重新打开页面登录。`);
   }
   if (result.status === 429) {
-    logError("graphql", "fetch.rateLimited", "触发 429 限流", { operation: message.operation, elapsedMs });
+    logError("graphql", "fetch.rateLimited", "触发 429 限流", { ...activityContext, operation: message.operation, status: result.status, elapsedMs });
     throw new Error("x.com 返回 429 限流，请降低抓取频率并稍后重试。");
   }
   if (!result.ok) {
-    logError("graphql", "fetch.httpError", "接口返回异常状态", { operation: message.operation, status: result.status });
+    logError("graphql", "fetch.httpError", "接口返回异常状态", { ...activityContext, operation: message.operation, status: result.status });
     throw new Error(`x.com 接口返回 HTTP ${result.status}。`);
   }
   return { status: result.status, json: result.json };
