@@ -12,6 +12,7 @@ import type { BrowserToolDefinition, BrowserToolRunResult } from "../browser-too
 import type { FeedPublisherConfig, FeedPublishResult, FeedRepoProbe } from "../publisher/types";
 
 const PUBLISH_DEBOUNCE_ALARM = "trail.feed.publishDebounce";
+const PUBLISH_INTERVAL_ALARM = "trail.feed.publishInterval";
 /** 多渠道合并窗口：防抖时长内如有其他渠道暂存，重置计时器，最终一次发布。 */
 const PUBLISH_DEBOUNCE_MINUTES = 3;
 
@@ -70,6 +71,7 @@ export async function getFeedState() {
 
 export async function saveFeedPublisherConfig(config: FeedPublisherConfig) {
   await saveFeedConfig(config);
+  await ensurePublishIntervalAlarm();
   return getFeedPublisherSnapshot();
 }
 
@@ -102,5 +104,32 @@ export function registerFeedPublisher(): void {
     if (alarm.name === PUBLISH_DEBOUNCE_ALARM) {
       void publishFromDebounce();
     }
+    if (alarm.name === PUBLISH_INTERVAL_ALARM) {
+      void publishFromInterval().catch(() => undefined);
+    }
   });
+  void ensurePublishIntervalAlarm();
+}
+
+/** 定时间隔到期：有暂存则推送，无则静默跳过。 */
+async function publishFromInterval(): Promise<void> {
+  const snapshot = await getFeedPublisherSnapshot();
+  if (snapshot.stagedCount === 0) return;
+  logInfo("feed", "publish.interval", "定时间隔到期，推送暂存记录", { staged: snapshot.stagedCount });
+  await publishFromDebounce();
+}
+
+/** 配置了自动发布间隔时确保闹钟存在，否则清除。 */
+async function ensurePublishIntervalAlarm(): Promise<void> {
+  const { config } = await getFeedPublisherSnapshot();
+  const hours = config?.autoPublishHours || 12;
+  if (!config?.autoPublish) {
+    await chrome.alarms.clear(PUBLISH_INTERVAL_ALARM);
+    return;
+  }
+  const existing = await chrome.alarms.get(PUBLISH_INTERVAL_ALARM);
+  if (!existing) {
+    await chrome.alarms.create(PUBLISH_INTERVAL_ALARM, { periodInMinutes: hours * 60 });
+    logInfo("feed", "publish.intervalSet", `定时发布已排定（每 ${hours} 小时）`, { hours });
+  }
 }

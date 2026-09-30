@@ -111,7 +111,12 @@ export function FeedPublisherView() {
         <label className="feed-config-wide" title="留空则默认 https://<owner>.github.io/<repo>/">Pages 地址<input ref={pagesRef} value={draft.pagesBaseUrl || ""} disabled={busy} onChange={(e) => setDraft({ ...draft, pagesBaseUrl: e.target.value })} placeholder="https://gqy20.github.io/feed/" /></label>
         <label>封顶<input type="number" min={100} max={20000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
         <label>每源<input type="number" min={10} max={500} value={draft.itemsPerFeed} disabled={busy} onChange={(e) => setDraft({ ...draft, itemsPerFeed: Number(e.target.value) })} /></label>
-        <label className="feed-config-toggle" title="采集成功后自动推送，无需手动点发布"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 自动发布</label>
+        <label className="feed-config-toggle" title="采集成功后 3 分钟合并窗口自动推送"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 自动</label>
+        <label className="feed-config-toggle" title="定时兜底：间隔到期若有未发布暂存则推送">
+          <input className="collector-interval" type="number" min={1} max={168} value={draft.autoPublishHours || 12} disabled={busy || draft.autoPublish !== true}
+            onChange={(e) => setDraft({ ...draft, autoPublishHours: Number(e.target.value) })} />
+          <span>小时</span>
+        </label>
         <label className="feed-config-toggle"><input type="checkbox" checked={draft.excludeRetweets === true} disabled={busy} onChange={(e) => setDraft({ ...draft, excludeRetweets: e.target.checked })} /> 不收录转推</label>
       </div>
       <div className="feed-actions">
@@ -161,7 +166,7 @@ export function FeedPublisherView() {
 }
 
 function defaultConfig(): FeedPublisherConfig {
-  return { owner: "", repo: "feed", branch: "main", token: "", maxPosts: 5000, itemsPerFeed: 150, autoPublish: false, excludeRetweets: false };
+  return { owner: "", repo: "feed", branch: "main", token: "", maxPosts: 5000, itemsPerFeed: 150, autoPublish: false, autoPublishHours: 12, excludeRetweets: false };
 }
 
 function errorText(error: unknown): string { return error instanceof Error ? error.message : "操作失败，请重试。"; }
