@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Clock, Download, Plus, X } from "lucide-react";
+import { ChevronRight, Clock, FileDown, FileUp, Plus, X } from "lucide-react";
+import { exportFollowsCsv } from "../../collector/follows";
 import { sendMessage } from "../../shared/runtime";
 import type { CollectorItem, FollowEntry } from "../../collector/types";
 
@@ -10,6 +11,9 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [accountsOpen, setAccountsOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -53,18 +57,36 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
   const job = item?.job;
   const interval = job?.intervalHours ?? 4;
   const running = job?.status === "running";
+  const selectedHandles = selected.filter((handle) => follows?.some((entry) => entry.handle === handle));
+  const needsAttention = job?.status === "needs_user" || job?.status === "failed";
+
+  function exportAccounts() {
+    const url = URL.createObjectURL(new Blob(["\uFEFF", exportFollowsCsv(follows || [])], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${platform}-accounts.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
   return <div className="panel collector-panel stack">
     <div className="collector-head">
-      <strong>{name}</strong>
-      <label className="feed-config-toggle" title="到点自动采集">
+      <div className="collector-title-row"><strong>{name}</strong>
+        {job?.lastAttemptAt || (!needsAttention && job?.message) ? <span className="muted text-small">{job.lastAttemptAt ? `上次采集 ${formatRunTime(job.lastAttemptAt)}` : ""}{!needsAttention && job.message ? `${job.lastAttemptAt ? " · " : ""}${job.message}` : ""}</span> : null}
+      </div>
+      <div className="collector-schedule" title="到点自动采集">
+        <label>
         <input type="checkbox" checked={job?.enabled === true} disabled={busy || running}
-          onChange={(e) => void act(() => sendMessage({ type: "CONFIGURE_COLLECTOR", toolId, enabled: e.target.checked, intervalHours: interval }).then(() => e.target.checked ? "已开启。" : "已关闭。"))} />
-        <input className="collector-interval" type="number" min={1} max={48} value={interval} disabled={busy || running}
+          onChange={(e) => void act(() => sendMessage({ type: "CONFIGURE_COLLECTOR", toolId, enabled: e.target.checked, intervalHours: interval }).then(() => undefined))} />
+        自动采集</label><span>每</span>
+        <input className="collector-interval" aria-label={`${name}采集间隔`} type="number" min={1} max={48} value={interval} disabled={busy || running}
           onChange={(e) => void act(() => sendMessage({ type: "CONFIGURE_COLLECTOR", toolId, enabled: job?.enabled === true, intervalHours: Number(e.target.value) }).then(() => undefined))} />
         <span>小时</span>
-      </label>
-      <button className="button secondary collector-run" disabled={busy || running} onClick={() => void act(() => sendMessage({ type: "RUN_COLLECTOR_NOW", toolId }).then(() => "已启动。"))}><Clock size={14} />采集</button>
-      <button className="icon-button" title="导入名单（txt / csv）" disabled={busy} onClick={() => fileInputRef.current?.click()}><Download size={15} /></button>
+      </div>
+      <button className="button action collector-run" disabled={busy || running} onClick={() => void act(() => sendMessage({ type: "RUN_COLLECTOR_NOW", toolId }).then(() => "已启动。"))}><Clock size={14} />采集</button>
+      <button className="button secondary compact-button" title="合并导入账号名单（TXT / CSV）" disabled={busy} onClick={() => fileInputRef.current?.click()}><FileUp size={15} />导入账号</button>
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".txt,.csv,text/csv,text/plain" onChange={async (event) => {
         const file = event.target.files?.[0];
         event.currentTarget.value = "";
@@ -75,21 +97,41 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
 
     {error ? <p role="alert" className="error-text text-small">{error}</p> : null}
     {notice ? <p className="text-small">{notice}</p> : null}
-    {job?.message ? <p className={job.status === "needs_user" || job.status === "failed" ? "error-text text-small" : "muted text-small"}>{job.message}</p> : null}
-    {job?.lastAttemptAt ? <p className="muted text-small">{formatRunTime(job.lastAttemptAt)}{job.approvedHash ? "" : " · 开启后按间隔自动采集"}</p> : null}
-
+    {needsAttention && job?.message ? <p role="alert" className="error-text text-small">{job.message}</p> : null}
+    <div className="account-manager" data-open={accountsOpen}>
+      <div className="account-header">
+      <button className="account-disclosure" aria-expanded={accountsOpen} aria-controls={`accounts-${toolId}`} onClick={() => setAccountsOpen((open) => !open)}><ChevronRight size={13} />账号名单 · {follows?.length ?? 0} 个</button>
+      <div className="account-toolbar">
+        <button className="button secondary compact-button" disabled={!follows?.length || busy} onClick={exportAccounts}><FileDown size={14} />导出账号</button>
+        {!selecting ? <button className="button secondary compact-button" disabled={!follows?.length || busy || running} onClick={() => { setSelected([]); setSelecting(true); setAccountsOpen(true); }}>批量删除</button> : <>
+          <label><input type="checkbox" aria-label={`${name}全选账号`} checked={Boolean(follows?.length) && selectedHandles.length === follows?.length} disabled={busy || running} onChange={(e) => setSelected(e.target.checked ? (follows || []).map((entry) => entry.handle) : [])} />全选</label>
+          <button className="button secondary compact-button account-delete" disabled={!selectedHandles.length || busy || running} onClick={() => {
+            if (!window.confirm(`删除已选的 ${selectedHandles.length} 个账号？`)) return;
+            void act(async () => {
+              await sendMessage({ type: "REMOVE_FOLLOWS", platform, handles: selectedHandles });
+              setSelected([]);
+              setSelecting(false);
+              return undefined;
+            });
+          }}>删除已选（{selectedHandles.length}）</button>
+          <button className="button secondary compact-button" disabled={busy} onClick={() => { setSelecting(false); setSelected([]); }}>取消</button>
+        </>}
+      </div>
+      </div>
+      <div id={`accounts-${toolId}`} hidden={!accountsOpen}>
     <div className="collector-chips">
       {(follows || []).map((entry) => (
         <span className="collector-chip" key={`${entry.platform}-${entry.handle}`} title={entry.displayName || entry.handle}>
-          @{entry.handle}
-          <button aria-label={`移除 ${entry.handle}`} disabled={busy} onClick={() => void act(() => sendMessage({ type: "REMOVE_FOLLOW", platform: entry.platform, handle: entry.handle }).then(() => undefined))}><X size={11} /></button>
+          {selecting ? <input type="checkbox" aria-label={`选择 ${entry.handle}`} checked={selectedHandles.includes(entry.handle)} disabled={busy || running} onChange={(e) => setSelected((current) => e.target.checked ? [...current, entry.handle] : current.filter((handle) => handle !== entry.handle))} /> : null}
+          <span title={entry.handle}>{entry.displayName || `@${entry.handle}`}</span>
+          {!selecting ? <button aria-label={`移除 ${entry.handle}`} disabled={busy} onClick={() => void act(() => sendMessage({ type: "REMOVE_FOLLOW", platform: entry.platform, handle: entry.handle }).then(() => undefined))}><X size={11} /></button> : null}
         </span>
       ))}
       {follows && follows.length === 0 ? <span className="muted text-small">还没有账号</span> : null}
     </div>
 
     <div className="collector-add">
-      <input className="input collector-add-input" placeholder={`@${platform === "twitter" ? "handle" : "账号"}`} value={handle} disabled={busy} onChange={(e) => setHandle(e.target.value)}
+      <input className="input collector-add-input" aria-label={`${name}添加账号`} placeholder={`@${platform === "twitter" ? "handle" : "账号"}`} value={handle} disabled={busy} onChange={(e) => setHandle(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && handle.trim()) void act(async () => {
             await sendMessage({ type: "ADD_FOLLOW", platform, handle: handle.trim() });
@@ -103,6 +145,8 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
         setHandle("");
         return undefined;
       })}><Plus size={15} /></button>
+    </div>
+      </div>
     </div>
   </div>;
 }

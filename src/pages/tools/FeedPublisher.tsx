@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PlugZap, Rss, Send, Trash2, UploadCloud } from "lucide-react";
+import { Send } from "lucide-react";
 import { sendMessage } from "../../shared/runtime";
 import type { FeedPublisherConfig, FeedPublisherSnapshot } from "../../publisher/types";
 
@@ -35,6 +35,7 @@ export function FeedPublisherView() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showToken, setShowToken] = useState(false);
   const [draft, setDraft] = useState<FeedPublisherConfig>(defaultConfig());
   const hydrated = useRef(false);
   const ownerRef = useRef<HTMLInputElement>(null);
@@ -92,66 +93,57 @@ export function FeedPublisherView() {
 
   const state = snapshot?.state;
   return <section className="feed-view stack">
-    <div className="view-heading"><h2>订阅源发布</h2><Rss size={20} /></div>
-    <p className="muted text-small">
-      记录暂存本地，发布时合并到 GitHub 仓库的 data/posts.json 并重写 RSS 与时间线页；token 只存本机。
-    </p>
+    <div className="view-heading feed-heading"><h1>发布</h1><p className="muted text-small">将采集记录发布到 GitHub，更新 RSS 与时间线。</p></div>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
     {notice ? <p className="text-small">{notice}</p> : null}
 
     <article className="panel stack">
-      <div className="section-heading"><strong>GitHub 仓库</strong></div>
-      <div className="feed-config-grid">
-        <div className="feed-config-wide feed-config-identity">
-          <label>owner<input ref={ownerRef} value={draft.owner} disabled={busy} onChange={(e) => setDraft({ ...draft, owner: e.target.value })} placeholder="gqy20" /></label>
-          <label>仓库<input ref={repoRef} value={draft.repo} disabled={busy} onChange={(e) => setDraft({ ...draft, repo: e.target.value })} placeholder="feed" /></label>
-          <label>分支<input ref={branchRef} value={draft.branch} disabled={busy} onChange={(e) => setDraft({ ...draft, branch: e.target.value })} placeholder="main" /></label>
-        </div>
-        <label className="feed-config-wide" title="只授予该仓库 Contents 读写权限">token<input ref={tokenRef} type="text" autoComplete="off" spellCheck={false} value={draft.token} disabled={busy} onChange={(e) => setDraft({ ...draft, token: e.target.value })} placeholder="github_pat_…" /></label>
-        <label className="feed-config-wide" title="留空则默认 https://<owner>.github.io/<repo>/">Pages 地址<input ref={pagesRef} value={draft.pagesBaseUrl || ""} disabled={busy} onChange={(e) => setDraft({ ...draft, pagesBaseUrl: e.target.value })} placeholder="https://gqy20.github.io/feed/" /></label>
-        <label>封顶<input type="number" min={100} max={20000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
-        <label>每源<input type="number" min={10} max={500} value={draft.itemsPerFeed} disabled={busy} onChange={(e) => setDraft({ ...draft, itemsPerFeed: Number(e.target.value) })} /></label>
-        <label className="feed-config-toggle" title="采集成功后 3 分钟合并窗口自动推送"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 自动</label>
-        <label className="feed-config-toggle" title="定时兜底：间隔到期若有未发布暂存则推送">
-          <input className="collector-interval" type="number" min={1} max={168} value={draft.autoPublishHours || 12} disabled={busy || draft.autoPublish !== true}
-            onChange={(e) => setDraft({ ...draft, autoPublishHours: Number(e.target.value) })} />
-          <span>小时</span>
-        </label>
-        <label className="feed-config-toggle"><input type="checkbox" checked={draft.excludeRetweets === true} disabled={busy} onChange={(e) => setDraft({ ...draft, excludeRetweets: e.target.checked })} /> 不收录转推</label>
-      </div>
-      <div className="feed-actions">
-        <button className="button secondary" disabled={busy} onClick={() => void act("save", async () => {
+      <div className="section-heading repository-heading"><strong>GitHub 仓库</strong><div className="feed-actions">
+        <button className="button quiet" disabled={busy} onClick={() => void act("save", async () => {
           await sendMessage({ type: "SAVE_FEED_CONFIG", config: currentDraft() });
           return "配置已保存。";
         })}>保存</button>
-        <button className="button secondary" title="保存当前表单并探测仓库连通性" disabled={busy} onClick={() => void act("probe", async () => {
+        <button className="button quiet" title="保存当前表单并探测仓库连通性" disabled={busy} onClick={() => void act("probe", async () => {
           await sendMessage({ type: "SAVE_FEED_CONFIG", config: currentDraft() });
           const probe = await sendMessage({ type: "PROBE_FEED_REPO" });
           return `配置已保存。连接成功：仓库为${probe.repoPrivate ? "私有" : "公共"}，默认分支 ${probe.defaultBranch}。`;
-        })}><PlugZap size={15} />测试</button>
+        })}>测试连接</button>
+      </div></div>
+      <div className="feed-config-grid">
+        <div className="feed-config-wide feed-config-identity">
+          <label>所有者<input ref={ownerRef} value={draft.owner} disabled={busy} onChange={(e) => setDraft({ ...draft, owner: e.target.value })} placeholder="gqy20" /></label>
+          <label>仓库<input ref={repoRef} value={draft.repo} disabled={busy} onChange={(e) => setDraft({ ...draft, repo: e.target.value })} placeholder="feed" /></label>
+          <label>分支<input ref={branchRef} value={draft.branch} disabled={busy} onChange={(e) => setDraft({ ...draft, branch: e.target.value })} placeholder="main" /></label>
+        </div>
+        <div className="feed-config-wide token-field"><label title="只授予该仓库 Contents 读写权限">Token · 仅保存在本机<input ref={tokenRef} type={showToken ? "text" : "password"} autoComplete="off" spellCheck={false} value={draft.token} disabled={busy} onChange={(e) => setDraft({ ...draft, token: e.target.value })} placeholder="github_pat_…" /></label><button className="button secondary compact-button" type="button" aria-pressed={showToken} onClick={() => setShowToken(!showToken)}>{showToken ? "隐藏" : "显示"}</button></div>
+        <label className="feed-config-wide" title="留空则默认 https://<owner>.github.io/<repo>/">Pages 地址<input ref={pagesRef} value={draft.pagesBaseUrl || ""} disabled={busy} onChange={(e) => setDraft({ ...draft, pagesBaseUrl: e.target.value })} placeholder="https://gqy20.github.io/feed/" /></label>
+        <label>总条数上限<input type="number" min={100} max={20000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
+        <label>每源条数上限<input type="number" min={10} max={500} value={draft.itemsPerFeed} disabled={busy} onChange={(e) => setDraft({ ...draft, itemsPerFeed: Number(e.target.value) })} /></label>
+        <div className="feed-config-wide publish-options">
+          <label className="feed-config-toggle"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 自动发布</label>
+          <label className="feed-config-toggle"><input type="checkbox" checked={draft.excludeRetweets === true} disabled={busy} onChange={(e) => setDraft({ ...draft, excludeRetweets: e.target.checked })} /> 排除转推</label>
+        </div>
+        <div className="feed-config-wide publish-schedule" title="采集后 3 分钟合并推送；定时间隔到期时补发暂存记录">
+          <span>兜底间隔</span><input className="collector-interval" aria-label="自动发布兜底间隔" type="number" min={1} max={168} value={draft.autoPublishHours || 12} disabled={busy || !draft.autoPublish} onChange={(e) => setDraft({ ...draft, autoPublishHours: Number(e.target.value) })} /><span>小时</span>
+        </div>
       </div>
     </article>
 
     <article className="panel stack">
       <div className="section-heading"><strong>待发布</strong><span className="muted text-small">{snapshot ? `${snapshot.stagedCount} 条` : "…"}</span></div>
-      <p className="muted text-small">发布失败时暂存保留，下次重试。</p>
       <div className="feed-actions">
-        <button className="button secondary" title="暂存两条示例记录，用于验证发布链路" disabled={busy} onClick={() => void act("sample", () =>
+        <button className="button quiet" title="暂存两条示例记录，用于验证发布链路" disabled={busy} onClick={() => void act("sample", () =>
           sendMessage({ type: "STAGE_FEED_POSTS", posts: SAMPLE_POSTS }).then((result) => `已暂存 ${result.staged} 条（含示例数据）。`)
-        )}><UploadCloud size={15} />示例</button>
-        <button className="button secondary" title="清空全部暂存记录" disabled={busy || snapshot?.stagedCount === 0} onClick={() => void act("clear", () => {
+        )}>添加示例</button>
+        {(snapshot?.stagedCount ?? 0) > 0 ? <button className="button quiet" title="清空全部暂存记录" disabled={busy} onClick={() => void act("clear", () => {
           if (!window.confirm(`清空全部 ${snapshot?.stagedCount ?? 0} 条暂存记录？此操作不可撤销。`)) return Promise.resolve(undefined);
           return sendMessage({ type: "CLEAR_STAGED_FEED" }).then((result) => `已清空 ${result.cleared} 条暂存记录。`);
-        })}><Trash2 size={15} />清空</button>
+        })}>清空</button> : null}
         <button className="button primary" disabled={busy || snapshot?.stagedCount === 0} onClick={() => void act("publish", () =>
           sendMessage({ type: "PUBLISH_FEED" }).then((result) =>
             `发布成功：新增 ${result.newPosts} 条，共 ${result.totalPosts} 条，写入 ${result.files.length} 个文件。`)
         )}><Send size={15} />{busy ? "正在发布…" : "立即发布"}</button>
       </div>
-    </article>
-
-    <article className="panel stack">
-      <div className="section-heading"><strong>发布状态</strong></div>
       {state?.lastPublishAt
         ? <p className="checkin-meta muted text-small">{[
           formatTime(state.lastPublishAt),

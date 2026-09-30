@@ -254,12 +254,13 @@ export type RuntimeMessage =
   | { type: "GET_FOLLOWS"; platform: string }
   | { type: "ADD_FOLLOW"; platform: string; handle: string; displayName?: string }
   | { type: "REMOVE_FOLLOW"; platform: string; handle: string }
+  | { type: "REMOVE_FOLLOWS"; platform: string; handles: string[] }
   | { type: "IMPORT_FOLLOWS"; platform: string; text: string }
   | { type: "GET_POPUP_STATE" }
   | { type: "GET_INTERACTION_SETTINGS" }
   | { type: "UPDATE_INTERACTION_SETTINGS"; settings: Partial<TrailInteractionSettings> }
   | { type: "START_GROUP_RECORDING"; name?: string }
-  | { type: "START_NEW_GROUP_RECORDING"; name?: string }
+  | { type: "START_NEW_GROUP_RECORDING"; name?: string; tabIds?: number[] }
   | { type: "START_WINDOW_RECORDING"; name?: string }
   | { type: "STOP_RECORDING" }
   | { type: "GENERATE_FROM_CURRENT_GROUP"; name?: string }
@@ -296,6 +297,7 @@ export type RuntimeMessage =
   | { type: "PAUSE_LITERATURE_DOWNLOAD" }
   | { type: "RESUME_LITERATURE_DOWNLOAD" }
   | { type: "DELETE_BROWSER_TOOL"; toolId: string }
+  | { type: "SET_BROWSER_TOOL_ENABLED"; toolId: string; enabled: boolean }
   | {
       type: "RUN_STORED_BROWSER_TOOL";
       toolId: string;

@@ -162,7 +162,7 @@ export function LiteratureQueueView() {
         <div className="queue-empty-mark"><Download size={22} /></div>
         <strong>导入文献清单</strong>
         <p>支持 CSV，自动识别 title、doi、pdf_url、download_url 和 decision，并按 DOI 或题名去重。</p>
-        <button className="button primary" onClick={() => fileInputRef.current?.click()}><FileUp size={16} /> 选择 CSV</button>
+        <button className="button primary" onClick={() => fileInputRef.current?.click()}><FileUp size={16} /> 导入文献 CSV</button>
         <input ref={fileInputRef} className="visually-hidden" type="file" accept=".csv,text/csv" onChange={(event) => { void importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
         {error ? <p className="error-text text-small">{error}</p> : null}
       </section>
@@ -172,15 +172,15 @@ export function LiteratureQueueView() {
   return (
     <section className="literature-queue-view">
       <div className="queue-heading">
-        <div><span className="tool-eyebrow">文献下载队列</span><h2>{queue.sourceName}</h2><p>{queue.sourceRows} 条原始记录 · 去重后 {queue.items.length} 篇</p></div>
+        <div><span className="tool-eyebrow">文献下载队列</span><div className="queue-file-heading"><h2>{queue.sourceName}</h2><p>{queue.sourceRows} 条原始记录 · 去重后 {queue.items.length} 篇</p></div></div>
         <div className="queue-heading-actions">
-          <button className="icon-button" title="重新导入 CSV" disabled={busy} onClick={() => fileInputRef.current?.click()}><FileUp size={15} /></button>
+          <button className="button quiet" title="用文献 CSV 替换当前队列" disabled={busy} onClick={() => fileInputRef.current?.click()}><FileUp size={15} />导入文献</button>
           <button className="icon-button danger" title="清空队列" disabled={busy} onClick={() => void clearQueue()}><Trash2 size={15} /></button>
         </div>
       </div>
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".csv,text/csv" onChange={(event) => { void importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
 
-      <p className="checkin-meta muted text-small">{[
+      <p className="queue-summary muted text-small">{[
         `可处理 ${summary.actionable}`,
         summary.completed ? `完成 ${summary.completed}` : null,
         summary.needsSearch ? `待检索 ${summary.needsSearch}` : null,
@@ -234,8 +234,8 @@ export function LiteratureQueueView() {
       <div className="queue-footer">
         <button className="button secondary" title="把失败/需处理项重置为待处理" disabled={busy || summary.needsUser + summary.failed === 0} onClick={() => void resetFailures()}><RotateCcw size={15} /> 重置</button>
         <button className="button secondary" title="导出 CSV 报告" disabled={busy} onClick={() => exportQueue(queue)}><Download size={15} /> 导出</button>
-        <button className="button primary queue-start" disabled={busy || runnableItems.length === 0} onClick={() => void startDownload()}>
-          <Download size={16} /> {busy ? "正在处理…" : `处理 ${runnableItems.length} 篇`}
+        <button className="button primary queue-start" title="下载当前范围中尚未完成且含 DOI 或全文链接的文献" disabled={busy || runnableItems.length === 0} onClick={() => void startDownload()}>
+          <Download size={16} /> {busy ? "正在处理…" : `下载 ${runnableItems.length} 篇`}
         </button>
       </div>
       {error ? <p className="error-text text-small">{error}</p> : null}
@@ -250,7 +250,7 @@ function QueueRow({ item }: { item: LiteratureQueueItem }) {
       <span className={`queue-status status-${item.status}`} title={statusLabel(item.status)} aria-label={statusLabel(item.status)}>{statusIcon(item.status)}</span>
       <div className="queue-row-main">
         <strong title={item.title}>{stripTags(item.title)}</strong>
-        <span>{item.doi || routeLabel(item)}{item.sourceRows > 1 ? ` · 合并 ${item.sourceRows} 条` : ""}</span>
+        <span>{item.doi || routeLabel(item)}{item.sourceRows > 1 ? ` · 来源记录 ${item.sourceRows} 条` : ""}</span>
         {item.error ? <small title={item.error}>{item.error}</small> : null}
       </div>
       <a className="icon-button" href={openUrl} target="_blank" rel="noreferrer" title="打开来源或检索页面"><ExternalLink size={14} /></a>
@@ -260,7 +260,7 @@ function QueueRow({ item }: { item: LiteratureQueueItem }) {
 
 function summarize(items: LiteratureQueueItem[]) {
   return {
-    actionable: items.filter((item) => Boolean(item.downloadUrl || item.pdfUrl || item.doi)).length,
+    actionable: items.filter((item) => item.status !== "completed" && Boolean(item.downloadUrl || item.pdfUrl || item.doi)).length,
     completed: items.filter((item) => item.status === "completed").length,
     needsSearch: items.filter((item) => item.status === "needs_search").length,
     needsUser: items.filter((item) => item.status === "needs_user").length,

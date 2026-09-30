@@ -38,21 +38,21 @@ test("隔离扩展：侧边栏、独立账户、并发去重、定时授权及�
     const cnkiId = parseBrowserToolYaml(customCnki).id;
     await request({ type: "IMPORT_BROWSER_TOOL", yaml: customCnki });
     const sync = await request({ type: "IMPORT_BUNDLED_BROWSER_TOOLS" });
-    expect(sync.unchanged).toBe(4);
+    expect(sync.unchanged).toBe(6);
     expect(sync.customPreserved).toBe(1);
     expect(sync.updated).toBe(0);
     await page.getByRole("button", { name: "设置", exact: true }).click();
     await page.getByRole("button", { name: "刷新页面状态" }).click();
-    await expect(page.getByText("自定义规则 v0.1.0", { exact: true })).toBeVisible();
-    await expect(page.getByText("内置规则 v0.3.0 可用 · 当前使用自定义版", { exact: true })).toBeVisible();
+    await expect(page.getByText("网页运行 · 自定义 v0.1.0 · 内置 v0.3.0 可用", { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath("versions.png"), fullPage: true });
-    await page.getByRole("button", { name: "使用内置版", exact: true }).click();
+    await page.getByRole("button", { name: "切换为内置", exact: true }).click();
     await expect(page.getByText("已切换到内置版本，原自定义规则已另存为备份。", { exact: true })).toBeVisible();
     const manager = await request({ type: "GET_BROWSER_TOOL_STATE" });
     expect(manager.tools.find((t: any) => t.id === cnkiId).source.type).toBe("bundled");
     expect(manager.tools.find((t: any) => t.id === cnkiId).definition.version).toBe("0.3.0");
-    expect(manager.tools.find((t: any) => t.id.startsWith(`${cnkiId}.backup-`)).yaml).toContain("# local customization");
+    expect(manager.backups.find((t: any) => t.id.startsWith(`${cnkiId}.backup-`)).yaml).toContain("# local customization");
+    expect(manager.tools.some((t: any) => t.source?.backupOf)).toBe(false);
     for (const [file, path, domain] of [["glados/tool.yml", "one", "glados.one"], ["glados/rocks.yml", "rocks", "glados.rocks"], ["ablesci/tool.yml", "ablesci", "www.ablesci.com"]]) {
       const yaml = readFileSync(`browser-tools/${file}`, "utf8")
         .replace(`domains: [${domain}]`, "domains: [127.0.0.1]")
@@ -61,7 +61,7 @@ test("隔离扩展：侧边栏、独立账户、并发去重、定时授权及�
       await request({ type: "IMPORT_BROWSER_TOOL", yaml });
     }
     await page.getByRole("button", { name: "签到", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "每日签到", exact: true, level: 2 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "每日签到", exact: true, level: 1 })).toBeVisible();
     await expect(page.locator(".checkin-card")).toHaveCount(3);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 

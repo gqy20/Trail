@@ -28,7 +28,7 @@ function patchJob(id: string, patch: Partial<CheckinJob>): Promise<void> {
 
 async function toolFor(id: string) {
   const tool = await getStoredBrowserTool(id);
-  if (!tool) throw new Error("未找到签到工具，请同步内置工具库。");
+  if (!tool || tool.source?.backupOf || tool.enabled === false) throw new Error("签到工具已停用或未安装。");
   const definition = parseBrowserToolYaml(tool.yaml);
   if (!definition.checkin) throw new Error("此工具不支持签到。");
   return { ...tool, definition };
@@ -42,7 +42,7 @@ async function hash(source: string): Promise<string> {
 export async function getCheckinState(): Promise<CheckinState> {
   await initialization;
   const [tools, jobs] = await Promise.all([getStoredBrowserTools(), readJobs()]);
-  return { items: tools.filter((tool) => tool.definition.checkin).map((tool) => ({
+  return { items: tools.filter((tool) => !tool.source?.backupOf && tool.enabled !== false && tool.definition.checkin).map((tool) => ({
     toolId: tool.id, name: tool.definition.name,
     entryUrl: tool.definition.checkin!.entry_url, timezone: tool.definition.checkin!.timezone,
     job: jobs[tool.id] || defaultJob()

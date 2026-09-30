@@ -35,7 +35,7 @@ function patchJob(id: string, patch: Partial<CollectorJob>): Promise<void> {
 
 async function toolFor(id: string) {
   const tool = await getStoredBrowserTool(id);
-  if (!tool) throw new Error("未找到采集工具，请同步内置工具库。");
+  if (!tool || tool.source?.backupOf || tool.enabled === false) throw new Error("采集工具已停用或未安装。");
   const definition = parseBrowserToolYaml(tool.yaml);
   if (!definition.feed || !definition.batch) throw new Error("此工具不支持定时采集。");
   if (!definition.feed.entry_url) throw new Error("工具未声明 feed.entry_url，无法定时采集。");
@@ -51,7 +51,7 @@ export async function getCollectorState(): Promise<CollectorState> {
   await initialization;
   const [tools, jobs] = await Promise.all([getStoredBrowserTools(), readJobs()]);
   const items = [];
-  for (const tool of tools.filter((item) => item.definition.feed && item.definition.batch)) {
+  for (const tool of tools.filter((item) => !item.source?.backupOf && item.enabled !== false && item.definition.feed && item.definition.batch)) {
     const feed = tool.definition.feed!;
     const follows = await getFollows(feed.platform);
     items.push({

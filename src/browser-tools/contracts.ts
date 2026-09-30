@@ -406,6 +406,7 @@ export type BrowserToolRunResult = {
 
 export type StoredBrowserTool = {
   id: string;
+  enabled?: boolean;
   yaml: string;
   definition: BrowserToolDefinition;
   importedAt: number;
@@ -413,6 +414,7 @@ export type StoredBrowserTool = {
   source?: {
     type: "bundled" | "user";
     catalogVersion?: number;
+    backupOf?: string;
   };
 };
 
@@ -428,6 +430,7 @@ export type BrowserToolBatchProgress = {
 };
 
 export type BrowserToolManagerState = {
+  backups?: StoredBrowserTool[];
   bundledVersions?: Record<string, string>;
   tools: StoredBrowserTool[];
   recentRuns: BrowserToolRunRecord[];

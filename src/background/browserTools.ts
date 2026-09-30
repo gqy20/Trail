@@ -49,6 +49,7 @@ export async function importBrowserTool(yaml: string): Promise<StoredBrowserTool
   const now = Date.now();
   const tool: StoredBrowserTool = {
     id: definition.id,
+    enabled: current?.enabled !== false,
     yaml,
     definition,
     importedAt: current?.importedAt || now,
@@ -72,16 +73,18 @@ export async function getBrowserToolManagerState(tabId?: number): Promise<Browse
     getTargetTab(tabId).catch(() => undefined)
   ]);
   const pageUrl = targetTab?.url;
+  const activeTools = tools.filter((tool) => !tool.source?.backupOf);
 
   return {
-    tools,
+    tools: activeTools,
+    backups: tools.filter((tool) => tool.source?.backupOf),
     bundledVersions: getBundledToolVersions(),
     recentRuns,
     targetTab:
       targetTab?.id !== undefined && pageUrl
         ? { id: targetTab.id, title: targetTab.title || pageUrl, url: pageUrl }
         : undefined,
-    matchedToolIds: pageUrl ? tools.filter((tool) => matchesBrowserTool(tool.definition, pageUrl)).map((tool) => tool.id) : []
+    matchedToolIds: pageUrl ? activeTools.filter((tool) => tool.enabled !== false && matchesBrowserTool(tool.definition, pageUrl)).map((tool) => tool.id) : []
   };
 }
 
@@ -92,7 +95,7 @@ export async function runStoredBrowserTool(input: {
   userInitiated?: boolean;
 }): Promise<BrowserToolRunResult> {
   const tool = await getStoredBrowserTool(input.toolId);
-  if (!tool) throw new Error(`没有找到 Browser Tool：${input.toolId}`);
+  if (!tool || tool.source?.backupOf || tool.enabled === false) throw new Error(`工具已停用或不可运行：${input.toolId}`);
   return runBrowserTool({ ...input, yaml: tool.yaml });
 }
 
@@ -105,7 +108,7 @@ export async function runStoredBrowserToolBatch(input: {
   nativeExport?: { definitionId: string; maxRecords: number };
 }): Promise<BrowserToolRunResult> {
   const tool = await getStoredBrowserTool(input.toolId);
-  if (!tool) throw new Error(`没有找到 Browser Tool：${input.toolId}`);
+  if (!tool || tool.source?.backupOf || tool.enabled === false) throw new Error(`工具已停用或不可运行：${input.toolId}`);
   const definition = parseBrowserToolYaml(tool.yaml);
   if (!definition.batch) throw new Error(`工具 ${definition.id} 没有声明批量检索能力。`);
   assertUserInitiated(definition, input.userInitiated);

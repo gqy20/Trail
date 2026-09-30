@@ -73,6 +73,7 @@ export async function importBundledBrowserTools(): Promise<BundledBrowserToolImp
 
     nextBundled.push({
       id: definition.id,
+      enabled: current?.enabled !== false,
       yaml,
       definition,
       importedAt: current?.importedAt || now,
@@ -111,10 +112,10 @@ export async function restoreBundledBrowserTool(toolId: string): Promise<void> {
     document.set("id", backupId);
     document.set("name", `${current.definition.name}（自定义备份）`);
     const yaml = document.toString();
-    tools.push({ ...current, id: backupId, yaml, definition: parseBrowserToolYaml(yaml), updatedAt: now, source: { type: "user" } });
+    tools.push({ ...current, id: backupId, yaml, definition: parseBrowserToolYaml(yaml), updatedAt: now, source: { type: "user", backupOf: toolId } });
   }
   await replaceStoredBrowserTools([
-    { id: toolId, ...entry, importedAt: current?.importedAt || now, updatedAt: now, source: { type: "bundled", catalogVersion: catalog.version } },
+    { id: toolId, ...entry, enabled: current?.enabled !== false, importedAt: current?.importedAt || now, updatedAt: now, source: { type: "bundled", catalogVersion: catalog.version } },
     ...tools.filter((tool) => tool.id !== toolId)
   ]);
 }

@@ -1,4 +1,5 @@
 import type { FollowEntry, FollowsImportResult } from "./types";
+import { parseCsv } from "../literature-queue/csv";
 
 const KEY = "trail.follows.v1";
 const MAX_FOLLOWS = 200;
@@ -18,9 +19,19 @@ export async function addFollow(entry: FollowEntry): Promise<FollowEntry[]> {
 }
 
 export async function removeFollow(platform: string, handle: string): Promise<FollowEntry[]> {
-  const next = (await readAll()).filter((entry) => !(entry.platform === platform && entry.handle === handle));
+  return removeFollows(platform, [handle]);
+}
+
+export async function removeFollows(platform: string, handles: string[]): Promise<FollowEntry[]> {
+  const selected = new Set(handles);
+  const next = (await readAll()).filter((entry) => entry.platform !== platform || !selected.has(entry.handle));
   await chrome.storage.local.set({ [KEY]: next });
   return next;
+}
+
+export function exportFollowsCsv(entries: FollowEntry[]): string {
+  const cell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+  return ["handle,priority,name", ...entries.map((entry) => [entry.handle, entry.priority, entry.displayName].map(cell).join(","))].join("\r\n");
 }
 
 /** 导入文本：每行一个账号（txt），或带 handle,priority,name 表头/无表头的 CSV。 */
@@ -70,18 +81,24 @@ export function parseFollowsText(platform: string, text: string): FollowEntry[] 
   const entries: FollowEntry[] = [];
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const isCsv = lines.length > 0 && lines.some((line) => (line.match(/,/g) || []).length >= 1);
-  for (const [index, line] of lines.entries()) {
+  const rows = isCsv ? parseCsv(text).filter((row) => row.some((cell) => cell.trim())) : lines.map((line) => [line]);
+  const header = rows[0]?.map((cell) => cell.trim().toLowerCase()) || [];
+  const hasHeader = /handle|用户名|账号/i.test(header[0] || "");
+  const priorityIndex = hasHeader ? header.indexOf("priority") : 1;
+  const nameIndex = hasHeader ? header.findIndex((cell) => cell === "name" || cell === "displayname") : 2;
+  for (const [index, row] of rows.entries()) {
+    const line = row[0]?.trim() || "";
     if (line.startsWith("#")) continue;
     if (isCsv) {
-      const cells = line.split(",").map((cell) => cell.trim());
-      if (index === 0 && /handle|用户名|账号/i.test(cells[0])) continue; // 表头
+      const cells = row.map((cell) => cell.trim());
+      if (index === 0 && hasHeader) continue;
       const handle = (cells[0] || "").replace(/^@/, "");
       if (!handle || /[, ]/.test(handle)) continue;
       entries.push({
         platform,
         handle,
-        priority: cells[1] && /^\d+$/.test(cells[1]) ? Number(cells[1]) : undefined,
-        displayName: cells[2] || undefined
+        priority: cells[priorityIndex] && /^\d+$/.test(cells[priorityIndex]) ? Number(cells[priorityIndex]) : undefined,
+        displayName: cells[nameIndex] || undefined
       });
     } else {
       const handle = line.split(/[\s,，]/)[0].replace(/^@/, "");

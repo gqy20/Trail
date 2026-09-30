@@ -226,9 +226,9 @@ export async function startGroupRecording(name?: string): Promise<TrailSession> 
   return session;
 }
 
-export async function startNewGroupRecording(name?: string): Promise<TrailSession> {
+export async function startNewGroupRecording(name?: string, tabIds?: number[]): Promise<TrailSession> {
   const requestedName = name?.trim() || "研究记录";
-  const group = await createNamedGroupFromCurrentSelection(requestedName);
+  const group = await createNamedGroupFromCurrentSelection(requestedName, tabIds);
   const sessionName = group.title || requestedName;
   const tabs = await collectGroupTabs(group.windowId, group.id);
 

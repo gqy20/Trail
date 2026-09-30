@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eraser, FileDown, ScrollText } from "lucide-react";
+import { Eraser, FileDown } from "lucide-react";
 import { sendMessage } from "../../shared/runtime";
 import { formatLogEntriesText, LOG_STORE_KEY, type LogEntry, type LogLevel } from "../../logging/logger";
 
 const LEVEL_WEIGHT: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
-const LEVEL_LETTER: Record<LogLevel, string> = { debug: "D", info: "I", warn: "W", error: "E" };
 const LEVEL_LABEL: Record<LogLevel, string> = { debug: "调试", info: "信息", warn: "警告", error: "错误" };
 
 export function LogsView() {
@@ -69,10 +68,7 @@ export function LogsView() {
   }
 
   return <section className="logs-view stack">
-    <div className="view-heading"><h2>运行日志</h2><ScrollText size={20} /></div>
-    <p className="muted text-small">
-      批量、GraphQL、发布的结构化日志，保留 600 条；敏感字段写入前已脱敏，导出可直接用于反馈。
-    </p>
+    <div className="view-heading inline-view-heading"><h1>运行日志</h1><p className="muted text-small">保留最近 600 条日志，敏感字段已脱敏。</p></div>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
     <div className="logs-toolbar">
       <select className="input" aria-label="日志级别" value={minLevel} onChange={(e) => setMinLevel(e.target.value as "all" | LogLevel)}>
@@ -85,22 +81,23 @@ export function LogsView() {
         <option value="all">全部区域</option>
         {scopes.map((item) => <option key={item} value={item}>{item}</option>)}
       </select>
-      <input className="input logs-search" aria-label="搜索日志" placeholder="搜索事件、消息或字段…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <input className="input logs-search" aria-label="搜索日志" placeholder="搜索日志" value={search} onChange={(e) => setSearch(e.target.value)} />
       <button className="button secondary" disabled={busy || filtered.length === 0} onClick={exportLogs}><FileDown size={15} />导出</button>
       <button className="button secondary" disabled={busy || !entries?.length} onClick={() => void clearLogs()}><Eraser size={15} />清空</button>
     </div>
-    <p className="muted text-small">{filtered.length} / {entries?.length ?? 0} 条，最新在前</p>
+    <p className="muted text-small">{filtered.length === entries?.length ? `${filtered.length} 条` : `匹配 ${filtered.length} / ${entries?.length ?? 0} 条`} · 最新在前</p>
     <div className="logs-list">
-      {filtered.map((entry) => <article className={`log-entry log-${entry.level}`} key={`${entry.ts}-${entry.event}`}>
-        <header>
-          <span className={`log-level log-level-${entry.level}`} title={LEVEL_LABEL[entry.level]}>{LEVEL_LETTER[entry.level]}</span>
-          <span className="log-scope">{entry.scope}</span>
-          <code className="log-event">{entry.event}</code>
+      {filtered.map((entry, index) => <details className={`log-entry log-${entry.level}`} key={`${entry.ts}-${entry.event}-${index}`}>
+        <summary>
           <time>{new Date(entry.ts).toLocaleTimeString("zh-CN", { hour12: false })}</time>
-        </header>
-        <p>{entry.message}</p>
-        {entry.data ? <details><summary>字段</summary><pre>{JSON.stringify(entry.data, null, 2)}</pre></details> : null}
-      </article>)}
+          <span className={`log-level log-level-${entry.level}`}>{LEVEL_LABEL[entry.level]}</span>
+          <span className="log-scope">{entry.scope}</span>
+          <span className="log-message">{entry.message}</span>
+          <span className="log-expand" aria-hidden="true">›</span>
+        </summary>
+        <code className="log-event">{entry.event}</code>
+        {entry.data ? <pre>{JSON.stringify(entry.data, null, 2)}</pre> : null}
+      </details>)}
       {entries && filtered.length === 0 ? <p className="muted logs-empty">没有匹配的日志。</p> : null}
       {!entries ? <p className="muted">正在读取日志…</p> : null}
     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Antenna, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { sendMessage } from "../../shared/runtime";
 import type { CollectorState } from "../../collector/types";
 import { CollectorPanel } from "./CollectorPanel";
@@ -28,8 +28,7 @@ export function CollectorsView() {
 
   const items = state?.items || [];
   return <section className="collectors-view stack">
-    <div className="view-heading"><h2>采集</h2><Antenna size={20} /></div>
-    <p className="muted text-small">名单持久保存，导入一次即可；采集自动打开工作页面。</p>
+    <div className="view-heading inline-view-heading"><h1>账号采集</h1><p className="muted text-small">按名单定时采集，记录暂存到发布页。</p></div>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
     {!state ? <p className="muted">正在读取渠道…</p> : null}
     {items.map((item) => (

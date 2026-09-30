@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, ExternalLink, Play, RefreshCw } from "lucide-react";
+import { ExternalLink, Play, RefreshCw } from "lucide-react";
 import { sendMessage } from "../../shared/runtime";
 import type { CheckinItem, CheckinState } from "../../checkin/types";
 import { localClock } from "../../checkin/schedule";
@@ -30,8 +30,7 @@ export function CheckinsView() {
   }
 
   return <section className="checkins-view stack">
-    <div className="view-heading"><h2>每日签到</h2><CheckCircle2 size={20} /></div>
-    <p className="muted text-small">复用浏览器登录态，到点自动签到；错过的任务在浏览器下次启动后补跑，需要验证时暂停。</p>
+    <div className="view-heading inline-view-heading"><h1>每日签到</h1><p className="muted text-small" title="浏览器启动后补跑到期任务，复用各网站登录状态。">每天自动签到，需要登录或验证时暂停。</p></div>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
     {!state ? <p className="muted">正在读取签到工具…</p> : null}
     {state?.items.map((item) => <CheckinCard key={item.toolId} item={item} busy={busy !== undefined}
@@ -59,16 +58,16 @@ function CheckinCard({ item, busy, onRun, onOpen, onSave }: {
   const meta = [
     account?.points !== undefined ? `积分 ${account.points}` : null,
     account?.days !== undefined ? `连签 ${account.days} 天` : null,
-    account?.days_left !== undefined ? `剩余 ${account.days_left} 天` : null,
-    formatRunTime(job.lastAttemptAt)
+    account?.days_left !== undefined ? `剩余 ${account.days_left} 天` : null
   ].filter(Boolean).join(" · ");
 
   return <article className="panel checkin-card stack">
     <div className="checkin-head">
-      <a className="checkin-title" href={item.entryUrl} target="_blank" rel="noreferrer" title={safeHost(item.entryUrl)}>{item.name.replace(/每日签到$/, "")}</a>
-      <span className={`mini-badge ${today ? "run-completed" : ""}`}>{badge}</span>
+      <div className="checkin-title-row"><a className="checkin-title" href={item.entryUrl} target="_blank" rel="noreferrer" title={safeHost(item.entryUrl)}>{item.name.replace(/每日签到$/, "")}</a>
+        {meta ? <span className="checkin-meta muted text-small">{meta}</span> : null}
+      </div>
+      <span className={`mini-badge ${today ? "run-completed" : ""}`}>{badge}{job.lastAttemptAt ? ` · ${formatRunTime(job.lastAttemptAt)}` : ""}</span>
     </div>
-    {meta ? <p className="checkin-meta muted text-small">{meta}</p> : null}
     {job.status === "needs_user" || job.status === "failed" ? (job.message ? <p className="error-text text-small">{job.message}</p> : null) : null}
     <div className="checkin-controls">
       <div className="checkin-schedule">
@@ -77,7 +76,7 @@ function CheckinCard({ item, busy, onRun, onOpen, onSave }: {
         {time !== job.time ? <button className="button secondary" disabled={busy || !time} onClick={() => onSave(job.enabled, time)}>保存</button> : null}
       </div>
       <div className="checkin-actions">
-        <button className="button primary" disabled={busy || running || today} onClick={onRun}><Play size={15} />{running ? "签到中…" : job.status === "needs_user" ? "重试" : "签到"}</button>
+        {!today ? <button className="button action" disabled={busy || running} onClick={onRun}><Play size={15} />{running ? "签到中…" : job.status === "needs_user" ? "重试" : "签到"}</button> : null}
         <button className="button secondary" disabled={busy} onClick={onOpen}><ExternalLink size={15} />打开</button>
       </div>
     </div>

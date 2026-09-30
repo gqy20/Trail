@@ -76,18 +76,28 @@ export async function getUniqueGroupTitle(
   return `${baseTitle} ${suffix}`;
 }
 
-export async function createNamedGroupFromCurrentSelection(title: string): Promise<chrome.tabGroups.TabGroup> {
+export async function createNamedGroupFromCurrentSelection(title: string, selectedTabIds?: number[]): Promise<chrome.tabGroups.TabGroup> {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!activeTab?.id || !activeTab.windowId) {
     throw new Error("No active tab found for the new Trail group.");
   }
 
+  let tabIds: number[];
+  if (selectedTabIds !== undefined) {
+    if (!Array.isArray(selectedTabIds) || selectedTabIds.length === 0 || selectedTabIds.some((id) => !Number.isInteger(id))) {
+      throw new Error("请先选择要记录的网页。");
+    }
+    tabIds = [...new Set(selectedTabIds)];
+    const windowTabs = await chrome.tabs.query({ windowId: activeTab.windowId });
+    if (tabIds.some((id) => !windowTabs.some((tab) => tab.id === id && /^https?:\/\//i.test(tab.url || tab.pendingUrl || "")))) {
+      throw new Error("部分所选网页已关闭或不在当前窗口，请重新选择。");
+    }
+  } else {
+    const highlightedTabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+    tabIds = highlightedTabs.map((tab) => tab.id).filter((tabId): tabId is number => typeof tabId === "number");
+  }
   const uniqueTitle = await getUniqueGroupTitle(activeTab.windowId, title);
-  const highlightedTabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
-  const tabIds = highlightedTabs
-    .map((tab) => tab.id)
-    .filter((tabId): tabId is number => typeof tabId === "number");
 
   const groupTabIds: number | [number, ...number[]] =
     tabIds.length > 0 ? ([tabIds[0], ...tabIds.slice(1)] as [number, ...number[]]) : activeTab.id;

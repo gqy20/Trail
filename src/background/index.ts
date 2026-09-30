@@ -40,11 +40,16 @@ import {
   registerCollectors,
   runCollector
 } from "./collectors";
-import { addFollow, getFollows, importFollows, removeFollow } from "../collector/follows";
+import { addFollow, getFollows, importFollows, removeFollow, removeFollows } from "../collector/follows";
 import { getFeedState, probeFeedConnection, publishStagedFeed, registerFeedPublisher, saveFeedPublisherConfig, stagePosts, clearStagedFeed } from "./feed";
 import { fetchGraphqlPageForTab, readPageStateForTab, resolveGraphqlQueryIdForTab } from "./graphqlBridge";
 import { clearLogEntries, getLogEntries } from "../logging/logger";
 import { restoreBundledBrowserTool } from "../browser-tools/bundled";
+import { getStoredBrowserTool, saveStoredBrowserTool } from "../browser-tools/storage";
+
+void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((error: unknown) => {
+  console.error("Trail 无法设置边栏入口。", error);
+});
 
 registerCheckins();
 registerCollectors();
@@ -66,7 +71,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecu
 });
 
 async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
-  if (["RESTORE_BUNDLED_BROWSER_TOOL", "GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE", "GET_FEED_STATE", "SAVE_FEED_CONFIG", "STAGE_FEED_POSTS", "PUBLISH_FEED", "PROBE_FEED_REPO", "CLEAR_STAGED_FEED", "CLEAR_TRAIL_LOGS", "GET_COLLECTOR_STATE", "CONFIGURE_COLLECTOR", "RUN_COLLECTOR_NOW", "OPEN_COLLECTOR_PAGE", "ADD_FOLLOW", "REMOVE_FOLLOW", "IMPORT_FOLLOWS", "GET_BATCH_RUN_STATE", "PAUSE_BATCH_RUN", "RESUME_BATCH_RUN", "STOP_BATCH_RUN"].includes(message.type)) {
+  if (["RESTORE_BUNDLED_BROWSER_TOOL", "GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE", "GET_FEED_STATE", "SAVE_FEED_CONFIG", "STAGE_FEED_POSTS", "PUBLISH_FEED", "PROBE_FEED_REPO", "CLEAR_STAGED_FEED", "CLEAR_TRAIL_LOGS", "GET_COLLECTOR_STATE", "CONFIGURE_COLLECTOR", "RUN_COLLECTOR_NOW", "OPEN_COLLECTOR_PAGE", "ADD_FOLLOW", "REMOVE_FOLLOW", "REMOVE_FOLLOWS", "IMPORT_FOLLOWS", "GET_BATCH_RUN_STATE", "PAUSE_BATCH_RUN", "RESUME_BATCH_RUN", "STOP_BATCH_RUN"].includes(message.type)) {
     const extensionUrl = chrome.runtime.getURL("");
     if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(extensionUrl)) throw new Error("此操作只能从 Trail 界面发起。");
   }
@@ -91,6 +96,10 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
     case "GET_FOLLOWS": return getFollows(message.platform);
     case "ADD_FOLLOW": return addFollow({ platform: message.platform, handle: message.handle, displayName: message.displayName });
     case "REMOVE_FOLLOW": return removeFollow(message.platform, message.handle);
+    case "REMOVE_FOLLOWS": {
+      if (!Array.isArray(message.handles) || message.handles.some((handle) => typeof handle !== "string")) throw new Error("账号列表无效。");
+      return removeFollows(message.platform, message.handles);
+    }
     case "IMPORT_FOLLOWS": return importFollows(message.platform, message.text);
     case "BROWSER_TOOL_GRAPHQL_RESOLVE": return resolveGraphqlQueryIdForTab(message, sender);
     case "BROWSER_TOOL_GRAPHQL_FETCH": return fetchGraphqlPageForTab(message, sender);
@@ -108,7 +117,7 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
     case "START_GROUP_RECORDING":
       return startGroupRecording(message.name);
     case "START_NEW_GROUP_RECORDING":
-      return startNewGroupRecording(message.name);
+      return startNewGroupRecording(message.name, message.tabIds);
     case "START_WINDOW_RECORDING":
       return startWindowRecording(message.name);
     case "STOP_RECORDING":
@@ -145,6 +154,27 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       return resumeLiteratureDownload();
     case "DELETE_BROWSER_TOOL":
       return removeBrowserTool(message.toolId);
+    case "SET_BROWSER_TOOL_ENABLED": {
+      if (typeof message.enabled !== "boolean") throw new Error("工具启用状态无效。");
+      const tool = await getStoredBrowserTool(message.toolId);
+      if (!tool || tool.source?.backupOf) throw new Error("未找到工具。");
+      if (!message.enabled && tool.enabled !== false) {
+        const batch = await getBrowserToolBatchRunState();
+        if (batch?.toolId === tool.id && (batch.status === "running" || batch.status === "paused")) throw new Error("请先停止此工具的批量任务，再停用工具。");
+        if (tool.definition.checkin) {
+          const item = (await getCheckinState()).items.find((item) => item.toolId === tool.id);
+          if (item?.job.status === "running") throw new Error("请等待签到结束后停用。");
+          await configureCheckin(tool.id, false, item?.job.time || "09:00");
+        }
+        if (tool.definition.feed && tool.definition.batch && tool.definition.feed.entry_url) {
+          const item = (await getCollectorState()).items.find((item) => item.toolId === tool.id);
+          if (item?.job?.status === "running") throw new Error("请先停止采集任务，再停用工具。");
+          await configureCollector(tool.id, false, item?.job?.intervalHours || 4);
+        }
+      }
+      await saveStoredBrowserTool({ ...tool, enabled: message.enabled });
+      return undefined;
+    }
     case "RUN_STORED_BROWSER_TOOL":
       return runStoredBrowserTool(message);
     case "RUN_BROWSER_TOOL_BATCH":

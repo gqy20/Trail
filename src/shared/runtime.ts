@@ -40,6 +40,7 @@ type RuntimeResponseMap = {
   GET_FOLLOWS: import("../collector/types").FollowEntry[];
   ADD_FOLLOW: import("../collector/types").FollowEntry[];
   REMOVE_FOLLOW: import("../collector/types").FollowEntry[];
+  REMOVE_FOLLOWS: import("../collector/types").FollowEntry[];
   IMPORT_FOLLOWS: import("../collector/types").FollowsImportResult;
   GET_POPUP_STATE: PopupState;
   GET_INTERACTION_SETTINGS: TrailInteractionSettings;
@@ -64,6 +65,7 @@ type RuntimeResponseMap = {
   PAUSE_LITERATURE_DOWNLOAD: { paused: boolean };
   RESUME_LITERATURE_DOWNLOAD: { paused: boolean };
   DELETE_BROWSER_TOOL: undefined;
+  SET_BROWSER_TOOL_ENABLED: undefined;
   RUN_STORED_BROWSER_TOOL: BrowserToolRunResult;
   RUN_BROWSER_TOOL_BATCH: BrowserToolRunResult;
   OPEN_SESSION: undefined;

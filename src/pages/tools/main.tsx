@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import "@fontsource-variable/noto-serif-sc/wght.css";
 import "@fontsource-variable/source-code-pro/wght.css";
 import { Download, ExternalLink, FileJson, FileUp, Pause, Play, Plus, RefreshCw, Rss, Settings2, Square, Trash2, Wrench, X } from "lucide-react";
-import { BrandMark } from "../../shared/BrandMark";
 import { installDevChromeMock } from "../../shared/devChromeMock";
 import { sendMessage } from "../../shared/runtime";
 import { formatDateTime } from "../../shared/time";
@@ -12,8 +11,13 @@ import { CheckinsView } from "./Checkins";
 import { FeedPublisherView } from "./FeedPublisher";
 import { LogsView } from "./LogsView";
 import { CollectorsView } from "./CollectorsView";
+import { ResearchRecorder } from "../../popup/ResearchRecorder";
 import { describeBatchRun, type BatchRunState } from "../../background/runControl";
 import { TRAIL_VERSION } from "../../shared/version";
+import { parseBrowserToolYaml } from "../../browser-tools/loader";
+import { parseLiteratureCsv } from "../../literature-queue/csv";
+import { getLiteratureQueue, saveLiteratureQueue } from "../../literature-queue/storage";
+import { mergeLiteratureQueues } from "../../literature-queue/merge";
 import type {
   BrowserToolManagerState,
   BrowserToolCollectionPresentation,
@@ -31,6 +35,12 @@ import "../../styles.css";
 
 installDevChromeMock();
 
+function toolPurpose(definition: BrowserToolDefinition): string {
+  if (definition.checkin) return "每日签到";
+  if (definition.feed && definition.batch) return "账号采集 / 网页运行";
+  return "网页运行";
+}
+
 function BrowserToolsApp() {
   const [state, setState] = useState<BrowserToolManagerState>();
   const [selectedId, setSelectedId] = useState("");
@@ -46,7 +56,8 @@ function BrowserToolsApp() {
   const [nativeExportLimit, setNativeExportLimit] = useState(1000);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
-  const [activeView, setActiveView] = useState<"collect" | "results" | "queue" | "settings" | "checkins" | "feed" | "logs" | "collectors">("collect");
+  const [activeView, setActiveView] = useState<"research" | "collect" | "results" | "settings" | "checkins" | "feed" | "logs" | "collectors">("research");
+  const [logCategory, setLogCategory] = useState<"runtime" | "literature">("runtime");
   const [error, setError] = useState("");
   const [catalogNotice, setCatalogNotice] = useState("");
   const [executionProgress, setExecutionProgress] = useState<Record<string, BrowserToolExecutionProgress>>({});
@@ -79,7 +90,14 @@ function BrowserToolsApp() {
   const nativeExportDefinition = selectedTool?.definition.native_exports?.[0];
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
   const toolUi = resolveToolUi(selectedTool?.definition);
-  const pageTitle = activeView === "checkins" ? "每日签到" : activeView === "feed" ? "订阅源发布" : activeView === "logs" ? "运行日志" : activeView === "collectors" ? "采集" : toolUi.title;
+  const pageTitle = activeView === "research" ? "研究路径" : activeView === "settings" ? "设置" : activeView === "checkins" ? "每日签到" : activeView === "feed" ? "发布" : activeView === "logs" ? logCategory === "literature" ? "文献队列" : "运行日志" : activeView === "collectors" ? "账号采集" : "网页工具";
+  const yamlPreview = useMemo(() => {
+    if (!yamlDraft.trim()) return undefined;
+    try { return { definition: parseBrowserToolYaml(yamlDraft), error: "" }; }
+    catch (err) { return { definition: undefined, error: toErrorMessage(err) }; }
+  }, [yamlDraft]);
+  const replacedTool = state?.tools.find((tool) => tool.id === yamlPreview?.definition?.id);
+  const importAction = replacedTool ? replacedTool.source?.type === "bundled" ? "替换为自定义规则" : "更新规则" : "添加工具";
   const directBatchKeywords = useMemo(
     () => parseBatchInput(keywordDraft, selectedTool?.definition.presentation?.batch_input?.csv_headers),
     [keywordDraft, selectedTool?.updatedAt]
@@ -131,9 +149,9 @@ function BrowserToolsApp() {
       const next = await sendMessage({ type: "GET_BROWSER_TOOL_STATE", tabId: targetTabId });
       setState(next);
       setSelectedId((current) => {
-        if (preferredId && next.tools.some((tool) => tool.id === preferredId)) return preferredId;
-        if (current && next.tools.some((tool) => tool.id === current)) return current;
-        const collectionTools = next.tools.filter((tool) => !tool.definition.checkin);
+        if (preferredId && next.tools.some((tool) => tool.id === preferredId && tool.enabled !== false)) return preferredId;
+        if (current && next.tools.some((tool) => tool.id === current && tool.enabled !== false)) return current;
+        const collectionTools = next.tools.filter((tool) => tool.enabled !== false && !tool.definition.checkin);
         return collectionTools.find((tool) => next.matchedToolIds.includes(tool.id))?.id || collectionTools[0]?.id || "";
       });
     } catch (err) {
@@ -149,6 +167,7 @@ function BrowserToolsApp() {
       const imported = await sendMessage({ type: "IMPORT_BROWSER_TOOL", yaml: yamlDraft });
       setYamlDraft("");
       await refresh(imported.id);
+      setCatalogNotice(`已导入「${imported.definition.name}」。${imported.definition.checkin || imported.definition.feed ? "规则内容变化后，自动任务需重新开启。" : "可从工具列表进入使用。"}`);
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
@@ -307,6 +326,18 @@ function BrowserToolsApp() {
     }
   }
 
+  async function toggleTool(tool: StoredBrowserTool) {
+    setBusy(true);
+    setError("");
+    try {
+      const enabled = tool.enabled === false;
+      await sendMessage({ type: "SET_BROWSER_TOOL_ENABLED", toolId: tool.id, enabled });
+      await refresh();
+      setCatalogNotice(enabled ? `已启用「${tool.definition.name}」，自动任务需单独开启。` : `已停用「${tool.definition.name}」，规则和数据已保留。`);
+    } catch (err) { setError(toErrorMessage(err)); }
+    finally { setBusy(false); }
+  }
+
   async function loadFile(file?: File) {
     if (!file) return;
     setYamlDraft(await file.text());
@@ -321,20 +352,13 @@ function BrowserToolsApp() {
     <main className="page-shell tools-shell">
       <div className="page-inner stack tools-page">
         <header className="header-row tools-header">
-          <div className="brand">
-            <BrandMark />
-            <h1 className="page-title">{pageTitle}</h1>
-          </div>
-          <nav className="tools-nav" aria-label={`${toolUi.title}导航`}>
+          <nav className="tools-nav" aria-label="功能导航">
+            <button className={activeView === "research" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("research")}>研究路径</button>
             <button className={activeView === "checkins" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("checkins")}>签到</button>
-            <button className={activeView === "feed" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("feed")}>订阅源</button>
-            <button className={activeView === "logs" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("logs")}>日志</button>
-            <button className={activeView === "collectors" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collectors")}>采集</button>
-            <button className={activeView === "collect" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collect")}>运行</button>
-            {lastResult ? <button className={activeView === "results" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("results")}>结果</button> : null}
-            <button className={activeView === "queue" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("queue")}>
-              <Download size={15} /> 队列
-            </button>
+            <button className={activeView === "feed" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("feed")}>发布</button>
+            <button className={activeView === "logs" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => { setLogCategory("runtime"); setActiveView("logs"); }}>日志</button>
+            <button className={activeView === "collectors" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collectors")}>账号采集</button>
+            <button className={activeView === "collect" || activeView === "results" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collect")}>网页工具</button>
             <button className={activeView === "settings" ? "icon-button active" : "icon-button"} title="设置" aria-label="设置" onClick={() => setActiveView("settings")}>
               <Settings2 size={16} />
             </button>
@@ -343,11 +367,23 @@ function BrowserToolsApp() {
 
         {error ? <div className="card error-text">{error}</div> : null}
 
+        {activeView === "research" ? <ResearchRecorder embedded /> : null}
+
         {activeView === "collect" ? (
           <section className="collector-view">
+            <div className="view-heading section-heading"><h1>网页工具</h1><button className="button secondary compact-button" onClick={() => setActiveView("settings")}>管理规则</button></div>
+            <div className="workspace-tool-picker">
+              <label htmlFor="workspace-tool">当前工具</label>
+              <select id="workspace-tool" className="input" value={selectedTool?.definition.checkin ? "" : selectedId} disabled={busy} onChange={(event) => setSelectedId(event.target.value)}>
+                <option value="" disabled>选择工具</option>
+                {state?.tools.filter((tool) => tool.enabled !== false && !tool.definition.checkin).map((tool) => <option value={tool.id} key={tool.id}>{tool.definition.name}</option>)}
+              </select>
+            </div>
+            {lastResult ? <div className="workspace-tabs"><button className="button secondary compact-button" onClick={() => setActiveView("results")}>查看最近结果</button></div> : null}
             <div className={isMatched ? "connection-line connected" : "connection-line"}>
               <span className={isMatched ? "target-status online" : "target-status"} aria-hidden="true" />
               <span>{isMatched ? `已连接 · ${toolUi.sourceLabel}` : "当前网页暂不支持此工具"}</span>
+              {!isMatched && selectedTool ? <a className="button secondary compact-button" href={selectedTool.definition.feed?.entry_url || `https://${selectedTool.definition.match.domains[0]}/`} target="_blank" rel="noreferrer">打开适用网站</a> : null}
             </div>
 
             {selectedTool ? (
@@ -359,7 +395,7 @@ function BrowserToolsApp() {
                       <div className="field-actions">
                         {!isComposerMode ? (
                           <button className="text-button" disabled={busy} onClick={() => keywordFileInputRef.current?.click()}>
-                            <FileUp size={14} /> 导入 {toolUi.input.importFormats.map((format) => format.toUpperCase()).join("/")}
+                            <FileUp size={14} /> 导入{toolUi.input.label}（{toolUi.input.importFormats.map((format) => format.toUpperCase()).join("/")}）
                           </button>
                         ) : null}
                         {(!isComposerMode && keywordDraft) || (isComposerMode && composerGroups.some(Boolean)) ? (
@@ -455,6 +491,11 @@ function BrowserToolsApp() {
                   </section>
                 ) : null}
 
+                {Object.values(selectedTool.definition.parameters || {}).some((definition) => definition.presentation?.placement !== "primary" && definition.presentation?.placement !== "hidden") ? <details className="run-parameters">
+                  <summary>运行参数</summary>
+                  <ParameterForm definitions={Object.fromEntries(Object.entries(selectedTool.definition.parameters || {}).filter(([, definition]) => definition.presentation?.placement !== "primary" && definition.presentation?.placement !== "hidden"))} values={parameters} onChange={(name, value) => setParameters((current) => ({ ...current, [name]: value }))} />
+                </details> : null}
+
                 {batchRun && (batchRun.status === "running" || batchRun.status === "paused") ? (
                   <BatchRunControlBar
                     run={batchRun}
@@ -487,6 +528,8 @@ function BrowserToolsApp() {
                   </button>
                 )}
 
+                {selectedTool.definition.batch && toolUi.actions.hasSingleRun ? <button className="button secondary" disabled={busy || !isMatched || !state?.targetTab} onClick={() => void runTool()}><Play size={15} />{busyAction === "single" ? toolUi.actions.singleRunning : toolUi.actions.singleRun}</button> : null}
+
               </div>
             ) : (
               <section className="empty-tools-state">
@@ -499,44 +542,36 @@ function BrowserToolsApp() {
         ) : null}
 
         {activeView === "results" ? (
-          lastResult
-            ? <RunResult result={lastResult} definition={lastResultDefinition} />
-            : <EmptyResult definition={selectedTool?.definition} onBack={() => setActiveView("collect")} />
+          <section className="stack"><div className="section-heading"><h1>工具结果</h1><button className="button secondary compact-button" onClick={() => setActiveView("collect")}>返回网页工具</button></div>{lastResult
+            ? <RunResult result={lastResult} definition={lastResultDefinition} onOpenQueue={() => { setLogCategory("literature"); setActiveView("logs"); }} />
+            : <EmptyResult definition={selectedTool?.definition} onBack={() => setActiveView("collect")} />}</section>
         ) : null}
 
-        {activeView === "queue" ? <LiteratureQueueView /> : null}
         {activeView === "checkins" ? <CheckinsView /> : null}
         {activeView === "feed" ? <FeedPublisherView /> : null}
-        {activeView === "logs" ? <LogsView /> : null}
+        {activeView === "logs" ? <section className="logs-hub stack">
+          <nav className="logs-category-filter" aria-label="日志分类">
+            <button className={logCategory === "runtime" ? "active" : ""} aria-pressed={logCategory === "runtime"} onClick={() => setLogCategory("runtime")}>运行日志</button>
+            <button className={logCategory === "literature" ? "active" : ""} aria-pressed={logCategory === "literature"} onClick={() => setLogCategory("literature")}>文献队列</button>
+          </nav>
+          <div hidden={logCategory !== "runtime"}><LogsView /></div>
+          <div hidden={logCategory !== "literature"}><LiteratureQueueView /></div>
+        </section> : null}
         {activeView === "collectors" ? <CollectorsView /> : null}
 
         {activeView === "settings" ? (
           <section className="settings-view stack">
             <div className="view-heading header-row">
-              <div><h2>设置</h2><span className="muted">Trail v{TRAIL_VERSION}</span></div>
+              <div className="settings-title"><h1>设置</h1><span className="muted">v{TRAIL_VERSION}</span></div>
               <button className="icon-button" title="刷新页面状态" aria-label="刷新页面状态" disabled={busy} onClick={() => void refresh(selectedId)}><RefreshCw size={16} /></button>
             </div>
 
             <section className="settings-section stack">
-              <div className="section-heading"><strong>当前网页</strong></div>
-              <div className="settings-target-row">
-                <span className={isMatched ? "target-status online" : "target-status"} />
-                <span>{state?.targetTab?.title || "未连接普通网页"}</span>
-                {state?.targetTab?.url ? <a className="icon-button" href={state.targetTab.url} target="_blank" rel="noreferrer" aria-label="打开当前网页"><ExternalLink size={15} /></a> : null}
-              </div>
-              {toolUi.actions.hasSingleRun ? (
-                <button className="button secondary" disabled={busy || !isMatched || !state?.targetTab} onClick={() => void runTool()}>
-                  <Play size={15} /> {busyAction === "single" ? toolUi.actions.singleRunning : toolUi.actions.singleRun}
-                </button>
-              ) : null}
-            </section>
-
-            <section className="settings-section stack">
-              <div className="section-heading"><strong>工具</strong><span className="muted text-small">{state?.tools.length || 0} 个</span></div>
+              <div className="section-heading tool-library-heading"><strong>工具库</strong><span className="muted text-small tool-library-count">{state?.tools.filter((tool) => tool.enabled !== false).length || 0} / {state?.tools.length || 0} 已启用</span><span className="muted text-small">停用后隐藏工具并关闭自动任务，规则和数据保留。</span></div>
               <div className="bundled-tools-row">
                 <span>
-                  <strong>内置工具库 · Trail v{TRAIL_VERSION}</strong>
-                  <small>随扩展统一发布；自定义规则不会被同步覆盖</small>
+                  <strong>内置规则</strong>
+                  <small>随扩展更新；同步保留自定义规则</small>
                 </span>
                 <button className="button secondary compact-button" disabled={busy} onClick={() => void syncBundledTools()}>
                   <RefreshCw size={14} /> 同步
@@ -545,43 +580,50 @@ function BrowserToolsApp() {
               {catalogNotice ? <p className="muted text-small catalog-notice">{catalogNotice}</p> : null}
               <div className="tool-list">
                 {(state?.tools || []).map((tool) => {
-                  const matched = state?.matchedToolIds.includes(tool.id);
                   const bundled = tool.source?.type === "bundled";
                   const availableVersion = state?.bundledVersions?.[tool.id];
                   return (
-                    <div className={selectedId === tool.id ? "tool-settings-row active" : "tool-settings-row"} key={tool.id}>
-                      <button className="tool-select-button" onClick={() => { if (tool.definition.checkin) setActiveView("checkins"); else setSelectedId(tool.id); }}>
-                        <span><strong>{tool.definition.name}</strong><small>{bundled ? `内置 · 随 Trail v${TRAIL_VERSION} 发布` : `自定义规则 v${tool.definition.version}`}</small>
-                          <small>{bundled ? `规则修订 v${tool.definition.version}` : availableVersion ? `内置规则 v${availableVersion} 可用 · 当前使用自定义版` : "独立维护"}</small>
+                    <div className={`tool-settings-row${selectedId === tool.id ? " active" : ""}${tool.enabled === false ? " tool-disabled" : ""}`} key={tool.id}>
+                      <button className="tool-select-button" disabled={tool.enabled === false} onClick={() => { setSelectedId(tool.id); setActiveView(tool.definition.checkin ? "checkins" : tool.definition.feed && tool.definition.batch ? "collectors" : "collect"); }}>
+                        <span><strong>{tool.definition.name}</strong><small>{toolPurpose(tool.definition)} · {bundled ? "内置" : "自定义"} v{tool.definition.version}{!bundled && availableVersion ? ` · 内置 v${availableVersion} 可用` : ""}</small>
                         </span>
-                        <span className={matched ? "tool-state available" : "tool-state"}>{matched ? "当前可用" : "其他页面"}</span>
+                        <span className="tool-state">{tool.enabled === false ? "已停用" : "使用 →"}</span>
                       </button>
                       <div className="tool-settings-actions">
-                        {!bundled && availableVersion ? <button className="button secondary compact-button" disabled={busy} title="保留自定义备份并恢复内置规则" onClick={() => void restoreBundled(tool.id)}>用内置</button> : null}
+                        <button className="tool-enable-switch" role="switch" aria-checked={tool.enabled !== false} aria-label={`启用${tool.definition.name}`} title={tool.enabled === false ? "启用工具" : "停用工具并关闭自动任务"} disabled={busy} onClick={() => void toggleTool(tool)}><span /></button>
+                        {!bundled && availableVersion ? <button className="button secondary compact-button" disabled={busy} title="保留自定义备份并恢复内置规则" onClick={() => void restoreBundled(tool.id)}>切换为内置</button> : null}
                         <button className="icon-button danger" aria-label={`删除${tool.definition.name}`} onClick={() => void deleteTool(tool)}><Trash2 size={15} /></button>
                       </div>
                     </div>
                   );
                 })}
               </div>
-              {selectedTool ? (
-                <ParameterForm
-                  definitions={Object.fromEntries(Object.entries(selectedTool.definition.parameters || {}).filter(([, definition]) => definition.presentation?.placement !== "primary" && definition.presentation?.placement !== "hidden"))}
-                  values={parameters}
-                  onChange={(name, value) => setParameters((current) => ({ ...current, [name]: value }))}
-                />
-              ) : null}
             </section>
 
             <details className="settings-section stack yaml-settings">
-              <summary><strong>导入或更新 YAML 工具</strong><span className="muted text-small">高级</span></summary>
+              <summary><strong>添加工具规则（YAML）</strong><span className="muted text-small">展开</span></summary>
+              <p className="muted text-small">规则定义工具行为。账号名单在账号采集中导入，文献 CSV 在日志的文献队列中导入。</p>
               <textarea className="input yaml-editor" value={yamlDraft} spellCheck={false} placeholder="粘贴 tool.yml，或选择本地文件" onChange={(event) => setYamlDraft(event.target.value)} />
               <input ref={fileInputRef} className="visually-hidden" type="file" accept=".yml,.yaml,text/yaml,application/yaml" onChange={(event) => void loadFile(event.target.files?.[0])} />
+              {yamlPreview?.error ? <p role="alert" className="error-text text-small">{yamlPreview.error}</p> : null}
+              {yamlPreview?.definition ? <div className="rule-preview stack" aria-live="polite">
+                <strong>{yamlPreview.definition.name}</strong>
+                <span>{toolPurpose(yamlPreview.definition)} · 规则 v{yamlPreview.definition.version}</span>
+                <span className="muted text-small">适用网站：{yamlPreview.definition.match.domains.join("、")}</span>
+                <span className="text-small">{replacedTool ? `将替换「${replacedTool.definition.name}」v${replacedTool.definition.version}` : "将添加新工具"}</span>
+                {replacedTool?.source?.type === "bundled" ? <p className="text-small">替换后由你维护，内置同步不会覆盖此规则。</p> : null}
+                {replacedTool && (replacedTool.definition.checkin || replacedTool.definition.feed) ? <p className="text-small">规则内容变化后，自动任务需重新开启。</p> : null}
+              </div> : null}
               <div className="toolbar">
                 <button className="button secondary" onClick={() => fileInputRef.current?.click()}><FileUp size={16} /> 选择文件</button>
-                <button className="button primary" disabled={busy || !yamlDraft.trim()} onClick={() => void importTool()}>导入</button>
+                <button className="button primary" disabled={busy || !yamlPreview?.definition} onClick={() => void importTool()}>{importAction}</button>
               </div>
             </details>
+            {state?.backups?.length ? <details className="settings-section stack yaml-settings">
+              <summary><strong>规则备份</strong><span className="muted text-small">{state.backups.length} 份</span></summary>
+              <p className="muted text-small">备份不参与运行或自动任务；导出后可通过 YAML 入口重新添加。</p>
+              {state.backups.map((backup) => <div className="section-heading" key={backup.id}><span>{backup.definition.name} · v{backup.definition.version}</span><div className="feed-actions"><button className="button secondary compact-button" onClick={() => downloadTextFile(backup.yaml, `${backup.id}.yml`, "text/yaml;charset=utf-8")}>导出 YAML</button><button className="icon-button danger" aria-label={`删除${backup.definition.name}`} onClick={() => void deleteTool(backup)}><Trash2 size={15} /></button></div></div>)}
+            </details> : null}
           </section>
         ) : null}
       </div>
@@ -834,9 +876,30 @@ function EmptyResult({ definition, onBack }: { definition?: BrowserToolDefinitio
   );
 }
 
-function RunResult({ result, definition }: { result: BrowserToolRunResult; definition?: BrowserToolDefinition }) {
+function RunResult({ result, definition, onOpenQueue }: { result: BrowserToolRunResult; definition?: BrowserToolDefinition; onOpenQueue: () => void }) {
   const ui = resolveToolUi(definition);
   const recordCount = countRecords(result.data);
+  const [queueNotice, setQueueNotice] = useState("");
+  const [queueError, setQueueError] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+  useEffect(() => { setAdded(false); setQueueNotice(""); setQueueError(""); }, [result]);
+  async function addToQueue() {
+    setAdding(true);
+    setQueueError("");
+    try {
+      const records = result.data.literature;
+      const columns = getCollectionColumns(records);
+      const csv = [columns, ...records.map((record) => columns.map((column) => formatCsvValue(record[column])))].map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+      const imported = parseLiteratureCsv(csv, definition?.name || "工具提取结果");
+      const current = await getLiteratureQueue();
+      const next = mergeLiteratureQueues(current, imported);
+      await saveLiteratureQueue(next);
+      setAdded(true);
+      setQueueNotice(`已加入文献队列，新增 ${next.items.length - (current?.items.length || 0)} 篇；已有文献保留处理状态。`);
+    } catch (err) { setQueueError(toErrorMessage(err)); }
+    finally { setAdding(false); }
+  }
   return (
     <section className="panel stack run-result">
       <div className="header-row run-result-header">
@@ -849,6 +912,9 @@ function RunResult({ result, definition }: { result: BrowserToolRunResult; defin
           <RunExportActions result={result} />
         </div>
       </div>
+      {result.data.literature?.length ? <div className="feed-actions"><button className="button secondary" disabled={adding || added} onClick={() => void addToQueue()}><Plus size={15} />{adding ? "正在加入…" : added ? "已加入文献队列" : "加入文献队列"}</button><button className="button secondary" onClick={onOpenQueue}>查看文献队列</button></div> : null}
+      {queueNotice ? <p className="text-small" role="status">{queueNotice}</p> : null}
+      {queueError ? <p className="error-text text-small" role="alert">{queueError}</p> : null}
       {definition?.downloads?.map((downloadDefinition) => (
         <DownloadPanel
           toolId={definition.id}
