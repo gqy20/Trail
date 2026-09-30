@@ -857,7 +857,7 @@ async function applySinceFilter(
   const records = result.data[feed.collection];
   if (!records || records.length === 0) return result;
   const watermark = await getWatermark(feed.platform, keyword);
-  const { kept } = filterSinceRecords(records, since.field, watermark, since.lookback_days || 7);
+  const { kept, oldestIso } = filterSinceRecords(records, since.field, watermark, since.lookback_days || 7);
   if (kept.length < records.length) {
     logInfo("collector", "since.filtered", "按水位线跳过已采集记录", {
       toolId: definition.id, keyword, total: records.length, kept: kept.length,
@@ -865,20 +865,28 @@ async function applySinceFilter(
     });
     result.data[feed.collection] = kept;
   }
+  // 存储本轮最旧时间到运行状态，供回填判断是否继续翻页。
+  if (oldestIso) result.data["_backfill_oldest"] = [{ value: oldestIso }];
   return result;
 }
 
-/** 关键词成功后推进水位线为本批最新发布时间（只增不减）。 */
+/**
+ * 关键词成功后推进水位线。
+ * 正常模式：推进到本批最新（增量，已看到更新的内容）。
+ * 回填模式（isBackfill）：推进到本批最旧（还没采完历史，下一轮从最旧处继续）。
+ */
 async function advanceWatermark(
   definition: ReturnType<typeof parseBrowserToolYaml>,
   keyword: string,
-  data: BrowserToolRunResult["data"]
+  data: BrowserToolRunResult["data"],
+  isBackfill = false
 ): Promise<void> {
   const since = definition.since;
   const feed = definition.feed;
   if (!since || !feed) return;
   const records = data[feed.collection];
   if (!records || records.length === 0) return;
-  const { newestIso } = filterSinceRecords(records, since.field, undefined, 90);
-  if (newestIso) await setWatermark(feed.platform, keyword, newestIso);
+  const { newestIso, oldestIso } = filterSinceRecords(records, since.field, undefined, 90);
+  const target = isBackfill ? oldestIso : newestIso;
+  if (target) await setWatermark(feed.platform, keyword, target);
 }

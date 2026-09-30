@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Clock, FileDown, FileUp, Plus, X } from "lucide-react";
+import { ChevronRight, Clock, FileDown, FileUp, History, Plus, X } from "lucide-react";
 import { exportFollowsCsv } from "../../collector/follows";
 import { TaskStatus, useTransientNotice } from "./feedback";
 import { sendMessage } from "../../shared/runtime";
@@ -131,7 +131,16 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
         <span className="collector-chip" key={`${entry.platform}-${entry.handle}`} title={entry.displayName || entry.handle}>
           {selecting ? <input type="checkbox" aria-label={`选择 ${entry.handle}`} checked={selectedHandles.includes(entry.handle)} disabled={busy || running} onChange={(e) => setSelected((current) => e.target.checked ? [...current, entry.handle] : current.filter((handle) => handle !== entry.handle))} /> : null}
           <span title={entry.handle}>{entry.displayName || `@${entry.handle}`}</span>
-          {!selecting ? <button aria-label={`移除 ${entry.handle}`} disabled={busy} onClick={() => void act(() => sendMessage({ type: "REMOVE_FOLLOW", platform: entry.platform, handle: entry.handle }).then(() => undefined))}><X size={11} /></button> : null}
+          {!selecting ? <>
+            <button aria-label={`回填 ${entry.handle}`} title="回填历史内容" disabled={busy} onClick={() => {
+              const input = window.prompt(`回填 @${entry.handle} 到多少天前？（1-3650，输 0 取消）`, "30");
+              if (!input) return;
+              const days = Number(input);
+              if (!Number.isInteger(days) || days < 1 || days > 3650) return;
+              void act(() => sendMessage({ type: "BACKFILL_ACCOUNT", platform: entry.platform, handle: entry.handle, days }).then((r) => r.message || "回填已触发。"));
+            }}><History size={11} /></button>
+            <button aria-label={`移除 ${entry.handle}`} disabled={busy} onClick={() => void act(() => sendMessage({ type: "REMOVE_FOLLOW", platform: entry.platform, handle: entry.handle }).then(() => undefined))}><X size={11} /></button>
+          </> : null}
         </span>
       ))}
       {follows && follows.length === 0 ? <span className="muted text-small">还没有账号</span> : null}

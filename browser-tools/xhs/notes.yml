@@ -52,7 +52,6 @@ workflow:
     timeout_ms: 15000
     optional: true
   - action: state_read
-    max_items: "{{ parameters.notes_per_user }}"
     extract:
       collection: notes
       walk: { has: noteCard }
@@ -67,6 +66,31 @@ workflow:
           template: "{{ __page_url }}/{{ id }}?xsec_token={{ xsec_token }}&xsec_source=pc_user"
           transforms:
             - trim
+  # 回填模式：滚动加载更多笔记到 store，再读一次合并（去重由 dedupe_by 处理）。
+  - action: repeat
+    max: 15
+    stop_after_unchanged: 3
+    steps:
+      - action: state_read
+        extract:
+          collection: notes
+          walk: { has: noteCard }
+          dedupe_by: id
+          fields:
+            id: { path: id }
+            xsec_token: { path: xsecToken }
+            title: { path: noteCard.displayTitle, optional: true }
+            likes: { path: noteCard.interactInfo.liked, transforms: [parse_number], optional: true }
+            created_at: { path: noteCard.time, transforms: [parse_date], optional: true }
+            url:
+              template: "{{ __page_url }}/{{ id }}?xsec_token={{ xsec_token }}&xsec_source=pc_user"
+              transforms:
+                - trim
+    between:
+      - action: scroll
+        delta_y: 800
+      - action: wait
+        duration_ms: 1500
 detail_extract:
   collection: notes
   url_field: url

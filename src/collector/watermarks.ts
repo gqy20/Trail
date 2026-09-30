@@ -30,11 +30,18 @@ export async function setWatermark(platform: string, handle: string, iso: string
   await chrome.storage.local.set({ [KEY]: map });
 }
 
+/** 手动重置水位线到目标时间（回填入口），忽略"只增不减"保护。 */
+export async function resetWatermark(platform: string, handle: string, iso: string): Promise<void> {
+  const map = await readMap();
+  map[watermarkKey(platform, handle)] = iso;
+  await chrome.storage.local.set({ [KEY]: map });
+}
+
 /**
  * 纯函数：按水位线过滤记录。
- * - 有水位线：保留 created_at >= 水位线 的记录（列表按新→旧排序，边界重复由发布去重兜底）
+ * - 有水位线：保留 created_at >= 水位线 的记录
  * - 无水位线（首次）：保留 created_at >= now - lookbackDays 的记录
- * 返回保留记录与其中最新时间（推进水位线用）。
+ * 返回保留记录与其中最新/最旧时间（推进水位线用）。
  */
 export function filterSinceRecords(
   records: Array<Record<string, unknown>>,
@@ -42,16 +49,16 @@ export function filterSinceRecords(
   watermarkIso: string | undefined,
   lookbackDays: number,
   now = Date.now()
-): { kept: Array<Record<string, unknown>>; newestIso?: string } {
+): { kept: Array<Record<string, unknown>>; newestIso?: string; oldestIso?: string } {
   const threshold = watermarkIso
     ? Date.parse(watermarkIso)
     : now - Math.max(1, lookbackDays) * 24 * 60 * 60_000;
   const kept: Array<Record<string, unknown>> = [];
   let newest: number | undefined;
+  let oldest: number | undefined;
   for (const record of records) {
     const raw = record[field];
     if (typeof raw !== "string") {
-      // 没有发布时间的记录保留（由下游 id 去重兜底），但不推进水位线。
       kept.push(record);
       continue;
     }
@@ -59,6 +66,11 @@ export function filterSinceRecords(
     if (!Number.isFinite(time) || time < threshold) continue;
     kept.push(record);
     if (newest === undefined || time > newest) newest = time;
+    if (oldest === undefined || time < oldest) oldest = time;
   }
-  return { kept, newestIso: newest !== undefined ? new Date(newest).toISOString() : undefined };
+  return {
+    kept,
+    newestIso: newest !== undefined ? new Date(newest).toISOString() : undefined,
+    oldestIso: oldest !== undefined ? new Date(oldest).toISOString() : undefined
+  };
 }

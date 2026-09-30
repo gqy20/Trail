@@ -254,6 +254,7 @@ export type RuntimeMessage =
   | { type: "GET_FOLLOWS"; platform: string }
   | { type: "ADD_FOLLOW"; platform: string; handle: string; displayName?: string }
   | { type: "REMOVE_FOLLOW"; platform: string; handle: string }
+  | { type: "BACKFILL_ACCOUNT"; platform: string; handle: string; days: number }
   | { type: "REMOVE_FOLLOWS"; platform: string; handles: string[] }
   | { type: "IMPORT_FOLLOWS"; platform: string; text: string }
   | { type: "GET_POPUP_STATE" }

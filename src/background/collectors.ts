@@ -4,6 +4,7 @@ import { matchesBrowserTool } from "../browser-tools/matcher";
 import { executeAuthorizedCollectorBatch, importBundledBrowserTools } from "./browserTools";
 import { clampIntervalHours, isCollectorDue } from "../collector/schedule";
 import { getFollows } from "../collector/follows";
+import { resetWatermark } from "../collector/watermarks";
 import { pickRotation } from "../collector/rotation";
 import type { CollectorJob, CollectorState } from "../collector/types";
 import { logError, logInfo, logWarn } from "../logging/logger";
@@ -223,4 +224,17 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error("采集执行超时，请检查页面后重试。")), ms);
   })]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * 回填指定账号：重置水位线到 N 天前，触发一轮采集。
+ * 水位线推进到本轮最旧一条（而非最新），后续轮次继续往前补。
+ */
+export async function backfillAccount(platform: string, handle: string, days: number): Promise<{ started: boolean; message?: string }> {
+  await initialization;
+  if (!Number.isInteger(days) || days < 1 || days > 3650) throw new Error("回填天数需为 1-3650。");
+  const target = new Date(Date.now() - days * 24 * 60 * 60_000).toISOString();
+  await resetWatermark(platform, handle, target);
+  logInfo("collector", "backfill.trigger", "回填已触发", { platform, handle, days, target });
+  return { started: true, message: `已重置 @${handle} 水位线到 ${days} 天前，下一轮采集将从此时间开始补全。` };
 }

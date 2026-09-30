@@ -40,6 +40,7 @@ type RuntimeResponseMap = {
   GET_FOLLOWS: import("../collector/types").FollowEntry[];
   ADD_FOLLOW: import("../collector/types").FollowEntry[];
   REMOVE_FOLLOW: import("../collector/types").FollowEntry[];
+  BACKFILL_ACCOUNT: { started: boolean; message?: string };
   REMOVE_FOLLOWS: import("../collector/types").FollowEntry[];
   IMPORT_FOLLOWS: import("../collector/types").FollowsImportResult;
   GET_POPUP_STATE: PopupState;
