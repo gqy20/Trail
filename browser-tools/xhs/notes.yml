@@ -72,7 +72,6 @@ detail_extract:
   url_field: url
   wait_for: "#detail-desc, .note-text, #detail-title"
   timeout_ms: 12000
-  max_items: 3
   delay_ms: 5000
   blockers:
     - url_contains: "error_code=3000"
