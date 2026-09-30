@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Play, RefreshCw } from "lucide-react";
+import { TaskStatus, useTransientNotice } from "./feedback";
 import { sendMessage } from "../../shared/runtime";
 import type { CheckinItem, CheckinState } from "../../checkin/types";
 import { localClock } from "../../checkin/schedule";
@@ -7,6 +8,9 @@ import { localClock } from "../../checkin/schedule";
 export function CheckinsView() {
   const [state, setState] = useState<CheckinState>();
   const [error, setError] = useState("");
+  const [errorId, setErrorId] = useState("");
+  const [noticeId, setNoticeId] = useState("");
+  const [notice, setNotice] = useTransientNotice();
   const [busy, setBusy] = useState<string>();
   useEffect(() => {
     let alive = true;
@@ -21,22 +25,24 @@ export function CheckinsView() {
     return () => { alive = false; chrome.storage.onChanged.removeListener(changed); };
   }, []);
 
-  async function act(id: string, fn: () => Promise<unknown>) {
+  async function act(id: string, fn: () => Promise<unknown>, saved = false) {
     setBusy(id);
+    setErrorId(id);
+    setNotice("");
     setError("");
-    try { await fn(); setState(await sendMessage({ type: "GET_CHECKIN_STATE" })); }
+    try { await fn(); setState(await sendMessage({ type: "GET_CHECKIN_STATE" })); if (saved) { setNoticeId(id); setNotice("已保存"); } }
     catch (err) { setError(errorText(err)); }
     finally { setBusy(undefined); }
   }
 
   return <section className="checkins-view stack">
     <div className="view-heading inline-view-heading"><h1>每日签到</h1><p className="muted text-small" title="浏览器启动后补跑到期任务，复用各网站登录状态。">每天自动签到，需要登录或验证时暂停。</p></div>
-    {error ? <p role="alert" className="error-text">{error}</p> : null}
+    {error && (!errorId || errorId === "sync") ? <p role="alert" className="error-text">{error}</p> : null}
     {!state ? <p className="muted">正在读取签到工具…</p> : null}
-    {state?.items.map((item) => <CheckinCard key={item.toolId} item={item} busy={busy !== undefined}
+    {state?.items.map((item) => <CheckinCard key={item.toolId} item={item} busy={busy !== undefined} error={errorId === item.toolId ? error : ""} notice={noticeId === item.toolId ? notice : ""}
       onRun={() => void act(item.toolId, () => sendMessage({ type: "RUN_CHECKIN", toolId: item.toolId }))}
       onOpen={() => void act(item.toolId, () => sendMessage({ type: "OPEN_CHECKIN_PAGE", toolId: item.toolId }))}
-      onSave={(enabled, time) => void act(item.toolId, () => sendMessage({ type: "CONFIGURE_CHECKIN", toolId: item.toolId, enabled, time }))}
+      onSave={(enabled, time) => void act(item.toolId, () => sendMessage({ type: "CONFIGURE_CHECKIN", toolId: item.toolId, enabled, time }), true)}
     />)}
     {state?.items.length === 0 ? <div className="panel stack"><p>还没有签到工具。</p>
       <button className="button secondary" title="同步内置签到工具" disabled={busy !== undefined} onClick={() => void act("sync", () => sendMessage({ type: "IMPORT_BUNDLED_BROWSER_TOOLS" }))}><RefreshCw size={15} /> 同步</button>
@@ -44,8 +50,8 @@ export function CheckinsView() {
   </section>;
 }
 
-function CheckinCard({ item, busy, onRun, onOpen, onSave }: {
-  item: CheckinItem; busy: boolean; onRun: () => void; onOpen: () => void;
+function CheckinCard({ item, busy, error, notice, onRun, onOpen, onSave }: {
+  item: CheckinItem; busy: boolean; error: string; notice: string; onRun: () => void; onOpen: () => void;
   onSave: (enabled: boolean, time: string) => void;
 }) {
   const { job } = item;
@@ -53,7 +59,7 @@ function CheckinCard({ item, busy, onRun, onOpen, onSave }: {
   useEffect(() => setTime(job.time), [job.time]);
   const today = job.lastSuccessDay === localClock(Date.now(), item.timezone).day;
   const running = job.status === "running";
-  const badge = today ? "已签" : running ? "签到中" : job.status === "needs_user" ? "需处理" : job.status === "failed" ? "失败" : "待签";
+  const badge = running ? "签到中" : today ? "已签" : job.status === "needs_user" ? "需处理" : job.status === "failed" ? "失败" : "待签";
   const account = job.result?.data.account?.[0];
   const meta = [
     account?.points !== undefined ? `积分 ${account.points}` : null,
@@ -66,8 +72,9 @@ function CheckinCard({ item, busy, onRun, onOpen, onSave }: {
       <div className="checkin-title-row"><a className="checkin-title" href={item.entryUrl} target="_blank" rel="noreferrer" title={safeHost(item.entryUrl)}>{item.name.replace(/每日签到$/, "")}</a>
         {meta ? <span className="checkin-meta muted text-small">{meta}</span> : null}
       </div>
-      <span className={`mini-badge ${today ? "run-completed" : ""}`}>{badge}{job.lastAttemptAt ? ` · ${formatRunTime(job.lastAttemptAt)}` : ""}</span>
+      <TaskStatus tone={running ? "running" : today ? "success" : job.status === "failed" ? "failed" : "attention"}>{badge}{job.lastAttemptAt ? ` · ${formatRunTime(job.lastAttemptAt)}` : ""}</TaskStatus>
     </div>
+    {error ? <p role="alert" className="error-text text-small">{error}</p> : null}
     {job.status === "needs_user" || job.status === "failed" ? (job.message ? <p className="error-text text-small">{job.message}</p> : null) : null}
     <div className="checkin-controls">
       <div className="checkin-schedule">
@@ -75,6 +82,7 @@ function CheckinCard({ item, busy, onRun, onOpen, onSave }: {
         <input type="time" aria-label={`${item.name}签到时间`} value={time} disabled={busy || running} onChange={(e) => setTime(e.target.value)} />
         {time !== job.time ? <button className="button secondary" disabled={busy || !time} onClick={() => onSave(job.enabled, time)}>保存</button> : null}
       </div>
+      {notice ? <span className="muted text-small" role="status">{notice}</span> : null}
       <div className="checkin-actions">
         {!today ? <button className="button action" disabled={busy || running} onClick={onRun}><Play size={15} />{running ? "签到中…" : job.status === "needs_user" ? "重试" : "签到"}</button> : null}
         <button className="button secondary" disabled={busy} onClick={onOpen}><ExternalLink size={15} />打开</button>

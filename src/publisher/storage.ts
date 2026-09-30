@@ -1,5 +1,5 @@
 import { normalizeFeedPost } from "./merge";
-import type { FeedPost, FeedPublisherConfig, FeedPublisherSnapshot, FeedPublishState } from "./types";
+import type { FeedConnectionState, FeedPost, FeedPublisherConfig, FeedPublisherSnapshot, FeedPublishState } from "./types";
 
 const STORE_KEY = "trail.feedPublisher.v1";
 const MAX_STAGED_POSTS = 2000;
@@ -57,7 +57,9 @@ export function normalizeFeedConfig(input: FeedPublisherConfig): FeedPublisherCo
 
 export async function saveFeedConfig(input: FeedPublisherConfig): Promise<void> {
   const store = await readStore();
-  await writeStore({ ...store, config: normalizeFeedConfig(input) });
+  const config = normalizeFeedConfig(input);
+  const unchanged = store.config && sameFeedConnectionConfig(store.config, config);
+  await writeStore({ ...store, config, state: { ...store.state, connection: unchanged ? store.state?.connection : undefined } });
 }
 
 export async function requireFeedConfig(): Promise<FeedPublisherConfig> {
@@ -93,4 +95,14 @@ export async function clearStagedPosts(): Promise<void> {
 export async function patchFeedState(patch: FeedPublishState): Promise<void> {
   const store = await readStore();
   await writeStore({ ...store, state: { ...store.state, ...patch } });
+}
+
+/** 只将测试结果关联到仍在使用的仓库/凭据，避免旧请求给新配置亮绿灯。 */
+export function sameFeedConnectionConfig(a: FeedPublisherConfig, b: FeedPublisherConfig): boolean {
+  return (["owner", "repo", "branch", "token"] as const).every((key) => a[key].trim() === b[key].trim());
+}
+export async function saveFeedConnection(config: FeedPublisherConfig, connection: FeedConnectionState): Promise<void> {
+  const store = await readStore();
+  if (!store.config || !sameFeedConnectionConfig(store.config, config)) return;
+  await writeStore({ ...store, state: { ...store.state, connection } });
 }

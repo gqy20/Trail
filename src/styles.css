@@ -3014,3 +3014,29 @@ code, pre, kbd, samp, .code-textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Repository feedback stays with its heading; connection is the last verified state. */
+.feed-view .repository-heading { flex-wrap: wrap; gap: 8px 12px; }
+.repository-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+.repository-connection { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--trail-muted); white-space: nowrap; }
+.connection-dot { width: 6px; height: 6px; border-radius: 50%; background: #9b9b95; flex: 0 0 6px; }
+.repository-connection.connected { color: #43755b; }
+.repository-connection.connected .connection-dot { background: #47865f; }
+.repository-connection.failed .connection-dot { background: #b75c50; }
+.repository-connection.checking .connection-dot { background: #b58a43; }
+.repository-save-notice { font-size: 11px; }
+
+/* Inline feedback and semantic task status across the sidebar. */
+.task-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--trail-muted); white-space: nowrap; }
+.task-status > span { width: 6px; height: 6px; border-radius: 50%; background: #a68d53; flex-shrink: 0; }
+.task-status-success { color: #43755b; }
+.task-status-success > span { background: #47865f; }
+.task-status-running > span { background: var(--trail-accent); }
+.task-status-failed > span { background: #b75c50; }
+.inline-feedback-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.inline-feedback-actions .catalog-notice { max-width: 320px; overflow-wrap: anywhere; }
+.task-feedback-details summary { cursor: pointer; font-size: 12px; color: var(--trail-muted); }
+.task-feedback-details p { margin: 6px 0 0; overflow-wrap: anywhere; }
+.queue-run-feedback { position: sticky; bottom: 0; padding-top: 8px; background: var(--trail-bg, #fbfaf7); }
+.queue-run-feedback .queue-footer { position: static; }
+.queue-run-feedback .queue-progress { margin: 0 0 8px; border: 0; box-shadow: none; padding: 8px 0; background: transparent; }

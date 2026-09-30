@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTransientNotice } from "./feedback";
 import { sendMessage } from "../../shared/runtime";
 import type { BudgetConfig, BudgetState } from "../../collector/budget";
 
@@ -26,8 +27,9 @@ function BudgetRow({ state }: { state: BudgetState }) {
   const [draft, setDraft] = useState<BudgetConfig>(state.config);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useTransientNotice();
   useEffect(() => { setDraft(state.config); }, [state.config.hours, state.config.profileIntervalSeconds, state.config.detailIntervalSeconds, state.config.profileLimit, state.config.detailLimit]);
+  const dirty = (["hours", "profileIntervalSeconds", "detailIntervalSeconds", "profileLimit", "detailLimit"] as const).some((key) => (draft[key] ?? 0) !== (state.config[key] ?? 0));
   const label = state.platform === "twitter" ? "X" : state.platform === "xhs" ? "小红书" : state.platform;
   return <section className="budget-row stack"><div className="section-heading"><strong>{label}</strong><span className="muted text-small">{state.used} / {state.limit} 分钟 · 主页 {state.profile}{state.config.profileLimit ? ` / ${state.config.profileLimit}` : ""} 次 · 详情 {state.detail}{state.config.detailLimit ? ` / ${state.config.detailLimit}` : ""} 次</span></div>
     <div className="budget-config-row">
@@ -41,6 +43,7 @@ function BudgetRow({ state }: { state: BudgetState }) {
         catch (err) { setError(err instanceof Error ? err.message : "保存失败。"); }
         finally { setBusy(false); }
       }}>保存预算</button>
+      {dirty ? <span className="muted text-small">未保存</span> : null}
       {notice ? <span className="muted text-small" role="status">{notice}</span> : null}
     </div>
     <p className="muted text-small">次数上限为 0 时仅按浏览量限制；次数与浏览量任一达到上限即暂停。修改仅影响当前平台，已用额度保留。</p>

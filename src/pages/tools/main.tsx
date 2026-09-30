@@ -12,6 +12,7 @@ import { FeedPublisherView } from "./FeedPublisher";
 import { LogsView } from "./LogsView";
 import { CollectorsView } from "./CollectorsView";
 import { ResearchRecorder } from "../../popup/ResearchRecorder";
+import { useTransientNotice } from "./feedback";
 import { BudgetSettings } from "./BudgetSettings";
 import { describeBatchRun, type BatchRunState } from "../../background/runControl";
 import { TRAIL_VERSION } from "../../shared/version";
@@ -59,8 +60,16 @@ function BrowserToolsApp() {
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
   const [activeView, setActiveView] = useState<"research" | "collect" | "results" | "settings" | "checkins" | "feed" | "logs" | "collectors">("research");
   const [logCategory, setLogCategory] = useState<"runtime" | "literature">("runtime");
-  const [error, setError] = useState("");
-  const [catalogNotice, setCatalogNotice] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [errorScope, setErrorScope] = useState({ view: activeView, tool: selectedId, area: "view" });
+  const [catalogNotice, setCatalogNotice] = useTransientNotice(7000);
+  const [catalogArea, setCatalogArea] = useState("library");
+  function setError(message: string, area = "view") {
+    setErrorScope({ view: activeView, tool: selectedId, area });
+    setErrorMessage(message);
+  }
+  const error = errorScope.view === activeView && (activeView !== "collect" || errorScope.tool === selectedId) ? errorMessage : "";
+  useEffect(() => { setErrorMessage(""); }, [activeView, selectedId]);
   const [executionProgress, setExecutionProgress] = useState<Record<string, BrowserToolExecutionProgress>>({});
   const [batchRun, setBatchRun] = useState<BatchRunState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -162,6 +171,7 @@ function BrowserToolsApp() {
 
   async function importTool() {
     if (!yamlDraft.trim()) return;
+    setCatalogArea("yaml");
     setBusy(true);
     setError("");
     try {
@@ -170,13 +180,14 @@ function BrowserToolsApp() {
       await refresh(imported.id);
       setCatalogNotice(`已导入「${imported.definition.name}」。${imported.definition.checkin || imported.definition.feed ? "规则内容变化后，自动任务需重新开启。" : "可从工具列表进入使用。"}`);
     } catch (err) {
-      setError(toErrorMessage(err));
+      setError(toErrorMessage(err), "yaml");
     } finally {
       setBusy(false);
     }
   }
 
   async function syncBundledTools() {
+    setCatalogArea("library");
     setBusy(true);
     setError("");
     setCatalogNotice("");
@@ -185,7 +196,7 @@ function BrowserToolsApp() {
       setCatalogNotice(formatBundledImportResult(result));
       await refresh();
     } catch (err) {
-      setError(toErrorMessage(err));
+      setError(toErrorMessage(err), "library");
     } finally {
       setBusy(false);
     }
@@ -222,6 +233,7 @@ function BrowserToolsApp() {
     try {
       await sendMessage({ type: "RESTORE_BUNDLED_BROWSER_TOOL", toolId });
       await refresh(toolId);
+      setCatalogArea("library");
       setCatalogNotice("已切换到内置版本，原自定义规则已另存为备份。");
     } catch (err) { setError(toErrorMessage(err)); }
     finally { setBusy(false); }
@@ -334,6 +346,7 @@ function BrowserToolsApp() {
       const enabled = tool.enabled === false;
       await sendMessage({ type: "SET_BROWSER_TOOL_ENABLED", toolId: tool.id, enabled });
       await refresh();
+      setCatalogArea("library");
       setCatalogNotice(enabled ? `已启用「${tool.definition.name}」，自动任务需单独开启。` : `已停用「${tool.definition.name}」，规则和数据已保留。`);
     } catch (err) { setError(toErrorMessage(err)); }
     finally { setBusy(false); }
@@ -366,13 +379,14 @@ function BrowserToolsApp() {
           </nav>
         </header>
 
-        {error ? <div className="card error-text">{error}</div> : null}
+        {error && !["collect", "results", "settings"].includes(activeView) ? <p role="alert" className="error-text text-small">{error}</p> : null}
 
         {activeView === "research" ? <ResearchRecorder embedded /> : null}
 
         {activeView === "collect" ? (
           <section className="collector-view">
             <div className="view-heading section-heading"><h1>网页工具</h1><button className="button secondary compact-button" onClick={() => setActiveView("settings")}>管理规则</button></div>
+            {error ? <p role="alert" className="error-text text-small">{error}</p> : null}
             <div className="workspace-tool-picker">
               <label htmlFor="workspace-tool">当前工具</label>
               <select id="workspace-tool" className="input" value={selectedTool?.definition.checkin ? "" : selectedId} disabled={busy} onChange={(event) => setSelectedId(event.target.value)}>
@@ -543,7 +557,7 @@ function BrowserToolsApp() {
         ) : null}
 
         {activeView === "results" ? (
-          <section className="stack"><div className="section-heading"><h1>工具结果</h1><button className="button secondary compact-button" onClick={() => setActiveView("collect")}>返回网页工具</button></div>{lastResult
+          <section className="stack"><div className="section-heading"><h1>工具结果</h1><button className="button secondary compact-button" onClick={() => setActiveView("collect")}>返回网页工具</button></div>{error ? <p role="alert" className="error-text text-small">{error}</p> : null}{lastResult
             ? <RunResult result={lastResult} definition={lastResultDefinition} onOpenQueue={() => { setLogCategory("literature"); setActiveView("logs"); }} />
             : <EmptyResult definition={selectedTool?.definition} onBack={() => setActiveView("collect")} />}</section>
         ) : null}
@@ -567,6 +581,7 @@ function BrowserToolsApp() {
               <button className="icon-button" title="刷新页面状态" aria-label="刷新页面状态" disabled={busy} onClick={() => void refresh(selectedId)}><RefreshCw size={16} /></button>
             </div>
 
+            {error && errorScope.area === "view" ? <p role="alert" className="error-text text-small">{error}</p> : null}
             <section className="settings-section stack">
               <div className="section-heading tool-library-heading"><strong>工具库</strong><span className="muted text-small tool-library-count">{state?.tools.filter((tool) => tool.enabled !== false).length || 0} / {state?.tools.length || 0} 已启用</span><span className="muted text-small">停用后隐藏工具并关闭自动任务，规则和数据保留。</span></div>
               <div className="bundled-tools-row">
@@ -574,11 +589,13 @@ function BrowserToolsApp() {
                   <strong>内置规则</strong>
                   <small>随扩展更新；同步保留自定义规则</small>
                 </span>
+                <div className="inline-feedback-actions">
+                {catalogNotice && catalogArea === "library" ? <span role="status" className="muted text-small catalog-notice">{catalogNotice}</span> : null}
                 <button className="button secondary compact-button" disabled={busy} onClick={() => void syncBundledTools()}>
                   <RefreshCw size={14} /> 同步
-                </button>
+                </button></div>
               </div>
-              {catalogNotice ? <p className="muted text-small catalog-notice">{catalogNotice}</p> : null}
+              {error && errorScope.area === "library" ? <p role="alert" className="error-text text-small">{error}</p> : null}
               <div className="tool-list">
                 {(state?.tools || []).map((tool) => {
                   const bundled = tool.source?.type === "bundled";
@@ -618,7 +635,9 @@ function BrowserToolsApp() {
               <div className="toolbar">
                 <button className="button secondary" onClick={() => fileInputRef.current?.click()}><FileUp size={16} /> 选择文件</button>
                 <button className="button primary" disabled={busy || !yamlPreview?.definition} onClick={() => void importTool()}>{importAction}</button>
+                {catalogNotice && catalogArea === "yaml" ? <span role="status" className="muted text-small catalog-notice">{catalogNotice}</span> : null}
               </div>
+              {error && errorScope.area === "yaml" ? <p role="alert" className="error-text text-small">{error}</p> : null}
             </details>
             <BudgetSettings />
             {state?.backups?.length ? <details className="settings-section stack yaml-settings">

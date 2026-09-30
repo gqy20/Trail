@@ -1,12 +1,20 @@
 import { commitGitHubFiles, fetchGitHubContent, probeGitHubRepo } from "./github";
 import { buildFeedMetaFile, buildFeedPostsFile, mergeFeedPosts, normalizeFeedPost } from "./merge";
 import { planFeedFiles } from "./rss";
-import { clearStagedPosts, getStagedPosts, patchFeedState, requireFeedConfig } from "./storage";
+import { clearStagedPosts, getStagedPosts, patchFeedState, requireFeedConfig, saveFeedConnection } from "./storage";
 import type { FeedPost, FeedPublishResult, FeedRepoProbe } from "./types";
 import { FEED_META_PATH, FEED_POSTS_PATH } from "./types";
 
 export async function probeFeedRepo(): Promise<FeedRepoProbe> {
-  return probeGitHubRepo(await requireFeedConfig());
+  const config = await requireFeedConfig();
+  try {
+    const probe = await probeGitHubRepo(config);
+    await saveFeedConnection(config, { status: "connected", checkedAt: new Date().toISOString(), ...probe });
+    return probe;
+  } catch (error) {
+    await saveFeedConnection(config, { status: "failed", checkedAt: new Date().toISOString() });
+    throw error;
+  }
 }
 
 export async function publishFeed(): Promise<FeedPublishResult> {

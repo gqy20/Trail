@@ -34,6 +34,7 @@ export function FeedPublisherView() {
   const [snapshot, setSnapshot] = useState<FeedPublisherSnapshot>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [operation, setOperation] = useState("");
   const [busy, setBusy] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [draft, setDraft] = useState<FeedPublisherConfig>(defaultConfig());
@@ -77,6 +78,7 @@ export function FeedPublisherView() {
   }, []);
 
   async function act(label: string, fn: () => Promise<string | undefined>) {
+    setOperation(label);
     setBusy(true);
     setError("");
     setNotice("");
@@ -86,29 +88,40 @@ export function FeedPublisherView() {
       setSnapshot(await sendMessage({ type: "GET_FEED_STATE" }));
     } catch (err) {
       setError(errorText(err));
+      setSnapshot(await sendMessage({ type: "GET_FEED_STATE" }).catch(() => snapshot));
     } finally {
       setBusy(false);
     }
   }
 
+  useEffect(() => {
+    if (!notice || operation !== "save") return;
+    const timer = window.setTimeout(() => setNotice(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice, operation]);
   const state = snapshot?.state;
+  const matchesSaved = snapshot?.config && (["owner", "repo", "branch", "token"] as const).every((key) => draft[key].trim() === snapshot.config![key].trim());
+  const connection = matchesSaved ? state?.connection : undefined;
+  const testing = busy && operation === "probe";
+  const connectionLabel = testing ? "测试中" : connection?.status === "connected" ? "已连接" : connection?.status === "failed" ? "连接失败" : !matchesSaved && state?.connection ? "待重新测试" : "未测试";
+  const repositoryFeedback = operation === "save" || operation === "probe";
   return <section className="feed-view stack">
     <div className="view-heading feed-heading"><h1>发布</h1><p className="muted text-small">将采集记录发布到 GitHub，更新 RSS 与时间线。</p></div>
-    {error ? <p role="alert" className="error-text">{error}</p> : null}
-    {notice ? <p className="text-small">{notice}</p> : null}
 
     <article className="panel stack">
-      <div className="section-heading repository-heading"><strong>GitHub 仓库</strong><div className="feed-actions">
+      <div className="section-heading repository-heading"><div className="repository-title"><strong>GitHub 仓库</strong><span className={`repository-connection ${testing ? "checking" : connection?.status || "unknown"}`} role="status" title={connection ? `最近测试：${formatTime(connection.checkedAt)}${connection.status === "connected" ? ` · ${connection.repoPrivate ? "私有" : "公共"}仓库 · 默认分支 ${connection.defaultBranch}` : ""}` : "保存配置后测试连接"}><span className="connection-dot" aria-hidden="true" />{connectionLabel}</span></div><div className="feed-actions">
+        {repositoryFeedback && notice ? <span className="repository-save-notice muted text-small" role="status">{notice}</span> : null}
         <button className="button quiet" disabled={busy} onClick={() => void act("save", async () => {
           await sendMessage({ type: "SAVE_FEED_CONFIG", config: currentDraft() });
-          return "配置已保存。";
+          return "已保存";
         })}>保存</button>
         <button className="button quiet" title="保存当前表单并探测仓库连通性" disabled={busy} onClick={() => void act("probe", async () => {
           await sendMessage({ type: "SAVE_FEED_CONFIG", config: currentDraft() });
-          const probe = await sendMessage({ type: "PROBE_FEED_REPO" });
-          return `配置已保存。连接成功：仓库为${probe.repoPrivate ? "私有" : "公共"}，默认分支 ${probe.defaultBranch}。`;
-        })}>测试连接</button>
+          await sendMessage({ type: "PROBE_FEED_REPO" });
+          return undefined;
+        })}>{testing ? "测试中…" : "测试连接"}</button>
       </div></div>
+      {repositoryFeedback && error ? <p role="alert" className="error-text text-small">{error}</p> : null}
       <div className="feed-config-grid">
         <div className="feed-config-wide feed-config-identity">
           <label>所有者<input ref={ownerRef} value={draft.owner} disabled={busy} onChange={(e) => setDraft({ ...draft, owner: e.target.value })} placeholder="gqy20" /></label>
@@ -144,6 +157,8 @@ export function FeedPublisherView() {
             `发布成功：新增 ${result.newPosts} 条，共 ${result.totalPosts} 条，写入 ${result.files.length} 个文件。`)
         )}><Send size={15} />{busy ? "正在发布…" : "立即发布"}</button>
       </div>
+      {!repositoryFeedback && error ? <p role="alert" className="error-text text-small">{error}</p> : null}
+      {!repositoryFeedback && notice ? <p role="status" className="text-small">{notice}</p> : null}
       {state?.lastPublishAt
         ? <p className="checkin-meta muted text-small">{[
           formatTime(state.lastPublishAt),

@@ -42,7 +42,10 @@ export type FeedPublisherConfig = {
   excludeRetweets?: boolean;
 };
 
+export type FeedConnectionState = { status: "connected" | "failed"; checkedAt: string; repoPrivate?: boolean; defaultBranch?: string };
+
 export type FeedPublishState = {
+  connection?: FeedConnectionState;
   lastPublishAt?: string;
   totalPosts?: number;
   lastNewPosts?: number;

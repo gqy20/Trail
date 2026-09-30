@@ -1,3 +1,4 @@
+import { useTransientNotice } from "./feedback";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, Circle, Download, ExternalLink, FileUp, LoaderCircle, Pause, Play, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { parseLiteratureCsv } from "../../literature-queue/csv";
@@ -24,6 +25,8 @@ export function LiteratureQueueView() {
   const [scope, setScope] = useState<QueueScope>("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [errorArea, setErrorArea] = useState("run");
+  const [notice, setNotice] = useTransientNotice();
   const [progress, setProgress] = useState<LiteratureDownloadProgress>();
   const [concurrency, setConcurrency] = useState(2);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,13 +53,16 @@ export function LiteratureQueueView() {
 
   async function importFile(file?: File) {
     if (!file) return;
+    setErrorArea("import");
     setError("");
+    setNotice("");
     try {
       if (queue && !window.confirm(`用“${file.name}”替换当前下载队列？`)) return;
       const next = parseLiteratureCsv(await file.text(), file.name);
       await saveLiteratureQueue(next);
       setQueue(next);
       setProgress(undefined);
+      setNotice(`已导入 ${next.items.length} 篇`);
     } catch (err) {
       setError(toErrorMessage(err));
     }
@@ -65,6 +71,8 @@ export function LiteratureQueueView() {
   async function startDownload() {
     if (!queue || runnableItems.length === 0) return;
     setBusy(true);
+    setErrorArea("run");
+    setNotice("");
     setError("");
     setProgress({
       type: "LITERATURE_DOWNLOAD_PROGRESS",
@@ -83,8 +91,8 @@ export function LiteratureQueueView() {
       items: queue.items.map((item) => runningIds.has(item.id) ? { ...item, status: "resolving", error: undefined } : item)
     };
     setQueue(runningQueue);
-    await saveLiteratureQueue(runningQueue);
     try {
+      await saveLiteratureQueue(runningQueue);
       const result = await sendMessage({
         type: "DOWNLOAD_LITERATURE_QUEUE",
         items: runnableItems.map(({ id, title, doi, pdfUrl, downloadUrl }) => ({ id, title, doi, pdfUrl, downloadUrl })),
@@ -117,6 +125,7 @@ export function LiteratureQueueView() {
 
   async function togglePause() {
     if (!busy || !progress) return;
+    setErrorArea("run");
     setError("");
     const targetState = progress.state === "paused" ? "running" : "paused";
     setProgress((current) => current ? { ...current, state: targetState } : current);
@@ -134,7 +143,9 @@ export function LiteratureQueueView() {
   async function updateConcurrency(value: number) {
     const next = Math.max(1, Math.min(4, value));
     setConcurrency(next);
-    await saveLiteratureQueuePreferences({ concurrency: next });
+    setErrorArea("run"); setError("");
+    try { await saveLiteratureQueuePreferences({ concurrency: next }); }
+    catch (err) { setError(toErrorMessage(err)); }
   }
 
   async function resetFailures() {
@@ -145,15 +156,16 @@ export function LiteratureQueueView() {
         ? { ...item, status: item.downloadUrl || item.pdfUrl || item.doi ? "pending" as const : "needs_search" as const, error: undefined }
         : item)
     };
-    await saveLiteratureQueue(next);
-    setQueue(next);
+    setErrorArea("run"); setError("");
+    try { await saveLiteratureQueue(next); setQueue(next); }
+    catch (err) { setError(toErrorMessage(err)); }
   }
 
   async function clearQueue() {
     if (!queue || !window.confirm("清空当前文献下载队列？已下载文件不会被删除。")) return;
-    await clearLiteratureQueue();
-    setQueue(undefined);
-    setProgress(undefined);
+    setErrorArea("import"); setError("");
+    try { await clearLiteratureQueue(); setQueue(undefined); setProgress(undefined); }
+    catch (err) { setError(toErrorMessage(err)); }
   }
 
   if (!queue) {
@@ -164,7 +176,7 @@ export function LiteratureQueueView() {
         <p>支持 CSV，自动识别 title、doi、pdf_url、download_url 和 decision，并按 DOI 或题名去重。</p>
         <button className="button primary" onClick={() => fileInputRef.current?.click()}><FileUp size={16} /> 导入文献 CSV</button>
         <input ref={fileInputRef} className="visually-hidden" type="file" accept=".csv,text/csv" onChange={(event) => { void importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-        {error ? <p className="error-text text-small">{error}</p> : null}
+        {error ? <p role="alert" className="error-text text-small">{error}</p> : null}
       </section>
     );
   }
@@ -174,11 +186,13 @@ export function LiteratureQueueView() {
       <div className="queue-heading">
         <div><span className="tool-eyebrow">文献下载队列</span><div className="queue-file-heading"><h2>{queue.sourceName}</h2><p>{queue.sourceRows} 条原始记录 · 去重后 {queue.items.length} 篇</p></div></div>
         <div className="queue-heading-actions">
+          {notice ? <span className="muted text-small" role="status">{notice}</span> : null}
           <button className="button quiet" title="用文献 CSV 替换当前队列" disabled={busy} onClick={() => fileInputRef.current?.click()}><FileUp size={15} />导入文献</button>
           <button className="icon-button danger" title="清空队列" disabled={busy} onClick={() => void clearQueue()}><Trash2 size={15} /></button>
         </div>
       </div>
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".csv,text/csv" onChange={(event) => { void importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+      {error && errorArea === "import" ? <p role="alert" className="error-text text-small">{error}</p> : null}
 
       <p className="queue-summary muted text-small">{[
         `可处理 ${summary.actionable}`,
@@ -205,6 +219,12 @@ export function LiteratureQueueView() {
         </div>
       </div>
 
+      <div className="queue-list">
+        {scopedItems.slice(0, 60).map((item) => <QueueRow item={item} key={item.id} />)}
+        {scopedItems.length > 60 ? <p className="queue-list-note">显示前 60 篇，共 {scopedItems.length} 篇。</p> : null}
+      </div>
+
+      <div className="queue-run-feedback">
       {busy && progress ? (
         <div className="queue-progress" aria-live="polite">
           <div className="queue-progress-heading">
@@ -226,11 +246,6 @@ export function LiteratureQueueView() {
         </div>
       ) : null}
 
-      <div className="queue-list">
-        {scopedItems.slice(0, 60).map((item) => <QueueRow item={item} key={item.id} />)}
-        {scopedItems.length > 60 ? <p className="queue-list-note">显示前 60 篇，共 {scopedItems.length} 篇。</p> : null}
-      </div>
-
       <div className="queue-footer">
         <button className="button secondary" title="把失败/需处理项重置为待处理" disabled={busy || summary.needsUser + summary.failed === 0} onClick={() => void resetFailures()}><RotateCcw size={15} /> 重置</button>
         <button className="button secondary" title="导出 CSV 报告" disabled={busy} onClick={() => exportQueue(queue)}><Download size={15} /> 导出</button>
@@ -238,7 +253,8 @@ export function LiteratureQueueView() {
           <Download size={16} /> {busy ? "正在处理…" : `下载 ${runnableItems.length} 篇`}
         </button>
       </div>
-      {error ? <p className="error-text text-small">{error}</p> : null}
+      {error && errorArea === "run" ? <p role="alert" className="error-text text-small">{error}</p> : null}
+      </div>
     </section>
   );
 }

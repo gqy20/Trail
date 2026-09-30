@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Clock, FileDown, FileUp, Plus, X } from "lucide-react";
 import { exportFollowsCsv } from "../../collector/follows";
+import { TaskStatus, useTransientNotice } from "./feedback";
 import { sendMessage } from "../../shared/runtime";
 import type { CollectorItem, FollowEntry } from "../../collector/types";
 
@@ -9,7 +10,8 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
   const [follows, setFollows] = useState<FollowEntry[]>();
   const [handle, setHandle] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useTransientNotice();
+  const [feedbackArea, setFeedbackArea] = useState<"accounts" | "collect" | "settings">("collect");
   const [busy, setBusy] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
@@ -34,7 +36,8 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
     return () => { alive = false; chrome.storage.onChanged.removeListener(changed); };
   }, [toolId, platform]);
 
-  async function act(fn: () => Promise<string | undefined>) {
+  async function act(fn: () => Promise<string | undefined>, area: "accounts" | "collect" | "settings" = "accounts") {
+    setFeedbackArea(area);
     setBusy(true);
     setError("");
     setNotice("");
@@ -74,19 +77,20 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
   return <div className="panel collector-panel stack">
     <div className="collector-head">
       <div className="collector-title-row"><strong>{name}</strong>
+        {running || needsAttention ? <TaskStatus tone={running ? "running" : job?.status === "failed" ? "failed" : "attention"}>{running ? "采集中" : job?.status === "failed" ? "失败" : "需处理"}</TaskStatus> : null}
         {job?.lastAttemptAt || (!needsAttention && job?.message) ? <span className="muted text-small">{job.lastAttemptAt ? `上次采集 ${formatRunTime(job.lastAttemptAt)}` : ""}{!needsAttention && job.message ? `${job.lastAttemptAt ? " · " : ""}${job.message}` : ""}</span> : null}
       </div>
       <div className="collector-schedule" title="到点自动采集">
         <label>
         <input type="checkbox" checked={job?.enabled === true} disabled={busy || running}
-          onChange={(e) => void act(() => sendMessage({ type: "CONFIGURE_COLLECTOR", toolId, enabled: e.target.checked, intervalHours: interval }).then(() => undefined))} />
+          onChange={(e) => void act(() => sendMessage({ type: "CONFIGURE_COLLECTOR", toolId, enabled: e.target.checked, intervalHours: interval }).then(() => "已保存"), "settings")} />
         自动采集</label><span>每</span>
         <input className="collector-interval" aria-label={`${name}采集间隔`} type="number" min={1} max={48} value={interval} disabled={busy || running}
-          onChange={(e) => void act(() => sendMessage({ type: "CONFIGURE_COLLECTOR", toolId, enabled: job?.enabled === true, intervalHours: Number(e.target.value) }).then(() => undefined))} />
+          onChange={(e) => void act(() => sendMessage({ type: "CONFIGURE_COLLECTOR", toolId, enabled: job?.enabled === true, intervalHours: Number(e.target.value) }).then(() => "已保存"), "settings")} />
         <span>小时</span>
       </div>
-      <button className="button action collector-run" disabled={busy || running} onClick={() => void act(() => sendMessage({ type: "RUN_COLLECTOR_NOW", toolId }).then(() => "已启动。"))}><Clock size={14} />采集</button>
-      <button className="button secondary compact-button" title="合并导入账号名单（TXT / CSV）" disabled={busy} onClick={() => fileInputRef.current?.click()}><FileUp size={15} />导入账号</button>
+      <button className="button action collector-run" disabled={busy || running} onClick={() => void act(() => sendMessage({ type: "RUN_COLLECTOR_NOW", toolId }).then(() => "已启动"), "collect")}><Clock size={14} />{running ? "采集中" : "采集"}</button>
+      {feedbackArea !== "accounts" && notice ? <span className="muted text-small" role="status">{notice}</span> : null}
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".txt,.csv,text/csv,text/plain" onChange={async (event) => {
         const file = event.target.files?.[0];
         event.currentTarget.value = "";
@@ -95,13 +99,15 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
       }} />
     </div>
 
-    {error ? <p role="alert" className="error-text text-small">{error}</p> : null}
-    {notice ? <p className="text-small">{notice}</p> : null}
-    {needsAttention && job?.message ? <p role="alert" className="error-text text-small">{job.message}</p> : null}
+    {error && feedbackArea !== "accounts" ? <p role="alert" className="error-text text-small">{error}</p> : null}
+    {needsAttention && job?.message ? <details className="task-feedback-details"><summary>查看需处理原因</summary><p className="error-text text-small">{job.message}</p></details> : null}
     <div className="account-manager" data-open={accountsOpen}>
       <div className="account-header">
       <button className="account-disclosure" aria-expanded={accountsOpen} aria-controls={`accounts-${toolId}`} onClick={() => setAccountsOpen((open) => !open)}><ChevronRight size={13} />账号名单 · {follows?.length ?? 0} 个</button>
       <div className="account-toolbar">
+<button className="button secondary compact-button" title="合并导入账号名单（TXT / CSV）" disabled={busy} onClick={() => fileInputRef.current?.click()}><FileUp size={15} />导入账号</button>
+
+        {feedbackArea === "accounts" && notice ? <span className="muted text-small" role="status">{notice}</span> : null}
         <button className="button secondary compact-button" disabled={!follows?.length || busy} onClick={exportAccounts}><FileDown size={14} />导出账号</button>
         {!selecting ? <button className="button secondary compact-button" disabled={!follows?.length || busy || running} onClick={() => { setSelected([]); setSelecting(true); setAccountsOpen(true); }}>批量删除</button> : <>
           <label><input type="checkbox" aria-label={`${name}全选账号`} checked={Boolean(follows?.length) && selectedHandles.length === follows?.length} disabled={busy || running} onChange={(e) => setSelected(e.target.checked ? (follows || []).map((entry) => entry.handle) : [])} />全选</label>
@@ -118,6 +124,7 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
         </>}
       </div>
       </div>
+      {error && feedbackArea === "accounts" ? <p role="alert" className="error-text text-small">{error}</p> : null}
       <div id={`accounts-${toolId}`} hidden={!accountsOpen}>
     <div className="collector-chips">
       {(follows || []).map((entry) => (
