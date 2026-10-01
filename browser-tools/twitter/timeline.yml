@@ -85,6 +85,8 @@ workflow:
       withAuxiliaryUserLabels: true
     store:
       user_id: data.user.result.rest_id
+      profile_name: data.user.result.legacy.name
+      profile_avatar: data.user.result.legacy.profile_image_url_https
   - action: graphql_fetch
     operation: UserTweets
     query_id: "lrMzG9qPQHpqJdP3AbM-bQ"

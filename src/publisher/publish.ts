@@ -29,6 +29,16 @@ export async function publishFeed(): Promise<FeedPublishResult> {
   const { posts, newCount } = mergeFeedPosts(existing, staged, config.maxPosts);
   const publishedAt = new Date().toISOString();
 
+  // 旧记录 author 补全：从 follows 的显示名映射，解决 531 条缺 author 的存量数据。
+  const follows = await getFollows();
+  const nameByHandle = new Map(follows.map((f) => [`${f.platform}:${f.handle}`, f.displayName || f.handle]));
+  for (const post of posts) {
+    if (!post.author || !post.author.trim()) {
+      const name = nameByHandle.get(`${post.platform}:${post.handle}`);
+      if (name) post.author = name;
+    }
+  }
+
   // 单提交包含本轮完整一致状态：数据、元数据、关注列表与全部 RSS。
   const followsFile = await buildFollowsFile(publishedAt);
   const files = [
@@ -74,6 +84,7 @@ async function buildFollowsFile(publishedAt: string): Promise<FeedFollowsFile> {
       platform: entry.platform,
       handle: entry.handle,
       ...(entry.displayName ? { name: entry.displayName } : {}),
+      ...(entry.avatar ? { avatar: entry.avatar } : {}),
       ...(entry.priority !== undefined ? { priority: entry.priority } : {})
     }))
   };

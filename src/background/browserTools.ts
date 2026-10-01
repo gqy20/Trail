@@ -14,7 +14,7 @@ import { matchesBrowserTool } from "../browser-tools/matcher";
 import { resolveParameterDefaults, resolveTemplate } from "../browser-tools/template";
 import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
-import { getFollows } from "../collector/follows";
+import { getFollows, updateFollowProfile } from "../collector/follows";
 import { filterUncollected, recordCollectedIds } from "../collector/collectedIndex";
 import { getBudgetUsage, budgetPauseReason, recordActivity, releaseActivity } from "../collector/budget";
 import { filterSinceRecords, getWatermark, setWatermark } from "../collector/watermarks";
@@ -365,6 +365,7 @@ async function continueBatchRun(
           lastPageTitle: result.pageTitle
         };
         await advanceWatermark(definition, keyword, result.data);
+        await refreshFollowProfile(definition, keyword, result.data);
         logDebug("batch", "keyword.done", "完成当前输入", {
           keyword,
           index: index + 1,
@@ -946,4 +947,32 @@ export async function takeDetailRetryQueue(platform: string, handle: string): Pr
   const ids = JSON.parse(result[key] || "[]") as string[];
   if (ids.length > 0) await chrome.storage.local.remove(key);
   return ids;
+}
+
+/**
+ * 采集成功后从运行数据中提取用户资料（显示名 + 头像）并回写 follows 存储。
+ * Twitter: graphql_fetch 的 store 已提取 profile_name / profile_avatar 到 values。
+ * XHS: state_read 的 _profile 集合包含 nickname / avatar。
+ */
+async function refreshFollowProfile(
+  definition: ReturnType<typeof parseBrowserToolYaml>,
+  keyword: string,
+  data: BrowserToolRunResult["data"]
+): Promise<void> {
+  const feed = definition.feed;
+  if (!feed) return;
+  const profile: { displayName?: string; avatar?: string } = {};
+
+  // Twitter: values 中的 profile_name / profile_avatar
+  const profileRecords = data["_profile"];
+  if (Array.isArray(profileRecords) && profileRecords.length > 0) {
+    const record = profileRecords[0];
+    if (typeof record.nickname === "string" && record.nickname.trim()) profile.displayName = record.nickname;
+    if (typeof record.avatar === "string" && record.avatar.trim()) profile.avatar = record.avatar;
+  }
+
+  if (Object.keys(profile).length > 0) {
+    await updateFollowProfile(feed.platform, keyword, profile);
+    logInfo("collector", "profile.refresh", "已刷新用户资料", { platform: feed.platform, handle: keyword, ...profile });
+  }
 }

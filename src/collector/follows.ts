@@ -29,6 +29,16 @@ export async function removeFollows(platform: string, handles: string[]): Promis
   return next;
 }
 
+/** 采集时从平台实时数据刷新用户资料（显示名 + 头像），覆盖旧值。 */
+export async function updateFollowProfile(platform: string, handle: string, profile: { displayName?: string; avatar?: string }): Promise<void> {
+  const all = await readAll();
+  const entry = all.find((e) => e.platform === platform && e.handle === handle);
+  if (!entry) return;
+  if (profile.displayName?.trim()) entry.displayName = profile.displayName.trim();
+  if (profile.avatar?.trim()) entry.avatar = profile.avatar.trim();
+  await chrome.storage.local.set({ [KEY]: all });
+}
+
 export function exportFollowsCsv(entries: FollowEntry[]): string {
   const cell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
   return ["handle,priority,name", ...entries.map((entry) => [entry.handle, entry.priority, entry.displayName].map(cell).join(","))].join("\r\n");

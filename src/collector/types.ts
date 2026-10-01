@@ -4,6 +4,7 @@ export type FollowEntry = {
   platform: string;
   handle: string;
   displayName?: string;
+  avatar?: string;
   priority?: number;
 };
 

@@ -52,6 +52,14 @@ workflow:
     timeout_ms: 15000
     optional: true
   - action: state_read
+    max_items: 1
+    extract:
+      collection: _profile
+      walk: { has: userPageData }
+      fields:
+        nickname: { path: userPageData.nickname, optional: true }
+        avatar: { path: userPageData.imageb, optional: true }
+  - action: state_read
     extract:
       collection: notes
       walk: { has: noteCard }
