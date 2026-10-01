@@ -54,7 +54,7 @@ workflow:
   - action: state_read
     max_items: 1
     extract:
-      collection: _profile
+      collection: profile
       walk: { has: userPageData }
       fields:
         nickname: { path: userPageData.nickname, optional: true }

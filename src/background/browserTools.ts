@@ -964,7 +964,7 @@ async function refreshFollowProfile(
   const profile: { displayName?: string; avatar?: string } = {};
 
   // Twitter: values 中的 profile_name / profile_avatar
-  const profileRecords = data["_profile"];
+  const profileRecords = data["profile"];
   if (Array.isArray(profileRecords) && profileRecords.length > 0) {
     const record = profileRecords[0];
     if (typeof record.nickname === "string" && record.nickname.trim()) profile.displayName = record.nickname;
