@@ -15,6 +15,7 @@ import { resolveParameterDefaults, resolveTemplate } from "../browser-tools/temp
 import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
 import { getFollows } from "../collector/follows";
+import { filterUncollected, recordCollectedIds } from "../collector/collectedIndex";
 import { getBudgetUsage, budgetPauseReason, recordActivity, releaseActivity } from "../collector/budget";
 import { filterSinceRecords, getWatermark, setWatermark } from "../collector/watermarks";
 import {
@@ -760,9 +761,17 @@ async function enrichWithDetails(
   const delay = spec.delay_ms ?? 0;
   let enriched = 0;
 
+  // 本地已采集 ID 索引：跳过已补全过详情的记录，不浪费预算。
+  const platform = definition.feed?.platform;
+  const allIds = records.map((r) => String(r.id || "")).filter(Boolean);
+  const uncollected = platform ? new Set(await filterUncollected(platform, allIds)) : null;
+  const newlyEnrichedIds: string[] = [];
+
   for (const record of records.slice(0, maxItems)) {
     const url = record[spec.url_field];
     if (typeof url !== "string" || !/^https?:\/\//.test(url)) continue;
+    const recordId = String(record.id || "");
+    if (uncollected && recordId && !uncollected.has(recordId)) continue;
     if (definition.feed) {
       const detailBudget = await recordActivity(definition.feed.platform, "detail");
       if (!detailBudget.allowed) {
@@ -804,9 +813,14 @@ async function enrichWithDetails(
     }
     Object.assign(record, detail.record || {});
     enriched += 1;
+    if (recordId) newlyEnrichedIds.push(recordId);
     const peeked = peekControlRequest();
     if (peeked.pause || peeked.stop) break;
     if (delay > 0 && enriched < maxItems) await sleep(delay);
+  }
+  // 成功补全的 ID 写入本地索引（跨发布持久，下次直接跳过）。
+  if (platform && newlyEnrichedIds.length > 0) {
+    await recordCollectedIds(platform, newlyEnrichedIds).catch(() => undefined);
   }
   if (enriched === 0 && records.length > 0 && !peekControlRequest().pause && !peekControlRequest().stop) {
     const reason = "详情补全全部失败（页面可能要求登录或验证），已暂停；完成验证后点继续将从该账号重试。";
