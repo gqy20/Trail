@@ -399,14 +399,33 @@ async function executeGraphqlFetchStep(step: BrowserToolGraphqlFetchStep, contex
     }
     if (step.cursor && cursor) variables.cursor = cursor;
 
-    const payload = await sendMessage({
-      type: "BROWSER_TOOL_GRAPHQL_FETCH",
-      operation: step.operation,
-      query_id: queryId,
-      variables,
-      features: step.features,
-      field_toggles: step.field_toggles
-    });
+    let payload: { status: number; json: unknown } | undefined;
+    let graphqlRetried = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        payload = await sendMessage({
+          type: "BROWSER_TOOL_GRAPHQL_FETCH",
+          operation: step.operation,
+          query_id: queryId,
+          variables,
+          features: step.features,
+          field_toggles: step.field_toggles
+        });
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // 429 限流：等 30 秒后重试（最多 3 次）
+        if (message.includes("429") && attempt < 2) {
+          if (!graphqlRetried) {
+            graphqlRetried = true;
+            context.warnings.push(`GraphQL ${step.operation} 收到 429 限流，30 秒后重试。`);
+          }
+          await sleep(30_000);
+          continue;
+        }
+        throw error;
+      }
+    }
     if (!payload || typeof payload.json !== "object" || payload.json === null) {
       throw new Error(`GraphQL ${step.operation} 没有返回 JSON 数据。`);
     }

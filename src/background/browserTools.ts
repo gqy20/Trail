@@ -241,8 +241,8 @@ async function continueBatchRun(
   const nativeExports: NonNullable<BrowserToolRunResult["nativeExports"]> = [];
   let state = initial;
   let failed = false;
-  let retriedIndex = -1;
-  let cooldownRetriedIndex = -1;
+  const transientRetries = new Map<number, number>();
+  const cooldownRetries = new Map<number, number>();
   const runStartedAt = Date.now();
   const displayNames = definition.feed ? new Map((await getFollows(definition.feed.platform)).filter((entry) => entry.displayName).map((entry) => [entry.handle, entry.displayName!])) : undefined;
   logInfo("batch", "batch.start", "批量运行开始", { toolId: definition.id, runId: initial.runId, total: initial.keywords.length, fromIndex: initial.nextIndex });
@@ -316,8 +316,8 @@ async function continueBatchRun(
             return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined, lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle }, "paused", result.error || "平台预算不足，进度已保存。", warnings);
           }
           // 软封锁自动冷却：15 分钟后自动重试一次（可被停止打断），再失败转人工。
-          if (cooldownRetriedIndex !== index) {
-            cooldownRetriedIndex = index;
+          if ((cooldownRetries.get(index) || 0) < 2) {
+            cooldownRetries.set(index, (cooldownRetries.get(index) || 0) + 1);
             const reason = result.error || "需要登录或验证";
             logWarn("batch", "cooldown.start", "软封锁，15 分钟后自动重试一次", { platform: definition.feed?.platform, toolId: definition.id, runId: state.runId, keyword, detail: reason });
             warnings.push("[" + keyword + "] " + reason + "；15 分钟后自动重试。");
@@ -341,10 +341,10 @@ async function continueBatchRun(
         warnings.push(...result.warnings.map((warning) => `[${keyword}] ${warning}`));
         if (result.status !== "completed") {
           const message = result.error || "提取未完整完成";
-          if (retriedIndex !== index && isTransientBatchError(message)) {
-            retriedIndex = index;
-            logWarn("batch", "keyword.retry", "瞬时错误，5 秒后重试当前输入", { platform: definition.feed?.platform, toolId: definition.id, runId: state.runId, keyword, error: message });
-            warnings.push(`[${keyword}] ${message}；5 秒后重试一次。`);
+          if ((transientRetries.get(index) || 0) < 3 && isTransientBatchError(message)) {
+            transientRetries.set(index, (transientRetries.get(index) || 0) + 1);
+            logWarn("batch", "keyword.retry", "瞬时错误，5 秒后重试当前输入", { keyword, error: message, attempt: transientRetries.get(index) });
+            warnings.push(`[${keyword}] ${message}；5 秒后重试。`);
             await sleep(5_000);
             continue;
           }
@@ -375,10 +375,10 @@ async function continueBatchRun(
         await saveBatchRunState(state);
       } catch (error) {
         const message = error instanceof Error ? error.message : "批量检索失败";
-        if (retriedIndex !== index && isTransientBatchError(message)) {
-          retriedIndex = index;
-          logWarn("batch", "keyword.retry", "瞬时异常，5 秒后重试当前输入", { platform: definition.feed?.platform, toolId: definition.id, runId: state.runId, keyword, error: message });
-          warnings.push(`[${keyword}] ${message}；5 秒后重试一次。`);
+        if ((transientRetries.get(index) || 0) < 3 && isTransientBatchError(message)) {
+          transientRetries.set(index, (transientRetries.get(index) || 0) + 1);
+          logWarn("batch", "keyword.retry", "瞬时异常，5 秒后重试当前输入", { keyword, error: message, attempt: transientRetries.get(index) });
+          warnings.push(`[${keyword}] ${message}；5 秒后重试。`);
           await sleep(5_000);
           continue;
         }
@@ -781,7 +781,23 @@ async function enrichWithDetails(
     if (detail.paused || detail.warning) logWarn("activity", "detail.result", "详情访问暂停或失败", detailLog);
     else logInfo("activity", "detail.result", "详情访问完成", detailLog);
     if (detail.paused) return detail.paused;
-    if (detail.warning) { result.warnings.push("[详情] " + detail.warning); continue; }
+    if (detail.warning) {
+      result.warnings.push("[详情] " + detail.warning);
+      // 排队到下轮补全：记录 ID 存入 localStorage，下次该账号采集时优先重试
+      const retryId = String(record.id || "");
+      if (retryId && definition.feed) {
+        const retryKey = `trail.detailRetry.${definition.feed.platform}.${keywordFromUrl(url)}`;
+        try {
+          const stored = (await chrome.storage.local.get(retryKey)) as Record<string, string>;
+          const existing = JSON.parse(stored[retryKey] || "[]") as string[];
+          if (!existing.includes(retryId)) {
+            existing.push(retryId);
+            await chrome.storage.local.set({ [retryKey]: JSON.stringify(existing.slice(-50)) });
+          }
+        } catch { /* 存储失败不影响主流程 */ }
+      }
+      continue;
+    }
     Object.assign(record, detail.record || {});
     enriched += 1;
     const peeked = peekControlRequest();
@@ -889,4 +905,27 @@ async function advanceWatermark(
   const { newestIso, oldestIso } = filterSinceRecords(records, since.field, undefined, 90);
   const target = isBackfill ? oldestIso : newestIso;
   if (target) await setWatermark(feed.platform, keyword, target);
+}
+
+/** 从详情 URL 提取账号标识（用于 retry key）。 */
+function keywordFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    // x.com/handle/status/id 或 xiaohongshu.com/user/profile/id/noteId
+    if (parsed.hostname.includes("x.com") || parsed.hostname.includes("twitter.com")) return parts[0] || "unknown";
+    if (parsed.hostname.includes("xiaohongshu.com")) return parts[2] || parts[1] || "unknown";
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** 读取某账号的详情重试队列，并清空（本轮处理完即消）。 */
+export async function takeDetailRetryQueue(platform: string, handle: string): Promise<string[]> {
+  const key = `trail.detailRetry.${platform}.${handle}`;
+  const result = (await chrome.storage.local.get(key)) as Record<string, string>;
+  const ids = JSON.parse(result[key] || "[]") as string[];
+  if (ids.length > 0) await chrome.storage.local.remove(key);
+  return ids;
 }
