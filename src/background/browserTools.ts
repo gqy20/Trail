@@ -246,7 +246,7 @@ async function continueBatchRun(
   const warnings: string[] = [];
   const nativeExports: NonNullable<BrowserToolRunResult["nativeExports"]> = [];
   let state = initial;
-  let failed = false;
+  let failedCount = 0;
   const transientRetries = new Map<number, number>();
   const cooldownRetries = new Map<number, number>();
   const runStartedAt = Date.now();
@@ -354,11 +354,14 @@ async function continueBatchRun(
             await sleep(5_000);
             continue;
           }
-          // 失败的输入不推进游标（继续/重试时从该输入重新开始），也不计入完成数。
-          state = { ...state, lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
-          failed = true;
-          warnings.push(`[${keyword}] ${message}`);
-          break;
+          // 非瞬时失败（账号冻结/改名等）：跳过该输入，继续后续账号。
+          failedCount += 1;
+          logWarn("batch", "keyword.skipped", "非瞬时失败，跳过该输入", { keyword, error: message, failedCount });
+          warnings.push(`[${keyword}] ${message}（已跳过）`);
+          // 推进游标但不计入完成数（下一轮不会重试这个账号，除非手动重置水位线）。
+          state = { ...state, nextIndex: state.nextIndex + 1, lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
+          await saveBatchRunState(state);
+          continue;
         }
         state = {
           ...advanceBatchRun(state, keyword, (() => { const name = displayNames?.get(keyword); return name ? enrichAuthor(result.data, keyword, name) : result.data; })()),
@@ -389,9 +392,12 @@ async function continueBatchRun(
           await sleep(5_000);
           continue;
         }
-        failed = true;
-        warnings.push(`[${keyword}] ${message}`);
-        break;
+        failedCount += 1;
+        logWarn("batch", "keyword.skipped", "非瞬时异常，跳过该输入", { keyword, error: message, failedCount });
+        warnings.push(`[${keyword}] ${message}（已跳过）`);
+        state = { ...state, nextIndex: state.nextIndex + 1 };
+        await saveBatchRunState(state);
+        continue;
       }
 
       if (index < state.keywords.length - 1) {
@@ -406,7 +412,7 @@ async function continueBatchRun(
     clearInterval(heartbeat);
   }
 
-  const status: BrowserToolRunResult["status"] = failed
+  const status: BrowserToolRunResult["status"] = failedCount > 0
     ? state.completedKeywords > 0
       ? "partial"
       : "failed"
@@ -422,7 +428,7 @@ async function continueBatchRun(
     data: state.data,
     warnings,
     nativeExports: nativeExports.length > 0 ? nativeExports : undefined,
-    error: failed ? `已完成 ${state.completedKeywords}/${state.keywords.length} 个输入。` : undefined
+    error: failedCount > 0 ? `成功 ${state.completedKeywords}/${state.keywords.length} 个输入，${failedCount} 个失败（已跳过）。` : undefined
   };
   void stageAndMaybePublish(definition, result).catch(() => undefined);
   await clearBatchRunState(definition.id);

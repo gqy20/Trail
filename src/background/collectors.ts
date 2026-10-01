@@ -147,7 +147,9 @@ async function runOne(toolId: string, automatic: boolean): Promise<CollectorStat
       lastSuccessAt: ok ? Date.now() : job.lastSuccessAt,
       rotationCursor: ok ? ((job.rotationCursor || 0) + follows.length) % allFollows.length : job.rotationCursor,
       message: ok
-        ? `完成 ${result.status === "partial" ? "（部分）" : ""}：${records} 条记录`
+        ? result.status === "partial"
+          ? `${records} 条 · ${result.error || "部分账号失败"}`
+          : `${records} 条记录`
         : result.error || "采集失败。"
     });
     logInfo("collector", "collector.done", "采集结束", { toolId, status: result.status, records });
