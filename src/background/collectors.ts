@@ -210,13 +210,15 @@ export function registerCollectors(): void {
 }
 
 async function waitForPage(tabId: number): Promise<void> {
-  const deadline = Date.now() + 40_000;
+  const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     const tab = await chrome.tabs.get(tabId);
     if (tab.status === "complete") return;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error("页面加载超时，稍后会有限重试。");
+  // SPA 站点经常长时间不触发 complete（长轮询/分析脚本），
+  // 超时不致命——工作流自身的 wait_for / pause_if_present 会处理页面状态。
+  logWarn("collector", "page.slow", "页面加载缓慢（20 秒未 complete），继续尝试执行");
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
