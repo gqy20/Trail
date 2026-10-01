@@ -52,12 +52,13 @@ export function isTransientBatchError(message: string): boolean {
   return TRANSIENT_ERROR_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-export async function getBatchRunState(): Promise<BatchRunState | null> {
-  const result = await chrome.storage.session.get(STATE_KEY);
-  const state = result[STATE_KEY] as BatchRunState | undefined;
+export async function getBatchRunState(toolId?: string): Promise<BatchRunState | null> {
+  // 按工具隔离：跨工具并行时各自有独立的运行状态。
+  const key = toolId ? `${STATE_KEY}.${toolId}` : STATE_KEY;
+  const result = await chrome.storage.session.get(key);
+  const state = result[key] as BatchRunState | undefined;
   if (!state) return null;
   if (state.status === "running" && Date.now() - state.updatedAt > STALE_RUNNING_MS) {
-    // 运行循环已不存在（SW 重启），降级为暂停，允许用户继续。
     const interrupted = { ...state, status: "paused" as BatchRunStatus };
     await saveBatchRunState(interrupted);
     return interrupted;
@@ -65,12 +66,21 @@ export async function getBatchRunState(): Promise<BatchRunState | null> {
   return state;
 }
 
-export async function saveBatchRunState(state: BatchRunState): Promise<void> {
-  await chrome.storage.session.set({ [STATE_KEY]: state });
+/** 列出所有活跃的运行状态（UI 用：显示多个并行运行）。 */
+export async function getAllBatchRunStates(): Promise<BatchRunState[]> {
+  const all = await chrome.storage.session.get(null);
+  return Object.entries(all)
+    .filter(([key]) => key.startsWith(STATE_KEY))
+    .map(([, value]) => value as BatchRunState)
+    .filter((state) => state.status === "running" || state.status === "paused");
 }
 
-export async function clearBatchRunState(): Promise<void> {
-  await chrome.storage.session.remove(STATE_KEY);
+export async function saveBatchRunState(state: BatchRunState): Promise<void> {
+  await chrome.storage.session.set({ [`${STATE_KEY}.${state.toolId}`]: state });
+}
+
+export async function clearBatchRunState(toolId: string): Promise<void> {
+  await chrome.storage.session.remove(`${STATE_KEY}.${toolId}`);
 }
 
 export function requestPauseBatchRun(): { requested: boolean } {

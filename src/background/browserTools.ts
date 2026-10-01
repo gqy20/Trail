@@ -30,6 +30,7 @@ import {
   clearBatchRunState,
   clearControlRequest,
   consumeControlRequest,
+  getAllBatchRunStates,
   getBatchRunState,
   isTransientBatchError,
   peekControlRequest,
@@ -151,7 +152,7 @@ async function startBatchRun(
   tabId: number,
   nativeExport?: { definitionId: string; maxRecords: number }
 ): Promise<BrowserToolRunResult> {
-  await clearBatchRunState();
+  await clearBatchRunState(definition.id);
   clearControlRequest();
   // 界面批量入口已解析默认值，定时调度授权入口传空参数——这里统一补齐，
   // 否则 YAML 中引用 parameters 的模板（如用户间隔）在后台解析时报变量不存在。
@@ -176,9 +177,10 @@ async function startBatchRun(
   return continueBatchRun(definition, state, tabId, nativeExport);
 }
 
-/** 从暂停状态恢复批量运行；由 Trail 界面的“继续”触发。 */
+/** 从暂停状态恢复批量运行；由 Trail 界面的”继续”触发。 */
 export async function resumeBrowserToolBatch(input: { tabId?: number; userInitiated?: boolean }): Promise<BrowserToolRunResult> {
-  const state = await getBatchRunState();
+  const states = await getAllBatchRunStates();
+  const state = states.find((s) => s.status === "paused") || null;
   if (!state) throw new Error("没有可继续的批量运行。");
   if (state.status !== "paused") throw new Error(`当前运行状态为 ${state.status}，不能继续。`);
   const tool = await getStoredBrowserTool(state.toolId);
@@ -200,7 +202,8 @@ export async function resumeBrowserToolBatch(input: { tabId?: number; userInitia
 }
 
 export async function getBrowserToolBatchRunState(): Promise<BatchRunState | null> {
-  return getBatchRunState();
+  const states = await getAllBatchRunStates();
+  return states[0] || null;
 }
 
 export function pauseBrowserToolBatch(): { requested: boolean } {
@@ -209,7 +212,8 @@ export function pauseBrowserToolBatch(): { requested: boolean } {
 
 /** 停止批量运行：运行中在下一个输入边界收尾；已暂停时立即以现有数据收尾。 */
 export async function stopBrowserToolBatch(): Promise<{ requested: boolean; finalized: boolean }> {
-  const state = await getBatchRunState();
+  const states = await getAllBatchRunStates();
+  const state = states.find((s) => s.status === "running") || states.find((s) => s.status === "paused") || null;
   if (!state) return { requested: false, finalized: false };
   if (state.status === "running") {
     requestStopBatchRun();
@@ -418,7 +422,7 @@ async function continueBatchRun(
     error: failed ? `已完成 ${state.completedKeywords}/${state.keywords.length} 个输入。` : undefined
   };
   void stageAndMaybePublish(definition, result).catch(() => undefined);
-  await clearBatchRunState();
+  await clearBatchRunState(definition.id);
   logInfo("batch", "batch.done", "批量运行结束", {
     toolId: definition.id,
     status,
@@ -453,7 +457,7 @@ async function finalizeBatchRun(
   };
   if (status !== "paused") {
     void stageAndMaybePublish(definition, result).catch(() => undefined);
-    await clearBatchRunState();
+    await clearBatchRunState(definition.id);
   }
   return persistRunResult(result, `${state.toolName} · 批量`);
 }

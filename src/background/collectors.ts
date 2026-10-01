@@ -17,7 +17,6 @@ const STALE_RUNNING_MS = 30 * 60_000;
 
 const defaultJob = (): CollectorJob => ({ enabled: false, intervalHours: 4, status: "idle" });
 let writes: Promise<unknown> = Promise.resolve();
-let runs: Promise<unknown> = Promise.resolve();
 let initialization: Promise<void> = Promise.resolve();
 
 async function readJobs(): Promise<Record<string, CollectorJob>> {
@@ -80,9 +79,13 @@ export async function configureCollector(toolId: string, enabled: boolean, inter
   return getCollectorState();
 }
 
+/** 每工具独立的执行链：同一工具不会并发，不同工具（X / 小红书）并行。 */
+const toolRuns = new Map<string, Promise<unknown>>();
+
 export function runCollector(toolId: string, automatic = false): Promise<CollectorState> {
-  const next = runs.then(() => runOne(toolId, automatic));
-  runs = next.catch(() => undefined);
+  const previous = toolRuns.get(toolId) || Promise.resolve();
+  const next = previous.then(() => runOne(toolId, automatic));
+  toolRuns.set(toolId, next.catch(() => undefined));
   return next;
 }
 
@@ -186,13 +189,16 @@ async function ensureAlarm(): Promise<void> {
 
 async function tick(): Promise<void> {
   const state = await getCollectorState();
+  const due: Promise<unknown>[] = [];
   for (const item of state.items) {
     if (item.job.status === "running" && Date.now() - (item.job.lastAttemptAt || 0) > STALE_RUNNING_MS) {
       await patchJob(item.toolId, { status: "needs_user", message: "上次采集中断，结果尚未确认，请检查后重试。" });
     } else if (isCollectorDue(item.job, Date.now())) {
-      await runCollector(item.toolId, true);
+      due.push(runCollector(item.toolId, true));
     }
   }
+  // 跨工具并行：不逐个 await，让各渠道同时开跑。
+  await Promise.all(due);
 }
 
 export function registerCollectors(): void {
