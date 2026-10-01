@@ -152,6 +152,7 @@ workflow:
       withDisallowedReplyControls: true
     max_pages: 20
     page_delay_ms: 2000
+    page_jitter_ms: 1500
     cursor: { match_key: cursorType, match_value: Bottom, value_path: value }
     extract:
       collection: tweets

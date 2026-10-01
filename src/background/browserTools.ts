@@ -12,6 +12,7 @@ import { importBundledBrowserTools, getBundledToolVersions } from "../browser-to
 import { parseBrowserToolYaml } from "../browser-tools/loader";
 import { matchesBrowserTool } from "../browser-tools/matcher";
 import { resolveParameterDefaults, resolveTemplate } from "../browser-tools/template";
+import { jitterDelay } from "../browser-tools/jitter";
 import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
 import { getFollows, updateFollowProfile } from "../collector/follows";
@@ -398,7 +399,7 @@ async function continueBatchRun(
         const delay = typeof rawDelay === "string"
           ? Number(resolveTemplate(rawDelay, definition, state.parameters))
           : rawDelay || 0;
-        if (Number.isFinite(delay) && delay > 0) await sleep(delay);
+        if (Number.isFinite(delay) && delay > 0) await sleep(jitterDelay(delay, batch.jitter_ms));
       }
     }
   } finally {
@@ -817,7 +818,7 @@ async function enrichWithDetails(
     if (recordId) newlyEnrichedIds.push(recordId);
     const peeked = peekControlRequest();
     if (peeked.pause || peeked.stop) break;
-    if (delay > 0 && enriched < maxItems) await sleep(delay);
+    if (delay > 0 && enriched < maxItems) await sleep(jitterDelay(delay, definition.detail_extract?.jitter_ms));
   }
   // 成功补全的 ID 写入本地索引（跨发布持久，下次直接跳过）。
   if (platform && newlyEnrichedIds.length > 0) {

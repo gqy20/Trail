@@ -14,6 +14,7 @@ import { matchesBrowserTool } from "./matcher";
 import { resolveParameters, resolveTemplate } from "./template";
 import { applyBrowserToolTransforms } from "./transforms";
 import { sendMessage } from "../shared/runtime";
+import { jitterDelay, jitterOffset } from "./jitter";
 
 type ExecutionSignal = "continue" | "stop_repeat" | "pause" | "finish";
 
@@ -165,7 +166,7 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
         const top = step.position === "top" ? 0 : target.scrollHeight;
         target.scrollTo({ top, behavior: "auto" });
       } else {
-        target.scrollBy({ top: step.delta_y || 0, behavior: "auto" });
+        target.scrollBy({ top: jitterOffset(step.delta_y || 0, step.jitter_y), behavior: "auto" });
       }
       return "continue";
     }
@@ -392,7 +393,7 @@ async function executeGraphqlFetchStep(step: BrowserToolGraphqlFetchStep, contex
 
   let cursor: string | null = null;
   for (let page = 0; page < maxPages; page += 1) {
-    if (page > 0 && step.page_delay_ms) await sleep(step.page_delay_ms);
+    if (page > 0 && step.page_delay_ms) await sleep(jitterDelay(step.page_delay_ms, step.page_jitter_ms));
     const variables: Record<string, unknown> = {};
     for (const [name, value] of Object.entries(step.variables || {})) {
       variables[name] = typeof value === "string" ? resolve(value, context) : value;

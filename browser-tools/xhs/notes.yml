@@ -36,6 +36,7 @@ batch:
     input_parameter: user
   max_keywords: 20
   delay_between_keywords_ms: 15000
+  jitter_ms: 8000
 limits:
   max_records: 60
   delay_between_actions_ms: 800
@@ -97,14 +98,16 @@ workflow:
     between:
       - action: scroll
         delta_y: 800
+        jitter_y: 200
       - action: wait
-        duration_ms: 1500
+        duration_ms: 1200
 detail_extract:
   collection: notes
   url_field: url
   wait_for: "#detail-desc, .note-text, #detail-title"
   timeout_ms: 12000
   delay_ms: 5000
+  jitter_ms: 4000
   blockers:
     - url_contains: "error_code=3000"
       reason: 详情页被风控拦截，请打开页面完成验证后继续。

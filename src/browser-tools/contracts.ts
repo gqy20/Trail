@@ -166,6 +166,8 @@ export type BrowserToolScrollStep = {
   action: "scroll";
   selector?: string;
   delta_y?: number;
+  /** 滚动距离随机偏移（±，px），实际 = delta_y + random(-jitter, +jitter) 。 */
+  jitter_y?: number;
   position?: "top" | "bottom";
 };
 
@@ -268,6 +270,8 @@ export type BrowserToolGraphqlFetchStep = {
   cursor?: { match_key: string; match_value: string; value_path: string };
   max_pages?: number | string;
   page_delay_ms?: number;
+  /** 分页间隔随机偏移上限（ms），实际 = page_delay_ms + random(0, jitter) 。 */
+  page_jitter_ms?: number;
   /** 页面 bundle 扫描失败时的 queryId 兜底（会随站点发布轮换）。 */
   query_id?: string;
   optional?: boolean;
@@ -318,6 +322,8 @@ export type BrowserToolDefinition = {
     timeout_ms?: number;
     max_items?: number;
     delay_ms?: number;
+    /** 详情间隔随机偏移上限（ms），实际 = delay_ms + random(0, jitter) 。 */
+    jitter_ms?: number;
     /** 记录中取内容 id 的字段，用于定位 a[href*=id] 卡片。 */
     id_field?: string;
     /** 详情页的返回按钮选择器（点击真实卡片进入，点返回回列表）。 */
@@ -333,6 +339,8 @@ export type BrowserToolDefinition = {
     max_keywords?: number;
     /** 数字或 "{{ parameters.x }}" 模板，便于把节奏参数暴露给用户。 */
     delay_between_keywords_ms?: number | string;
+    /** 账号间隔随机偏移上限（ms）。 */
+    jitter_ms?: number;
   };
   limits?: {
     delay_between_actions_ms?: number;

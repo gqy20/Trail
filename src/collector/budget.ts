@@ -49,7 +49,10 @@ export function evaluateBudget(platform: string, events: Event[], config: Budget
     if (remaining + BUDGET_COST[kind] <= limit && remainingCount + 1 <= countLimit) { nextAvailableAt = event.at + WINDOW_MS; break; }
   }
   const last = kept[kept.length - 1];
-  const intervalMs = (kind === "profile" ? config.profileIntervalSeconds : config.detailIntervalSeconds) * 1000;
+  const baseInterval = (kind === "profile" ? config.profileIntervalSeconds : config.detailIntervalSeconds) * 1000;
+  // 间隔加 ±30% 随机偏移，消除等间隔访问模式。
+  const jitter = baseInterval * 0.3;
+  const intervalMs = baseInterval + (Math.random() - 0.5) * jitter * 2;
   return { platform, config, used, limit, allowed, nextAvailableAt, delayMs: last ? Math.max(0, last.at + intervalMs - now) : 0,
     profile: kept.filter((event) => event.kind === "profile").length, detail: kept.filter((event) => event.kind === "detail").length };
 }
