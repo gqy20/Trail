@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Clock, FileDown, FileUp, History, Plus, X } from "lucide-react";
+import { ChevronRight, Clock, FileDown, FileUp, History, Pause, Play, Plus, Square, X } from "lucide-react";
 import { exportFollowsCsv } from "../../collector/follows";
 import { TaskStatus, useTransientNotice } from "./feedback";
 import { sendMessage } from "../../shared/runtime";
 import type { CollectorItem, FollowEntry } from "../../collector/types";
+import type { BatchRunState } from "../../background/runControl";
+
+/** 批量运行状态在 session 存储中的键（与 runControl 的 STATE_KEY 对应）。 */
+const batchRunKey = (toolId: string) => `trail.browserToolBatchRun.v1.${toolId}`;
 
 export function CollectorPanel({ toolId, platform, name }: { toolId: string; platform: string; name: string }) {
   const [item, setItem] = useState<CollectorItem>();
@@ -16,6 +20,7 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
   const [selecting, setSelecting] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [runState, setRunState] = useState<BatchRunState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -35,6 +40,20 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
     chrome.storage.onChanged.addListener(changed);
     return () => { alive = false; chrome.storage.onChanged.removeListener(changed); };
   }, [toolId, platform]);
+
+  // 批量运行进度：跟随 session 存储中的心跳与游标推进实时更新。
+  useEffect(() => {
+    let alive = true;
+    const load = () => void sendMessage({ type: "GET_BATCH_RUN_STATE", toolId })
+      .then((next) => { if (alive) setRunState(next); })
+      .catch(() => undefined);
+    load();
+    const changed = (_changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === "session" && _changes[batchRunKey(toolId)]) load();
+    };
+    chrome.storage.onChanged.addListener(changed);
+    return () => { alive = false; chrome.storage.onChanged.removeListener(changed); };
+  }, [toolId]);
 
   async function act(fn: () => Promise<string | undefined>, area: "accounts" | "collect" | "settings" = "accounts") {
     setFeedbackArea(area);
@@ -63,6 +82,38 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
   const selectedHandles = selected.filter((handle) => follows?.some((entry) => entry.handle === handle));
   const needsAttention = job?.status === "needs_user" || job?.status === "failed";
 
+  const runTotal = runState?.keywords.length ?? 0;
+  const runDone = runState?.completedKeywords ?? 0;
+  const runRecords = runState ? Object.values(runState.data).reduce((sum, list) => sum + list.length, 0) : 0;
+  const runActive = runState?.status === "running" || runState?.status === "paused";
+  const currentKeyword = runState && runState.nextIndex < runState.keywords.length ? runState.keywords[runState.nextIndex] : undefined;
+  const currentName = currentKeyword
+    ? follows?.find((entry) => entry.handle === currentKeyword)?.displayName || (platform === "twitter" ? `@${currentKeyword}` : currentKeyword)
+    : undefined;
+
+  /** 暂停/停止/继续不经过 act（不锁面板）：响应要么即时，要么由进度行与任务状态自行呈现。 */
+  function controlRun(action: "pause" | "stop" | "resume") {
+    setFeedbackArea("collect");
+    setError("");
+    if (action === "pause") {
+      void sendMessage({ type: "PAUSE_BATCH_RUN", toolId })
+        .then(() => setNotice("已请求暂停，当前账号完成后挂起。"))
+        .catch((err: unknown) => setError(errorText(err)));
+      return;
+    }
+    if (action === "stop") {
+      if (!window.confirm("停止采集？已完成账号的记录会保留并进入结果。")) return;
+      void sendMessage({ type: "STOP_BATCH_RUN", toolId })
+        .then(() => setNotice("已请求停止。"))
+        .catch((err: unknown) => setError(errorText(err)));
+      return;
+    }
+    // 继续会运行到本轮结束（可能数分钟），不等待结果；进度行与任务状态会实时反映。
+    setNotice("已继续采集。");
+    void sendMessage({ type: "RESUME_BATCH_RUN", toolId, userInitiated: true, asCollector: true })
+      .catch((err: unknown) => { setError(errorText(err)); setNotice(""); });
+  }
+
   function exportAccounts() {
     const url = URL.createObjectURL(new Blob(["\uFEFF", exportFollowsCsv(follows || [])], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
@@ -89,7 +140,12 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
           onChange={(e) => void act(() => sendMessage({ type: "CONFIGURE_COLLECTOR", toolId, enabled: job?.enabled === true, intervalHours: Number(e.target.value) }).then(() => "已保存"), "settings")} />
         <span>小时</span>
       </div>
-      <button className="button action collector-run" disabled={busy || running} onClick={() => void act(() => sendMessage({ type: "RUN_COLLECTOR_NOW", toolId }).then(() => "已启动"), "collect")}><Clock size={14} />{running ? "采集中" : "采集"}</button>
+      <button className="button action collector-run" disabled={busy || running} onClick={() => {
+        setFeedbackArea("collect");
+        setError("");
+        setNotice("已启动。");
+        void sendMessage({ type: "RUN_COLLECTOR_NOW", toolId }).catch((err: unknown) => { setError(errorText(err)); setNotice(""); });
+      }}><Clock size={14} />{running ? "采集中" : "采集"}</button>
       {feedbackArea !== "accounts" && notice ? <span className="muted text-small" role="status">{notice}</span> : null}
       <input ref={fileInputRef} className="visually-hidden" type="file" accept=".txt,.csv,text/csv,text/plain" onChange={async (event) => {
         const file = event.target.files?.[0];
@@ -98,6 +154,26 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
         await act(() => file.text().then((text) => sendMessage({ type: "IMPORT_FOLLOWS", platform, text })).then((result) => result.added === result.total ? `导入 ${result.total} 个账号。` : `新增 ${result.added}，共 ${result.total} 个。`));
       }} />
     </div>
+
+    {runState && runActive ? <div className="collector-progress" data-status={runState.status}>
+      <div className="collector-progress-meta">
+        <strong className="collector-progress-label">{runState.status === "running" ? "正在采集" : "已暂停"}</strong>
+        <span className="muted text-small">
+          {runState.status === "running"
+            ? `第 ${Math.min(runDone + 1, runTotal)}/${runTotal} 个${currentName ? `：${currentName}` : ""} · 已采 ${runRecords} 条`
+            : `第 ${Math.min(runDone + 1, runTotal)}/${runTotal} 个${currentName ? `：${currentName}` : ""} · 已采 ${runRecords} 条，点继续从中断处接着采`}
+        </span>
+      </div>
+      <div className="collector-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={runTotal} aria-valuenow={runDone} aria-label={`${name}采集进度`}>
+        <div className="collector-progress-fill" style={{ width: `${runTotal > 0 ? Math.round((runDone / runTotal) * 100) : 0}%` }} />
+      </div>
+      <div className="collector-progress-actions">
+        {runState.status === "running"
+          ? <button className="button secondary compact-button" onClick={() => controlRun("pause")}><Pause size={13} />暂停</button>
+          : <button className="button secondary compact-button" onClick={() => controlRun("resume")}><Play size={13} />继续</button>}
+        <button className="button secondary compact-button account-delete" onClick={() => controlRun("stop")}><Square size={12} />停止</button>
+      </div>
+    </div> : null}
 
     {error && feedbackArea !== "accounts" ? <p role="alert" className="error-text text-small">{error}</p> : null}
     {needsAttention && job?.message ? <details className="task-feedback-details"><summary>查看需处理原因</summary><p className="error-text text-small">{job.message}</p></details> : null}

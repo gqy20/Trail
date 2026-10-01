@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { advanceBatchRun, describeBatchRun, buildBatchRunResultFromState, isTransientBatchError, type BatchRunState } from "../src/background/runControl";
+import { advanceBatchRun, describeBatchRun, buildBatchRunResultFromState, isTransientBatchError, requestPauseBatchRun, requestStopBatchRun, consumeControlRequest, clearControlRequest, type BatchRunState } from "../src/background/runControl";
 
 function sampleState(overrides: Partial<BatchRunState> = {}): BatchRunState {
   return {
@@ -58,6 +58,25 @@ test("buildBatchRunResultFromState 保留数据与状态语义", () => {
   expect(result.status).toBe("paused");
   expect(result.data).toBe(state.data);
   expect(result.error).toContain("1/3");
+});
+
+test("控制请求按工具隔离：定向请求只被目标工具消费", () => {
+  clearControlRequest();
+  requestPauseBatchRun("twitter-timeline");
+  // 并行运行的其他工具不受影响，也不会消费掉定向请求。
+  expect(consumeControlRequest("xhs-notes").pause).toBe(false);
+  expect(consumeControlRequest("twitter-timeline").pause).toBe(true);
+  expect(consumeControlRequest("twitter-timeline").pause).toBe(false);
+});
+
+test("全局控制请求对所有工具生效，清理时一并移除", () => {
+  clearControlRequest();
+  requestStopBatchRun();
+  expect(consumeControlRequest("twitter-timeline").stop).toBe(true);
+  expect(consumeControlRequest("xhs-notes").stop).toBe(true);
+  // 定向清理会把全局请求一并清掉，避免新运行被遗留请求误停。
+  clearControlRequest("xhs-notes");
+  expect(consumeControlRequest("twitter-timeline").stop).toBe(false);
 });
 
 test("isTransientBatchError 只把瞬时网络错误判为可重试", () => {

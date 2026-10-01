@@ -2905,6 +2905,18 @@ code, pre, kbd, samp, .code-textarea {
 .collector-add-input { flex: 1; padding: 5px 10px; font-size: 13px; border: 1px solid #d7d7d7; border-radius: 10px; background: transparent; color: inherit; }
 .collector-panel > p { margin: 0; }
 
+/* 采集进度内联：状态 + 当前账号 + 进度条 + 暂停/停止 */
+.collector-progress { display: grid; gap: 7px; padding: 8px 12px; border: 1px solid var(--trail-border-soft); border-radius: 10px; background: var(--trail-surface-muted); }
+.collector-progress-meta { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; }
+.collector-progress-label { font-size: 12px; color: var(--trail-accent); }
+.collector-progress[data-status="paused"] .collector-progress-label { color: var(--trail-muted); }
+.collector-progress-track { height: 4px; border-radius: 999px; background: var(--trail-border); overflow: hidden; }
+.collector-progress-fill { height: 100%; border-radius: 999px; background: var(--trail-accent); transition: width 400ms ease; }
+.collector-progress[data-status="paused"] .collector-progress-fill { background: var(--trail-muted); }
+.collector-progress-actions { display: flex; gap: 6px; }
+.collector-progress-actions .button { min-height: 26px; padding: 2px 10px; font-size: 12px; gap: 4px; }
+@media (prefers-reduced-motion: reduce) { .collector-progress-fill { transition: none; } }
+
 /* 工具工作区：短标签完整呈现，规则管理与任务输入各自独立。 */
 .tools-page { gap: 14px; }
 .tools-header { flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--trail-border-soft); }

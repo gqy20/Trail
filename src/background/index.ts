@@ -38,8 +38,10 @@ import {
   getCollectorState,
   openCollectorPage,
   registerCollectors,
-  runCollector
+  runCollector,
+  syncCollectorJobFromResult
 } from "./collectors";
+import { getBatchRunState } from "./runControl";
 import { addFollow, getFollows, importFollows, removeFollow, removeFollows } from "../collector/follows";
 import { getFeedState, probeFeedConnection, publishStagedFeed, registerFeedPublisher, saveFeedPublisherConfig, stagePosts, clearStagedFeed } from "./feed";
 import { fetchGraphqlPageForTab, readPageStateForTab, resolveGraphqlQueryIdForTab } from "./graphqlBridge";
@@ -71,6 +73,23 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecu
 
   return true;
 });
+
+/**
+ * 恢复批量运行；asCollector 时补上 runOne 的收尾（同步采集任务状态并关闭工作标签页）。
+ * 采集任务的收尾逻辑放在路由层组装，避免 browserTools 与 collectors 相互依赖形成环。
+ */
+async function resumeCollectorAwareBatch(message: Extract<RuntimeMessage, { type: "RESUME_BATCH_RUN" }>) {
+  const paused = message.toolId ? await getBatchRunState(message.toolId) : null;
+  const result = await resumeBrowserToolBatch({ toolId: message.toolId, tabId: message.tabId, userInitiated: message.userInitiated });
+  if (message.asCollector) {
+    const toolId = message.toolId || paused?.toolId;
+    if (toolId) await syncCollectorJobFromResult(toolId, result).catch(() => undefined);
+    if (result.status !== "paused" && paused?.tabId !== undefined) {
+      await chrome.tabs.remove(paused.tabId).catch(() => undefined);
+    }
+  }
+  return result;
+}
 
 async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.MessageSender) {
   if (["BACKFILL_ACCOUNT", "RESTORE_BUNDLED_BROWSER_TOOL", "GET_CHECKIN_STATE", "CONFIGURE_CHECKIN", "RUN_CHECKIN", "OPEN_CHECKIN_PAGE", "GET_FEED_STATE", "SAVE_FEED_CONFIG", "STAGE_FEED_POSTS", "PUBLISH_FEED", "PROBE_FEED_REPO", "CLEAR_STAGED_FEED", "CLEAR_TRAIL_LOGS", "GET_COLLECTOR_STATE", "CONFIGURE_COLLECTOR", "RUN_COLLECTOR_NOW", "OPEN_COLLECTOR_PAGE", "ADD_FOLLOW", "REMOVE_FOLLOW", "REMOVE_FOLLOWS", "IMPORT_FOLLOWS", "GET_BATCH_RUN_STATE", "PAUSE_BATCH_RUN", "RESUME_BATCH_RUN", "STOP_BATCH_RUN"].includes(message.type)) {
@@ -112,10 +131,10 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
     case "BROWSER_TOOL_GRAPHQL_RESOLVE": return resolveGraphqlQueryIdForTab(message, sender);
     case "BROWSER_TOOL_GRAPHQL_FETCH": return fetchGraphqlPageForTab(message, sender);
     case "BROWSER_TOOL_STATE_READ": return readPageStateForTab(message, sender);
-    case "GET_BATCH_RUN_STATE": return getBrowserToolBatchRunState();
-    case "PAUSE_BATCH_RUN": return pauseBrowserToolBatch();
-    case "RESUME_BATCH_RUN": return resumeBrowserToolBatch({ tabId: message.tabId, userInitiated: message.userInitiated });
-    case "STOP_BATCH_RUN": return stopBrowserToolBatch();
+    case "GET_BATCH_RUN_STATE": return getBrowserToolBatchRunState(message.toolId);
+    case "PAUSE_BATCH_RUN": return pauseBrowserToolBatch(message.toolId);
+    case "RESUME_BATCH_RUN": return resumeCollectorAwareBatch(message);
+    case "STOP_BATCH_RUN": return stopBrowserToolBatch(message.toolId);
     case "GET_POPUP_STATE":
       return getPopupState();
     case "GET_INTERACTION_SETTINGS":

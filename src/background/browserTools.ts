@@ -155,7 +155,7 @@ async function startBatchRun(
   nativeExport?: { definitionId: string; maxRecords: number }
 ): Promise<BrowserToolRunResult> {
   await clearBatchRunState(definition.id);
-  clearControlRequest();
+  clearControlRequest(definition.id);
   // 界面批量入口已解析默认值，定时调度授权入口传空参数——这里统一补齐，
   // 否则 YAML 中引用 parameters 的模板（如用户间隔）在后台解析时报变量不存在。
   const resolvedParameters = resolveParameterDefaults(definition, parameters);
@@ -180,9 +180,9 @@ async function startBatchRun(
 }
 
 /** 从暂停状态恢复批量运行；由 Trail 界面的”继续”触发。 */
-export async function resumeBrowserToolBatch(input: { tabId?: number; userInitiated?: boolean }): Promise<BrowserToolRunResult> {
+export async function resumeBrowserToolBatch(input: { toolId?: string; tabId?: number; userInitiated?: boolean }): Promise<BrowserToolRunResult> {
   const states = await getAllBatchRunStates();
-  const state = states.find((s) => s.status === "paused") || null;
+  const state = (input.toolId ? states.filter((s) => s.toolId === input.toolId) : states).find((s) => s.status === "paused") || null;
   if (!state) throw new Error("没有可继续的批量运行。");
   if (state.status !== "paused") throw new Error(`当前运行状态为 ${state.status}，不能继续。`);
   const tool = await getStoredBrowserTool(state.toolId);
@@ -196,29 +196,32 @@ export async function resumeBrowserToolBatch(input: { tabId?: number; userInitia
   if (!tab.id || !tab.url || !matchesBrowserTool(definition, tab.url)) {
     throw new Error("继续运行需要打开一个匹配工具域名的网页标签页。");
   }
-  clearControlRequest();
+  clearControlRequest(state.toolId);
   const resumed: BatchRunState = { ...state, status: "running", tabId: tab.id, updatedAt: Date.now() };
   await saveBatchRunState(resumed);
   logInfo("batch", "batch.resume", "恢复已暂停的批量运行", { toolId: state.toolId, fromIndex: state.nextIndex, remaining: state.keywords.length - state.nextIndex });
-  return continueBatchRun(definition, resumed, tab.id);
+  const result = await continueBatchRun(definition, resumed, tab.id);
+  return result;
 }
 
-export async function getBrowserToolBatchRunState(): Promise<BatchRunState | null> {
+export async function getBrowserToolBatchRunState(toolId?: string): Promise<BatchRunState | null> {
+  if (toolId) return getBatchRunState(toolId);
   const states = await getAllBatchRunStates();
   return states[0] || null;
 }
 
-export function pauseBrowserToolBatch(): { requested: boolean } {
-  return requestPauseBatchRun();
+export function pauseBrowserToolBatch(toolId?: string): { requested: boolean } {
+  return requestPauseBatchRun(toolId);
 }
 
 /** 停止批量运行：运行中在下一个输入边界收尾；已暂停时立即以现有数据收尾。 */
-export async function stopBrowserToolBatch(): Promise<{ requested: boolean; finalized: boolean }> {
+export async function stopBrowserToolBatch(toolId?: string): Promise<{ requested: boolean; finalized: boolean }> {
   const states = await getAllBatchRunStates();
-  const state = states.find((s) => s.status === "running") || states.find((s) => s.status === "paused") || null;
+  const candidates = toolId ? states.filter((s) => s.toolId === toolId) : states;
+  const state = candidates.find((s) => s.status === "running") || candidates.find((s) => s.status === "paused") || null;
   if (!state) return { requested: false, finalized: false };
   if (state.status === "running") {
-    requestStopBatchRun();
+    requestStopBatchRun(state.toolId);
     return { requested: true, finalized: false };
   }
   if (state.status !== "paused") return { requested: false, finalized: false };
@@ -261,7 +264,7 @@ async function continueBatchRun(
   try {
     while (state.nextIndex < state.keywords.length) {
       const persisted = state.pendingControl;
-      const control = consumeControlRequest();
+      const control = consumeControlRequest(definition.id);
       const stopRequested = control.stop || persisted === 'stop';
       const pauseRequested = control.pause || persisted === 'pause';
       if (stopRequested) {
@@ -302,7 +305,7 @@ async function continueBatchRun(
             logWarn("batch", "budget.exhausted", "平台采集预算不足", { platform: budget.platform, used: budget.used, limit: budget.limit });
             return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined }, "paused", budgetPauseReason(budget), warnings);
           }
-          const wait = await sleepInterruptible(budget.delayMs);
+          const wait = await sleepInterruptible(budget.delayMs, definition.id);
           if (wait !== "done") {
             await releaseActivity(budget, "profile");
             return await finalizeBatchRun(definition, { ...state, status: wait === "stop" ? "stopped" : "paused", pendingControl: undefined }, wait === "stop" ? "partial" : "paused", "等待访问间隔时已" + (wait === "stop" ? "停止" : "暂停") + "，进度已保存。", warnings);
@@ -327,7 +330,7 @@ async function continueBatchRun(
             const reason = result.error || "需要登录或验证";
             logWarn("batch", "cooldown.start", "软封锁，15 分钟后自动重试一次", { platform: definition.feed?.platform, toolId: definition.id, runId: state.runId, keyword, detail: reason });
             warnings.push("[" + keyword + "] " + reason + "；15 分钟后自动重试。");
-            const cooled = await sleepInterruptible(15 * 60_000);
+            const cooled = await sleepInterruptible(15 * 60_000, definition.id);
             if (cooled === "stop") {
               return await finalizeBatchRun(definition, { ...state, status: "stopped", pendingControl: undefined }, "partial", "已手动停止：完成 " + state.completedKeywords + "/" + state.keywords.length + " 个输入。", warnings);
             }
@@ -786,7 +789,7 @@ async function enrichWithDetails(
         logWarn("detail", "budget.exhausted", "平台详情预算不足，停止补全", { platform: detailBudget.platform, used: detailBudget.used, limit: detailBudget.limit });
         return { ...result, status: "paused", pauseReason: "budget", error: budgetPauseReason(detailBudget) };
       }
-      if (await sleepInterruptible(detailBudget.delayMs) !== "done") { await releaseActivity(detailBudget, "detail"); break; }
+      if (await sleepInterruptible(detailBudget.delayMs, definition.id) !== "done") { await releaseActivity(detailBudget, "detail"); break; }
     }
     const detailStartedAt = Date.now();
     await navigateTab(tabId, url);
@@ -822,7 +825,7 @@ async function enrichWithDetails(
     Object.assign(record, detail.record || {});
     enriched += 1;
     if (recordId) newlyEnrichedIds.push(recordId);
-    const peeked = peekControlRequest();
+    const peeked = peekControlRequest(definition.id);
     if (peeked.pause || peeked.stop) break;
     if (delay > 0 && enriched < maxItems) await sleep(jitterDelay(delay, definition.detail_extract?.jitter_ms));
   }
@@ -830,7 +833,7 @@ async function enrichWithDetails(
   if (platform && newlyEnrichedIds.length > 0) {
     await recordCollectedIds(platform, newlyEnrichedIds).catch(() => undefined);
   }
-  if (enriched === 0 && records.length > 0 && !peekControlRequest().pause && !peekControlRequest().stop) {
+  if (enriched === 0 && records.length > 0 && !peekControlRequest(definition.id).pause && !peekControlRequest(definition.id).stop) {
     const reason = "详情补全全部失败（页面可能要求登录或验证），已暂停；完成验证后点继续将从该账号重试。";
     logWarn("detail", "detail.allFailed", "详情补全全部失败，运行转暂停", { platform: definition.feed?.platform, toolId: definition.id, records: records.length });
     return { ...result, status: "paused", error: reason, warnings: [...result.warnings, reason] };
@@ -874,12 +877,12 @@ function enrichAuthor(
 }
 
 /** 分片睡眠，期间响应暂停/停止请求；返回超时结束或收到的控制请求。 */
-function sleepInterruptible(totalMs: number, sliceMs = 5_000): Promise<"done" | "pause" | "stop"> {
+function sleepInterruptible(totalMs: number, toolId: string, sliceMs = 5_000): Promise<"done" | "pause" | "stop"> {
   if (totalMs <= 0) return Promise.resolve("done");
   return new Promise((resolvePromise) => {
     const startedAt = Date.now();
     const timer = setInterval(() => {
-      const peeked = peekControlRequest();
+      const peeked = peekControlRequest(toolId);
       if (peeked.stop) { clearInterval(timer); resolvePromise("stop"); return; }
       if (peeked.pause) { clearInterval(timer); resolvePromise("pause"); return; }
       if (Date.now() - startedAt >= totalMs) { clearInterval(timer); resolvePromise("done"); }

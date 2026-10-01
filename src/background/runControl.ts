@@ -31,7 +31,9 @@ const STALE_RUNNING_MS = 120_000;
 
 /** 只存在于内存的控制请求，由运行循环在每个账号边界消费。 */
 type ControlRequest = { pause: boolean; stop: boolean };
-let controlRequest: ControlRequest = { pause: false, stop: false };
+/** 按工具隔离的控制请求；全局键（不带 toolId 的调用）对所有并行运行生效。 */
+const GLOBAL_CONTROL_KEY = "*";
+const controlRequests = new Map<string, ControlRequest>();
 
 /**
  * 判断批量错误是否为瞬时网络类（页面导航中断、连接抖动等）。
@@ -83,24 +85,26 @@ export async function clearBatchRunState(toolId: string): Promise<void> {
   await chrome.storage.session.remove(`${STATE_KEY}.${toolId}`);
 }
 
-export function requestPauseBatchRun(): { requested: boolean } {
-  controlRequest = { pause: true, stop: false };
-  void persistPendingControl('pause');
+export function requestPauseBatchRun(toolId?: string): { requested: boolean } {
+  controlRequests.set(toolId || GLOBAL_CONTROL_KEY, { pause: true, stop: false });
+  void persistPendingControl('pause', toolId);
   return { requested: true };
 }
 
-export function requestStopBatchRun(): { requested: boolean } {
-  controlRequest = { pause: false, stop: true };
-  void persistPendingControl('stop');
+export function requestStopBatchRun(toolId?: string): { requested: boolean } {
+  controlRequests.set(toolId || GLOBAL_CONTROL_KEY, { pause: false, stop: true });
+  void persistPendingControl('stop', toolId);
   return { requested: true };
 }
 
-/** 把待生效的控制请求写入状态，供 UI 即时反馈与 SW 重启后的恢复。 */
-async function persistPendingControl(control: 'pause' | 'stop'): Promise<void> {
+/** 把待生效的控制请求写入运行状态，供 UI 即时反馈与 SW 重启后的恢复。 */
+async function persistPendingControl(control: 'pause' | 'stop', toolId?: string): Promise<void> {
   try {
-    const state = await getBatchRunState();
-    if (state && state.status === 'running') {
-      await saveBatchRunState({ ...state, pendingControl: control, updatedAt: Date.now() });
+    const states = toolId ? [await getBatchRunState(toolId)] : await getAllBatchRunStates();
+    for (const state of states) {
+      if (state && state.status === 'running') {
+        await saveBatchRunState({ ...state, pendingControl: control, updatedAt: Date.now() });
+      }
     }
   } catch {
     // 状态写入失败不影响内存标志生效。
@@ -108,19 +112,34 @@ async function persistPendingControl(control: 'pause' | 'stop'): Promise<void> {
 }
 
 /** 不消费地查看当前控制请求；长循环（如详情补全）用它提前响应暂停/停止。 */
-export function peekControlRequest(): ControlRequest {
-  return { ...controlRequest };
+export function peekControlRequest(toolId?: string): ControlRequest {
+  return readControlRequest(toolId);
 }
 
 /** 运行循环在账号边界调用：取出当前控制请求并复位。 */
-export function consumeControlRequest(): ControlRequest {
-  const current = controlRequest;
-  controlRequest = { pause: false, stop: false };
-  return current;
+export function consumeControlRequest(toolId?: string): ControlRequest {
+  const control = readControlRequest(toolId);
+  // 定向请求消费即清除；全局请求保留给其他并行运行，由下一次启动/继续统一清理。
+  if (toolId) controlRequests.delete(toolId);
+  return control;
 }
 
-export function clearControlRequest(): void {
-  controlRequest = { pause: false, stop: false };
+function readControlRequest(toolId?: string): ControlRequest {
+  const own = controlRequests.get(toolId || GLOBAL_CONTROL_KEY);
+  const broadcast = toolId ? controlRequests.get(GLOBAL_CONTROL_KEY) : undefined;
+  return {
+    pause: Boolean(own?.pause || broadcast?.pause),
+    stop: Boolean(own?.stop || broadcast?.stop)
+  };
+}
+
+export function clearControlRequest(toolId?: string): void {
+  if (toolId) {
+    controlRequests.delete(toolId);
+    controlRequests.delete(GLOBAL_CONTROL_KEY);
+  } else {
+    controlRequests.clear();
+  }
 }
 
 /** 由运行结果构造面向 UI 的摘要。 */

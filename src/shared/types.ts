@@ -240,10 +240,10 @@ export type RuntimeMessage =
       field_toggles?: Record<string, boolean>;
     }
   | { type: "BROWSER_TOOL_STATE_READ"; source?: string }
-  | { type: "GET_BATCH_RUN_STATE" }
-  | { type: "PAUSE_BATCH_RUN" }
-  | { type: "RESUME_BATCH_RUN"; tabId?: number; userInitiated?: boolean }
-  | { type: "STOP_BATCH_RUN" }
+  | { type: "GET_BATCH_RUN_STATE"; toolId?: string }
+  | { type: "PAUSE_BATCH_RUN"; toolId?: string }
+  | { type: "RESUME_BATCH_RUN"; toolId?: string; tabId?: number; userInitiated?: boolean; asCollector?: boolean }
+  | { type: "STOP_BATCH_RUN"; toolId?: string }
   | { type: "CLEAR_STAGED_FEED" }
   | { type: "GET_TRAIL_LOGS" }
   | { type: "CLEAR_TRAIL_LOGS" }

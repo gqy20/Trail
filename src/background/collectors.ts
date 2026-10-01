@@ -7,6 +7,7 @@ import { getFollows } from "../collector/follows";
 import { resetWatermark } from "../collector/watermarks";
 import { pickRotation } from "../collector/rotation";
 import type { CollectorJob, CollectorState } from "../collector/types";
+import type { BrowserToolRunResult } from "../browser-tools/contracts";
 import { logError, logInfo, logWarn } from "../logging/logger";
 
 const KEY = "trail.collectors.v1";
@@ -167,6 +168,25 @@ async function runOne(toolId: string, automatic: boolean): Promise<CollectorStat
     }
   }
   return getCollectorState();
+}
+
+/** 恢复运行等绕过 runOne 的入口结束后，同步采集任务状态并清理工作标签页。 */
+export async function syncCollectorJobFromResult(toolId: string, result: BrowserToolRunResult): Promise<void> {
+  const job = (await readJobs())[toolId];
+  if (!job) return;
+  const records = Object.values(result.data).reduce((total, list) => total + list.length, 0);
+  const ok = result.status === "completed" || result.status === "partial";
+  await patchJob(toolId, {
+    status: ok ? "ok" : result.status === "paused" ? "needs_user" : "failed",
+    result,
+    lastSuccessAt: ok ? Date.now() : job.lastSuccessAt,
+    message: ok
+      ? result.status === "partial"
+        ? `${records} 条 · ${result.error || "部分账号失败"}`
+        : `${records} 条记录`
+      : result.error || "采集失败。",
+    tabId: result.status === "paused" ? job.tabId : undefined
+  });
 }
 
 export async function openCollectorPage(toolId: string): Promise<void> {
