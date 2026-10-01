@@ -47,7 +47,7 @@ export async function publishFeed(): Promise<FeedPublishResult> {
     { path: FEED_FOLLOWS_PATH, content: `${JSON.stringify(followsFile, null, 2)}\n` },
     ...planFeedFiles(posts, config)
   ];
-  await commitGitHubFiles(config, files, `trail: 发布 ${newCount} 条新记录，共 ${posts.length} 条（${files.length} 个文件）`);
+  await commitGitHubFiles(config, files, `trail: 发布 ${newCount} 条新记录，共 ${posts.length} 条`);
 
   await clearStagedPosts();
   await patchFeedState({

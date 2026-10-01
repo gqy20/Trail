@@ -91,7 +91,7 @@ export async function fetchGraphqlPageForTab(
   logDebug("graphql", "fetch", "GraphQL 请求完成", { ...activityContext, operation: message.operation, status: result.status, elapsedMs });
   if (result.status === 401 || result.status === 403) {
     logError("graphql", "fetch.auth", "登录态被拒绝", { ...activityContext, operation: message.operation, status: result.status });
-    throw new Error(`x.com 拒绝了请求（HTTP ${result.status}），登录态可能已过期，请重新打开页面登录。`);
+    throw new Error(`需要重新登录 x.com（HTTP ${result.status}）。`);
   }
   if (result.status === 429) {
     logError("graphql", "fetch.rateLimited", "触发 429 限流", { ...activityContext, operation: message.operation, status: result.status, elapsedMs });

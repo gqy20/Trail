@@ -181,7 +181,7 @@ async function waitForPage(tabId: number): Promise<void> {
     if (tab.status === "complete") return;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error("页面加载超时，稍后会有限重试。");
+  throw new Error("页面加载超时，稍后会自动重试。");
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

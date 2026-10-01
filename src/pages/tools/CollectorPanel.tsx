@@ -95,7 +95,7 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
         const file = event.target.files?.[0];
         event.currentTarget.value = "";
         if (!file) return;
-        await act(() => file.text().then((text) => sendMessage({ type: "IMPORT_FOLLOWS", platform, text })).then((result) => `新增 ${result.added}，共 ${result.total} 个。`));
+        await act(() => file.text().then((text) => sendMessage({ type: "IMPORT_FOLLOWS", platform, text })).then((result) => result.added === result.total ? `导入 ${result.total} 个账号。` : `新增 ${result.added}，共 ${result.total} 个。`));
       }} />
     </div>
 

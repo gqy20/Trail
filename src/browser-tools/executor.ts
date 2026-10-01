@@ -378,10 +378,10 @@ const graphqlQueryIdCache = new Map<string, string>();
 async function executeGraphqlFetchStep(step: BrowserToolGraphqlFetchStep, context: ExecutionContext): Promise<ExecutionSignal> {
   const host = location.hostname.toLowerCase();
   if (host !== "x.com" && host !== "twitter.com" && !host.endsWith(".x.com")) {
-    throw new Error(`graphql_fetch 需要 x.com 页面上下文（当前：${host}）。`);
+    throw new Error(`请在 x.com 页面上运行此工具（当前页面：${host}）。`);
   }
   if (!/(?:^|;\s*)ct0=/.test(document.cookie)) {
-    throw new Error("页面缺少 x.com 登录态（ct0），请先登录后重试。");
+    throw new Error("需要重新登录 x.com。");
   }
 
   const queryId = await resolveGraphqlQueryId(host, step);
@@ -428,12 +428,12 @@ async function executeGraphqlFetchStep(step: BrowserToolGraphqlFetchStep, contex
       }
     }
     if (!payload || typeof payload.json !== "object" || payload.json === null) {
-      throw new Error(`GraphQL ${step.operation} 没有返回 JSON 数据。`);
+      throw new Error(`接口未返回数据，可能需要重新登录。`);
     }
 
     for (const [name, path] of Object.entries(step.store || {})) {
       const value = readJsonPath(payload.json, resolve(path, context));
-      if (value === undefined) throw new Error(`未从 ${step.operation} 响应读取到 ${name}（账号可能不存在、改名或被冻结）。`);
+      if (value === undefined) throw new Error(`账号可能已改名或被冻结（${step.operation} 未返回 ${name}）。`);
       context.values[name] = value;
     }
 
@@ -575,7 +575,7 @@ async function executeStateReadStep(step: BrowserToolStateReadStep, context: Exe
       context.warnings.push("页面没有可读取的状态数据。");
       return "continue";
     }
-    throw new Error("页面没有 __INITIAL_STATE__ 数据（可能被重定向或需要登录）。");
+    throw new Error("页面加载异常，可能需要重新登录。");
   }
 
   const requestedMax = typeof step.max_items === "number"

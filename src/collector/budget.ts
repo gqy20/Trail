@@ -107,5 +107,5 @@ export async function releaseActivity(state: BudgetReservation, kind: BudgetKind
 export function budgetPauseReason(state: BudgetReservation): string {
   const name = state.platform === "twitter" ? "X" : state.platform === "xhs" ? "小红书" : state.platform;
   const recovery = state.nextAvailableAt ? `最早 ${new Date(state.nextAvailableAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} 释放所需额度` : "额度按 24 小时滚动窗口释放";
-  return `${name} 近 24 小时访问预算不足（${state.used}/${state.limit} 分钟等效量；主页 ${state.profile}${state.config.profileLimit ? `/${state.config.profileLimit}` : ""} 次，详情 ${state.detail}${state.config.detailLimit ? `/${state.config.detailLimit}` : ""} 次），${recovery}；进度已保存，额度恢复或调整预算后请点继续。`;
+  return `${name} 今日访问额度已满（主页 ${state.profile}${state.config.profileLimit ? `/${state.config.profileLimit}` : ""} 次 · 详情 ${state.detail}${state.config.detailLimit ? `/${state.config.detailLimit}` : ""} 次），额度随时间自动恢复；进度已保存，恢复后请点继续。`;
 }
