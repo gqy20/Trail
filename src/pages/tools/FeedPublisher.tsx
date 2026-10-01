@@ -130,14 +130,12 @@ export function FeedPublisherView() {
         </div>
         <div className="feed-config-wide token-field"><label title="只授予该仓库 Contents 读写权限">Token · 仅保存在本机<input ref={tokenRef} type={showToken ? "text" : "password"} autoComplete="off" spellCheck={false} value={draft.token} disabled={busy} onChange={(e) => setDraft({ ...draft, token: e.target.value })} placeholder="github_pat_…" /></label><button className="button secondary compact-button" type="button" aria-pressed={showToken} onClick={() => setShowToken(!showToken)}>{showToken ? "隐藏" : "显示"}</button></div>
         <label className="feed-config-wide" title="留空则默认 https://<owner>.github.io/<repo>/">Pages 地址<input ref={pagesRef} value={draft.pagesBaseUrl || ""} disabled={busy} onChange={(e) => setDraft({ ...draft, pagesBaseUrl: e.target.value })} placeholder="https://gqy20.github.io/feed/" /></label>
-        <label>总条数上限<input type="number" min={100} max={20000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
-        <label>每源条数上限<input type="number" min={10} max={500} value={draft.itemsPerFeed} disabled={busy} onChange={(e) => setDraft({ ...draft, itemsPerFeed: Number(e.target.value) })} /></label>
-        <div className="feed-config-wide publish-options">
-          <label className="feed-config-toggle"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 自动发布</label>
-          <label className="feed-config-toggle"><input type="checkbox" checked={draft.excludeRetweets === true} disabled={busy} onChange={(e) => setDraft({ ...draft, excludeRetweets: e.target.checked })} /> 排除转推</label>
-        </div>
-        <div className="feed-config-wide publish-schedule" title="采集后 3 分钟合并推送；定时间隔到期时补发暂存记录">
-          <span>兜底间隔</span><input className="collector-interval" aria-label="自动发布兜底间隔" type="number" min={1} max={168} value={draft.autoPublishHours || 12} disabled={busy || !draft.autoPublish} onChange={(e) => setDraft({ ...draft, autoPublishHours: Number(e.target.value) })} /><span>小时</span>
+        <div className="feed-config-wide feed-config-inline">
+          <label>封顶<input type="number" min={100} max={20000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
+          <label>每源<input type="number" min={10} max={5000} value={draft.itemsPerFeed} disabled={busy} onChange={(e) => setDraft({ ...draft, itemsPerFeed: Number(e.target.value) })} /></label>
+          <label className="feed-config-toggle"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 自动</label>
+          <label className="feed-config-toggle"><input className="collector-interval" type="number" min={1} max={168} value={draft.autoPublishHours || 12} disabled={busy || !draft.autoPublish} onChange={(e) => setDraft({ ...draft, autoPublishHours: Number(e.target.value) })} /><span>小时</span></label>
+          <label className="feed-config-toggle"><input type="checkbox" checked={draft.excludeRetweets === true} disabled={busy} onChange={(e) => setDraft({ ...draft, excludeRetweets: e.target.checked })} /> 不收录转推</label>
         </div>
       </div>
     </article>

@@ -3,11 +3,11 @@ import { RefreshCw } from "lucide-react";
 import { sendMessage } from "../../shared/runtime";
 import type { CollectorState } from "../../collector/types";
 import { CollectorPanel } from "./CollectorPanel";
+import { FeedPublisherView } from "./FeedPublisher";
 
 /**
- * 跨渠道统一采集页：X / 小红书等渠道集中管理，
- * 不需要选中工具或打开对应网站即可查看状态与立即采集；
- * 账号名单持久化在 follows 存储，导入一次长期有效。
+ * 统一采集页：渠道管理 + 账号名单 + 发布配置一站式。
+ * 合并了原"订阅源"独立页，采集与发布在同一页面完成完整闭环。
  */
 export function CollectorsView() {
   const [state, setState] = useState<CollectorState>();
@@ -28,7 +28,7 @@ export function CollectorsView() {
 
   const items = state?.items || [];
   return <section className="collectors-view stack">
-    <div className="view-heading inline-view-heading"><h1>账号采集</h1><p className="muted text-small">按名单定时采集，记录暂存到发布页。</p></div>
+    <div className="view-heading inline-view-heading"><h1>采集与发布</h1><p className="muted text-small">名单定时采集 → 暂存 → 自动发布到 GitHub Pages。</p></div>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
     {!state ? <p className="muted">正在读取渠道…</p> : null}
     {items.map((item) => (
@@ -38,6 +38,7 @@ export function CollectorsView() {
       <p>还没有采集渠道。</p>
       <button className="button secondary" onClick={() => void sendMessage({ type: "IMPORT_BUNDLED_BROWSER_TOOLS" }).then(() => undefined)}><RefreshCw size={15} /> 同步内置工具</button>
     </div> : null}
+    <FeedPublisherView />
   </section>;
 }
 

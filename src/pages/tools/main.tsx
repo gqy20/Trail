@@ -58,7 +58,7 @@ function BrowserToolsApp() {
   const [nativeExportLimit, setNativeExportLimit] = useState(1000);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<"single" | "batch">();
-  const [activeView, setActiveView] = useState<"research" | "collect" | "results" | "settings" | "checkins" | "feed" | "logs" | "collectors">("research");
+  const [activeView, setActiveView] = useState<"research" | "collect" | "results" | "settings" | "checkins" | "logs" | "collectors">("research");
   const [logCategory, setLogCategory] = useState<"runtime" | "literature">("runtime");
   const [errorMessage, setErrorMessage] = useState("");
   const [errorScope, setErrorScope] = useState({ view: activeView, tool: selectedId, area: "view" });
@@ -100,7 +100,7 @@ function BrowserToolsApp() {
   const nativeExportDefinition = selectedTool?.definition.native_exports?.[0];
   const isMatched = Boolean(selectedTool && state?.matchedToolIds.includes(selectedTool.id));
   const toolUi = resolveToolUi(selectedTool?.definition);
-  const pageTitle = activeView === "research" ? "研究路径" : activeView === "settings" ? "设置" : activeView === "checkins" ? "每日签到" : activeView === "feed" ? "发布" : activeView === "logs" ? logCategory === "literature" ? "文献队列" : "运行日志" : activeView === "collectors" ? "账号采集" : "网页工具";
+  const pageTitle = activeView === "research" ? "研究路径" : activeView === "settings" ? "设置" : activeView === "checkins" ? "每日签到" : activeView === "logs" ? logCategory === "literature" ? "文献队列" : "运行日志" : activeView === "collectors" ? "采集与发布" : "网页工具";
   const yamlPreview = useMemo(() => {
     if (!yamlDraft.trim()) return undefined;
     try { return { definition: parseBrowserToolYaml(yamlDraft), error: "" }; }
@@ -369,7 +369,6 @@ function BrowserToolsApp() {
           <nav className="tools-nav" aria-label="功能导航">
             <button className={activeView === "research" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("research")}>研究路径</button>
             <button className={activeView === "checkins" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("checkins")}>签到</button>
-            <button className={activeView === "feed" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("feed")}>发布</button>
             <button className={activeView === "logs" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => { setLogCategory("runtime"); setActiveView("logs"); }}>日志</button>
             <button className={activeView === "collectors" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collectors")}>账号采集</button>
             <button className={activeView === "collect" || activeView === "results" ? "tools-nav-item active" : "tools-nav-item"} onClick={() => setActiveView("collect")}>网页工具</button>
@@ -563,7 +562,6 @@ function BrowserToolsApp() {
         ) : null}
 
         {activeView === "checkins" ? <CheckinsView /> : null}
-        {activeView === "feed" ? <FeedPublisherView /> : null}
         {activeView === "logs" ? <section className="logs-hub stack">
           <nav className="logs-category-filter" aria-label="日志分类">
             <button className={logCategory === "runtime" ? "active" : ""} aria-pressed={logCategory === "runtime"} onClick={() => setLogCategory("runtime")}>运行日志</button>
