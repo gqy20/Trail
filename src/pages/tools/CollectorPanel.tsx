@@ -254,7 +254,14 @@ function formatRunTime(at: number): string {
 function progressLabel(runState: BatchRunState): string {
   if (runState.pendingControl === "stop") return "正在停止…";
   if (runState.pendingControl === "pause") return "正在暂停…";
-  return runState.status === "running" ? "正在采集" : "已暂停";
+  if (runState.status !== "running") return "已暂停";
+  switch (runState.phase) {
+    case "pacing": return "等待访问间隔…";
+    case "details": return "正在补全详情…";
+    case "cooldown": return "冷却等待中…";
+    case "profile": return "正在读取主页…";
+    default: return "正在采集…";
+  }
 }
 
 function errorText(error: unknown): string { return error instanceof Error ? error.message : "操作失败，请重试。"; }

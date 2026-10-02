@@ -16,6 +16,8 @@ export type BatchRunState = {
   parameters: Record<string, unknown>;
   tabId?: number;
   status: BatchRunStatus;
+  /** 当前阶段（UI 展示用）：等间隔 → 读主页 → 补详情；冷却单独标识。 */
+  phase?: "pacing" | "profile" | "details" | "cooldown";
   /** 用户已请求但尚未生效的暂停/停止；运行循环在边界消费并清除。 */
   pendingControl?: "pause" | "stop";
   startedAt: number;

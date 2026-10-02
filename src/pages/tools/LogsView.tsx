@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eraser, FileDown } from "lucide-react";
+import { Check, Copy, Eraser, FileDown } from "lucide-react";
 import { sendMessage } from "../../shared/runtime";
 import { formatLogEntriesText, LOG_STORE_KEY, type LogEntry, type LogLevel } from "../../logging/logger";
 
@@ -15,6 +15,7 @@ export function LogsView() {
   const [platform, setPlatform] = useState("all");
   const [format, setFormat] = useState("json");
   const [search, setSearch] = useState("");
+  const [copiedKey, setCopiedKey] = useState<string>();
 
   useEffect(() => {
     let alive = true;
@@ -76,6 +77,48 @@ export function LogsView() {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
+  /** 单条日志文本：时间 级别 区域 事件 + 消息 + 数据 JSON，可直接贴给别人定位问题。 */
+  function entryText(entry: LogEntry): string {
+    const time = new Date(entry.ts).toLocaleString("zh-CN", { hour12: false });
+    return `[${time}] [${LEVEL_LABEL[entry.level]}] [${entry.scope}] ${entry.event}\n${entry.message}${entry.data ? `\n${JSON.stringify(entry.data, null, 2)}` : ""}`;
+  }
+
+  async function writeClipboard(text: string): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      try {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.append(area);
+        area.select();
+        const ok = document.execCommand("copy");
+        area.remove();
+        return ok;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  async function copyEntry(entry: LogEntry, key: string) {
+    if (!await writeClipboard(entryText(entry))) {
+      setError("复制失败，请展开日志后手动选择文本。");
+      return;
+    }
+    setCopiedKey(key);
+    window.setTimeout(() => setCopiedKey((current) => current === key ? undefined : current), 1_500);
+  }
+
+  async function copyFiltered() {
+    const chronological = filtered.slice().reverse();
+    if (chronological.length === 0) return;
+    if (!await writeClipboard(formatLogEntriesText(chronological))) setError("复制失败，请改用导出。");
+  }
+
   return <section className="logs-view stack">
     <div className="view-heading inline-view-heading"><h1>运行日志</h1><p className="muted text-small">保留最近 5000 条日志，敏感字段已脱敏。</p></div>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
@@ -93,23 +136,31 @@ export function LogsView() {
       <select className="input" aria-label="日志平台" value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="all">全部平台</option>{platforms.map((item) => <option key={item} value={item}>{platformName(item)}</option>)}</select>
       <select className="input" aria-label="日志导出格式" value={format} onChange={(e) => setFormat(e.target.value)}><option value="json">JSON</option><option value="text">文本</option></select>
       <input className="input logs-search" aria-label="搜索日志" placeholder="搜索日志" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <button className="button secondary" disabled={busy || filtered.length === 0} onClick={() => void copyFiltered()}><Copy size={15} />复制</button>
       <button className="button secondary" disabled={busy || filtered.length === 0} onClick={exportLogs}><FileDown size={15} />导出</button>
       <button className="button secondary" disabled={busy || !entries?.length} onClick={() => void clearLogs()}><Eraser size={15} />清空</button>
     </div>
     <p className="muted text-small">{filtered.length === entries?.length ? `${filtered.length} 条` : `匹配 ${filtered.length} / ${entries?.length ?? 0} 条`} · 最新在前</p>
     {observations.length ? <p className="muted text-small">当前筛选：访问结果 {observations.filter((entry) => entry.event !== "fetch.rateLimited" && entry.event !== "fetch.auth").length} 条 · 异常事件 {abnormal} 条（同一次访问可有多条） · 429 限流 {filtered.filter((entry) => entry.event === "fetch.rateLimited").length} 次。展开查看当时配置；验证或拦截不等于封号。</p> : null}
     <div className="logs-list">
-      {filtered.map((entry, index) => <details className={`log-entry log-${entry.level}`} key={`${entry.ts}-${entry.event}-${index}`}>
+      {filtered.map((entry, index) => {
+        const entryKey = `${entry.ts}-${entry.event}-${index}`;
+        return <details className={`log-entry log-${entry.level}`} key={entryKey}>
         <summary>
           <time title={new Date(entry.ts).toLocaleString("zh-CN", { hour12: false })}>{new Date(entry.ts).toLocaleTimeString("zh-CN", { hour12: false })}</time>
           <span className={`log-level log-level-${entry.level}`}>{LEVEL_LABEL[entry.level]}</span>
           <span className="log-scope">{typeof entry.data?.platform === "string" ? platformName(entry.data.platform) : entry.scope}</span>
           <span className="log-message">{entry.message}</span>
+          <button className="log-copy" type="button" aria-label="复制此日志" title="复制此日志"
+            onClick={(event) => { event.preventDefault(); event.stopPropagation(); void copyEntry(entry, entryKey); }}>
+            {copiedKey === entryKey ? <Check size={13} /> : <Copy size={13} />}
+          </button>
           <span className="log-expand" aria-hidden="true">›</span>
         </summary>
         <code className="log-event">{entry.event}</code>
         {entry.data ? <pre>{JSON.stringify(entry.data, null, 2)}</pre> : null}
-      </details>)}
+      </details>;
+      })}
       {entries && filtered.length === 0 ? <p className="muted logs-empty">没有匹配的日志。</p> : null}
       {!entries ? <p className="muted">正在读取日志…</p> : null}
     </div>

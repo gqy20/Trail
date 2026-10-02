@@ -394,7 +394,7 @@ export type BrowserToolRunStatus = "completed" | "partial" | "paused" | "cancell
 
 export type BrowserToolRunResult = {
   /** 预算暂停不属于登录/验证拦截，不触发冷却重试。 */
-  pauseReason?: "budget";
+  pauseReason?: "budget" | "local";
   outcome?: "success" | "already_done";
   message?: string;
   toolId: string;

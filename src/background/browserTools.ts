@@ -329,29 +329,44 @@ async function continueBatchRun(
             logWarn("batch", "budget.exhausted", "平台采集预算不足", { platform: budget.platform, used: budget.used, limit: budget.limit });
             return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined }, "paused", budgetPauseReason(budget), warnings);
           }
+          if (budget.delayMs > 30_000) {
+            // 长间隔等待会表现得像“卡住”，显式打点便于用户在日志里看到原因。
+            logInfo("batch", "pace.wait", "等待平台访问间隔", { platform: definition.feed.platform, toolId: definition.id, delayMs: budget.delayMs, seconds: Math.round(budget.delayMs / 1000) });
+          }
+          if (budget.delayMs > 0) {
+            state = { ...state, phase: "pacing" };
+            await saveBatchRunState(state);
+          }
           const wait = await sleepInterruptible(budget.delayMs, definition.id);
           if (wait !== "done") {
             await releaseActivity(budget, "profile");
             return await finalizeBatchRun(definition, { ...state, status: wait === "stop" ? "stopped" : "paused", pendingControl: undefined }, wait === "stop" ? "partial" : "paused", "等待访问间隔时已" + (wait === "stop" ? "停止" : "暂停") + "，进度已保存。", warnings);
           }
         }
+        state = { ...state, phase: "profile" };
+        await saveBatchRunState(state);
         const runParameters = navigation.type === "fixed_url"
           ? { ...state.parameters, [navigation.input_parameter]: keyword }
           : state.parameters;
+        const keywordStartedAt = Date.now();
         await navigateTab(tabId, nextUrl);
         const readyTab = await chrome.tabs.get(tabId);
         const raw = await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId);
         // 先按水位线过滤再补详情（不给旧内容花预算），详情补全出真实日期后再过滤一次兜底。
         // 用户已请求暂停/停止时跳过详情补全：工作流被中止的账号不值得再花详情预算。
         const control = peekControlRequest(definition.id);
+        if (!control.pause && !control.stop) {
+          state = { ...state, phase: "details" };
+          await saveBatchRunState(state);
+        }
         const result = control.pause || control.stop
           ? await applySinceFilter(definition, keyword, raw)
           : await applySinceFilter(definition, keyword, await enrichWithDetails(definition, tabId, await applySinceFilter(definition, keyword, raw)), "post-enrich");
 
         if (result.status === "paused") {
-          if (result.pauseReason === "budget") {
+          if (result.pauseReason === "budget" || result.pauseReason === "local") {
             warnings.push(...result.warnings);
-            return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined, lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle }, "paused", result.error || "平台预算不足，进度已保存。", warnings);
+            return await finalizeBatchRun(definition, { ...state, status: "paused", pendingControl: undefined, phase: undefined, lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle }, "paused", result.error || "平台预算不足，进度已保存。", warnings);
           }
           // 软封锁自动冷却：15 分钟后自动重试一次（可被停止打断），再失败转人工。
           if ((cooldownRetries.get(index) || 0) < 2) {
@@ -359,6 +374,8 @@ async function continueBatchRun(
             const reason = result.error || "需要登录或验证";
             logWarn("batch", "cooldown.start", "软封锁，15 分钟后自动重试一次", { platform: definition.feed?.platform, toolId: definition.id, runId: state.runId, keyword, detail: reason });
             warnings.push("[" + keyword + "] " + reason + "；15 分钟后自动重试。");
+            state = { ...state, phase: "cooldown" };
+            await saveBatchRunState(state);
             const cooled = await sleepInterruptible(15 * 60_000, definition.id);
             if (cooled === "stop") {
               return await finalizeBatchRun(definition, { ...state, status: "stopped", pendingControl: undefined }, "partial", "已手动停止：完成 " + state.completedKeywords + "/" + state.keywords.length + " 个输入。", warnings);
@@ -405,7 +422,8 @@ async function continueBatchRun(
         logDebug("batch", "keyword.done", "完成当前输入", {
           keyword,
           index: index + 1,
-          records: Object.values(result.data).reduce((total, records) => total + records.length, 0)
+          records: Object.values(result.data).reduce((total, records) => total + records.length, 0),
+          durationMs: Date.now() - keywordStartedAt
         });
         if (nativeExport) {
           const exportDefinition = definition.native_exports?.find((item) => item.id === nativeExport?.definitionId);
@@ -438,7 +456,11 @@ async function continueBatchRun(
           ? Number(resolveTemplate(rawDelay, definition, state.parameters))
           : rawDelay || 0;
         // 账号间隔可被暂停/停止打断（2 秒粒度），避免点了停止还要干等十几秒。
-        if (Number.isFinite(delay) && delay > 0 && await sleepInterruptible(jitterDelay(delay, batch.jitter_ms), definition.id, 2_000) !== "done") break;
+        if (Number.isFinite(delay) && delay > 0) {
+          state = { ...state, phase: "pacing" };
+          await saveBatchRunState(state);
+          if (await sleepInterruptible(jitterDelay(delay, batch.jitter_ms), definition.id, 2_000) !== "done") break;
+        }
       }
     }
   } finally {
@@ -801,6 +823,8 @@ async function enrichWithDetails(
   const maxItems = Math.min(spec.max_items || records.length, records.length);
   const delay = spec.delay_ms ?? 0;
   let enriched = 0;
+  let attempted = 0;
+  let noResponse = 0;
 
   // 本地已采集 ID 索引：跳过已补全过详情的记录，不浪费预算。
   const platform = definition.feed?.platform;
@@ -830,8 +854,11 @@ async function enrichWithDetails(
       return { ...result, status: "paused", error: urlBlocker.reason, warnings: [...result.warnings, urlBlocker.reason] };
     }
     const detail = await extractDetailsOnTab(tabId, spec);
+    attempted += 1;
+    if (detail.noResponse) noResponse += 1;
     const detailUsage = definition.feed ? (await getBudgetUsage([definition.feed.platform]))[0] : undefined;
-    const detailLog = { platform: definition.feed?.platform, toolId: definition.id, kind: "detail", config: detailUsage?.config, used: detailUsage?.used, durationMs: Date.now() - detailStartedAt, reason: detail.paused?.error || detail.warning };
+    // 记录定位信息：记录 ID + 页面路径（不含 xsec_token，避免敏感参数进日志）。
+    const detailLog = { platform: definition.feed?.platform, toolId: definition.id, kind: "detail", recordId: recordId || undefined, path: safeUrlPath(url), config: detailUsage?.config, used: detailUsage?.used, durationMs: Date.now() - detailStartedAt, reason: detail.paused?.error || detail.warning };
     if (detail.paused || detail.warning) logWarn("activity", "detail.result", "详情访问暂停或失败", detailLog);
     else logInfo("activity", "detail.result", "详情访问完成", detailLog);
     if (detail.paused) return detail.paused;
@@ -876,8 +903,15 @@ async function enrichWithDetails(
     await recordCollectedIds(platform, newlyEnrichedIds).catch(() => undefined);
   }
   if (enriched === 0 && records.length > 0 && !peekControlRequest(definition.id).pause && !peekControlRequest(definition.id).stop) {
+    // 内容脚本全部无响应：多半是扩展刚更新/注入失败，属于本地问题——
+    // 快速转人工并给出明确处置（重新加载扩展），不进 15 分钟冷却。
+    if (noResponse > 0 && noResponse >= attempted) {
+      const reason = "详情页无响应，扩展可能刚更新过；请在 chrome://extensions 重新加载 Trail 后点“继续”。";
+      logWarn("detail", "detail.noResponse", "详情页内容脚本无响应，转人工处理", { platform: definition.feed?.platform, toolId: definition.id, records: records.length, attempted });
+      return { ...result, status: "paused", pauseReason: "local", error: reason, warnings: [...result.warnings, reason] };
+    }
     const reason = "详情补全全部失败（页面可能要求登录或验证），已暂停；完成验证后点继续将从该账号重试。";
-    logWarn("detail", "detail.allFailed", "详情补全全部失败，运行转暂停", { platform: definition.feed?.platform, toolId: definition.id, records: records.length });
+    logWarn("detail", "detail.allFailed", "详情补全全部失败，运行转暂停", { platform: definition.feed?.platform, toolId: definition.id, records: records.length, attempted, noResponse });
     return { ...result, status: "paused", error: reason, warnings: [...result.warnings, reason] };
   }
   logInfo("detail", "detail.enrich", "详情页补全完成", { platform: definition.feed?.platform, toolId: definition.id, enriched });
@@ -908,20 +942,38 @@ async function readStateFieldOnTab(tabId: number, path: string, recordId: string
   return results?.[0]?.result;
 }
 
+/** 日志用 URL 路径（去掉查询串里的 xsec_token 等参数）。 */
+function safeUrlPath(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return "";
+  }
+}
+
 /** 详情页字段提取 + 阻断检测；命中阻断时返回暂停结果，提取异常返回 warning。 */
 async function extractDetailsOnTab(
   tabId: number,
   spec: NonNullable<ReturnType<typeof parseBrowserToolYaml>["detail_extract"]>
-): Promise<{ record?: Record<string, unknown>; warning?: string; paused?: BrowserToolRunResult }> {
-  const response = await chrome.tabs.sendMessage(tabId, {
+): Promise<{ record?: Record<string, unknown>; warning?: string; paused?: BrowserToolRunResult; noResponse?: boolean }> {
+  const request = () => chrome.tabs.sendMessage(tabId, {
     type: "EXTRACT_BROWSER_TOOL_DETAILS",
     fields: spec.fields,
     waitFor: spec.wait_for,
     timeoutMs: spec.timeout_ms,
     blockers: (spec.blockers || []).filter((blocker) => blocker.selector)
   }).catch(() => undefined);
-  if (!response || response.error) {
-    return { warning: response?.error || "无法在详情页提取字段。" };
+  let response = await request();
+  if (!response) {
+    // 内容脚本注入可能晚于页面 complete：延迟重试一次，消除注入竞态。
+    await sleep(600);
+    response = await request();
+  }
+  if (!response) {
+    return { warning: "无法在详情页提取字段。", noResponse: true };
+  }
+  if (response.error) {
+    return { warning: response.error };
   }
   if (response.blocker) {
     return { paused: { status: "paused", error: response.blocker, warnings: [response.blocker] } as BrowserToolRunResult };

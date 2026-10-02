@@ -45,6 +45,20 @@ test("采集面板：内联进度、暂停与停止", async ({}, testInfo) => {
     await expect(progress).toContainText("第 2/3 个：Sam Altman · 已采 12 条");
     await expect(progress.locator(".collector-progress-track")).toHaveAttribute("aria-valuenow", "1");
 
+    // 阶段显示：冷却等待中不再是“看起来卡死”
+    await page.evaluate(async () => {
+      const key = "trail.browserToolBatchRun.v1.twitter-timeline";
+      const state = (await chrome.storage.session.get(key))[key] as Record<string, unknown>;
+      await chrome.storage.session.set({ [key]: { ...state, phase: "cooldown" } });
+    });
+    await expect(progress).toContainText("冷却等待中…");
+    await page.evaluate(async () => {
+      const key = "trail.browserToolBatchRun.v1.twitter-timeline";
+      const state = (await chrome.storage.session.get(key))[key] as Record<string, unknown>;
+      await chrome.storage.session.set({ [key]: { ...state, phase: "details" } });
+    });
+    await expect(progress).toContainText("正在补全详情…");
+
     await panel.getByRole("button", { name: "暂停", exact: true }).click();
     await expect(panel).toContainText("已请求暂停");
 
