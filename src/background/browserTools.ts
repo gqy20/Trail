@@ -274,6 +274,7 @@ async function continueBatchRun(
   const nativeExports: NonNullable<BrowserToolRunResult["nativeExports"]> = [];
   let state = initial;
   let failedCount = 0;
+  const failures: Array<{ keyword: string; error: string }> = [];
   const transientRetries = new Map<number, number>();
   const cooldownRetries = new Map<number, number>();
   const runStartedAt = Date.now();
@@ -406,6 +407,7 @@ async function continueBatchRun(
           // 非瞬时失败（账号冻结/改名等）：跳过该输入，继续后续账号。
           failedCount += 1;
           logWarn("batch", "keyword.skipped", "非瞬时失败，跳过该输入", { keyword, error: message, failedCount });
+          failures.push({ keyword, error: message });
           warnings.push(`[${keyword}] ${message}（已跳过）`);
           // 推进游标但不计入完成数（下一轮不会重试这个账号，除非手动重置水位线）。
           state = { ...state, nextIndex: state.nextIndex + 1, lastPageUrl: result.pageUrl, lastPageTitle: result.pageTitle };
@@ -444,6 +446,7 @@ async function continueBatchRun(
         }
         failedCount += 1;
         logWarn("batch", "keyword.skipped", "非瞬时异常，跳过该输入", { keyword, error: message, failedCount });
+        failures.push({ keyword, error: message });
         warnings.push(`[${keyword}] ${message}（已跳过）`);
         state = { ...state, nextIndex: state.nextIndex + 1 };
         await saveBatchRunState(state);
@@ -493,7 +496,10 @@ async function continueBatchRun(
     completed: state.completedKeywords,
     total: state.keywords.length,
     records: countBatchRecords(state),
-    durationMs: Date.now() - runStartedAt
+    durationMs: Date.now() - runStartedAt,
+    // 汇总直接带失败明细（账号 + 原因），不必回翻 keyword.skipped。
+    failed: failures.length > 0 ? failures.length : undefined,
+    failures: failures.length > 0 ? failures.slice(0, 10) : undefined
   });
   return persistRunResult(result, `${state.toolName} · 批量`);
 }
