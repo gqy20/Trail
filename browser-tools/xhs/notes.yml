@@ -12,6 +12,8 @@ feed:
 since:
   field: created_at
   lookback_days: 7
+  # 详情补全后仍无日期的记录直接丢弃：宁可少采一篇，不让旧笔记漏进订阅源。
+  required: true
 parameters:
   user:
     type: string
@@ -104,10 +106,17 @@ workflow:
 detail_extract:
   collection: notes
   url_field: url
+  # 每个账号每轮最多补全 10 篇详情，控制时长与详情访问预算。
+  max_items: 10
   wait_for: "#detail-desc, .note-text, #detail-title"
   timeout_ms: 12000
   delay_ms: 5000
   jitter_ms: 4000
+  # 列表缺失发布时间时，从详情页全局状态补 created_at（毫秒时间戳 → ISO）。
+  state_fields:
+    created_at:
+      path: "note.noteDetailMap.{{ id }}.note.time"
+      transforms: [parse_date]
   blockers:
     - url_contains: "error_code=3000"
       reason: 详情页被风控拦截，请打开页面完成验证后继续。

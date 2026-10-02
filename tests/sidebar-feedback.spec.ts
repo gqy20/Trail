@@ -45,9 +45,9 @@ test("侧边栏反馈：错误归属、保存提示收起及未保存状态", as
         ? new Promise((_, reject) => setTimeout(() => { document.documentElement.dataset.testErrorDelivered = "true"; reject(new Error("本地测试：读取工具失败")); }, 500)) : original(message);
     });
     await page.getByRole("button", { name: "刷新页面状态" }).click();
-    await page.getByRole("button", { name: "发布", exact: true }).click();
+    await page.getByRole("button", { name: "账号采集", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-test-error-delivered", "true");
     await expect(page.getByText("本地测试：读取工具失败", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "发布", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "采集与发布", exact: true })).toBeVisible();
   } finally { await context.close(); }
 });

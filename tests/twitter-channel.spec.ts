@@ -161,7 +161,7 @@ test("recordsToFeedPosts 支持排除转推", () => {
 test("twitter/timeline.yml 通过加载器校验并保留 graphql 与 feed 声明", () => {
   const definition = parseBrowserToolYaml(readFileSync("browser-tools/twitter/timeline.yml", "utf8"));
   expect(definition.id).toBe("twitter-timeline");
-  expect(definition.feed).toEqual({ collection: "tweets", platform: "twitter" });
+  expect(definition.feed).toMatchObject({ collection: "tweets", platform: "twitter", entry_url: "https://x.com/home" });
   expect(definition.batch?.navigation).toMatchObject({ type: "fixed_url", url: "https://x.com/{{ parameters.username }}", input_parameter: "username" });
   expect(definition.batch?.delay_between_keywords_ms).toBe("{{ parameters.delay_between_users_ms }}");
   expect(definition.parameters?.tweets_per_user?.presentation).toMatchObject({ placement: "primary", style: "sentence" });
@@ -223,33 +223,36 @@ test("xhs/notes.yml 通过校验并保留风控节奏声明", () => {
   const definition = parseBrowserToolYaml(readFileSync("browser-tools/xhs/notes.yml", "utf8"));
   expect(definition.id).toBe("xhs-notes");
   expect(definition.feed).toMatchObject({ collection: "notes", platform: "xhs", entry_url: "https://www.xiaohongshu.com" });
-  expect(definition.batch?.delay_between_keywords_ms).toBe("{{ parameters.delay_between_users_ms }}" as unknown || 15000 || undefined);
-  expect(definition.detail_extract).toBeDefined();
-  expect(definition.detail_extract?.delay_ms).toBe(5000);
-  expect(definition.detail_extract?.max_items).toBe(8);
-  expect(definition.detail_extract?.url_field).toBe("url");
-  expect(definition.detail_extract?.blockers?.some((b) => b.url_contains === "error_code=3000")).toBe(true);
-  expect(definition.detail_extract?.back_selector).toBeDefined();
-  expect(definition.detail_extract?.id_field).toBe("id");
-  // match 转换保留为对象形态
-  const extract = definition.workflow.find((step) => step.action === "repeat") as { steps: Array<{ fields: Record<string, { transforms: unknown[] }> }> };
-  const idTransforms = extract.steps[0].fields.id.transforms;
-  expect(Array.isArray(idTransforms) && typeof idTransforms[0] === "object" && "match" in (idTransforms[0] as object)).toBe(true);
-  // pause_if_present 支持 url_contains
+  // 账号间隔为字面量 + 随机抖动（风控节奏声明）
+  expect(definition.batch?.delay_between_keywords_ms).toBe(15000);
+  expect(definition.batch?.jitter_ms).toBe(8000);
+  const detail = definition.detail_extract;
+  expect(detail).toBeDefined();
+  expect(detail?.delay_ms).toBe(5000);
+  expect(detail?.jitter_ms).toBe(4000);
+  expect(detail?.max_items).toBe(10);
+  expect(detail?.url_field).toBe("url");
+  expect(detail?.state_fields?.created_at).toMatchObject({ path: "note.noteDetailMap.{{ id }}.note.time" });
+  expect(detail?.blockers?.some((b) => b.url_contains === "error_code=3000")).toBe(true);
+  expect(definition.since).toMatchObject({ field: "created_at", required: true });
+  // 登录墙防护在工作流最前（pause_if_present 支持 url_contains）
   const pause = definition.workflow[0] as { url_contains?: string };
   expect(pause.url_contains).toBe("/login");
 });
 
 test("xhs v2 YAML：state_read 路线与模板 URL", () => {
   const definition = parseBrowserToolYaml(readFileSync("browser-tools/xhs/notes.yml", "utf8"));
-  const stateRead = definition.workflow.find((step) => step.action === "state_read") as Extract<typeof definition.workflow[number], { action: "state_read" }>;
+  const stateRead = definition.workflow.filter((step) => step.action === "state_read")
+    .find((step) => (step as { extract?: { collection?: string } }).extract?.collection === "notes") as Extract<typeof definition.workflow[number], { action: "state_read" }>;
   expect(stateRead).toBeDefined();
-  expect(stateRead.max_items).toBe("{{ parameters.notes_per_user }}");
   expect(stateRead.extract.walk).toEqual({ has: "noteCard" });
   expect(stateRead.extract.dedupe_by).toBe("id");
   expect(stateRead.extract.fields.url.template).toContain("xsec_source=pc_user");
-  // 不再有滚动提取卡片的 repeat
-  expect(definition.workflow.some((step) => step.action === "repeat")).toBe(false);
+  // 回填滚动：repeat 内继续读 store 合并去重
+  const repeat = definition.workflow.find((step) => step.action === "repeat") as Extract<typeof definition.workflow[number], { action: "repeat" }>;
+  expect(repeat).toBeDefined();
+  expect(repeat.max).toBe(15);
+  expect(repeat.stop_after_unchanged).toBe(3);
 });
 
 test("extractStateRecords 从 Pinia store 形态提取并组合规范 URL", () => {

@@ -46,8 +46,9 @@ test("工作区：规则预览、参数归属和窄屏布局", async ({}, testIn
     });
     for (const width of [360, 420, 760]) {
       await page.setViewportSize({ width, height: 860 });
-      for (const name of ["研究路径", "网页工具", "账号采集", "发布", "日志", "文献队列", "设置"]) {
+      for (const name of ["研究路径", "签到", "日志", "账号采集", "网页工具", "文献队列", "设置"]) {
         if (name === "文献队列") await page.getByRole("button", { name: "日志", exact: true }).click();
+        if (name === "文献队列") { await page.getByRole("button", { name: "文献队列", exact: true }).click(); continue; }
         await page.getByRole("button", { name, exact: true }).click();
         const overflow = await page.evaluate(() => [...document.querySelectorAll("*")].filter((element) => element.getBoundingClientRect().right > innerWidth + 1).map((element) => `${element.tagName}.${element.className}`).slice(-8));
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name} at ${width}px: ${overflow.join(", ")}`).toBe(true);
@@ -61,17 +62,14 @@ test("工作区：规则预览、参数归属和窄屏布局", async ({}, testIn
     expect(Math.abs(titleBox!.y - resultBox!.y)).toBeLessThan(8);
     await page.screenshot({ path: testInfo.outputPath("collectors-760.png"), fullPage: true });
     await page.setViewportSize({ width: 420, height: 860 });
-    await page.getByRole("button", { name: "发布", exact: true }).click();
+    await page.getByRole("button", { name: "账号采集", exact: true }).click();
     await expect(page.locator(".feed-config-grid input[type=checkbox]").first()).toHaveCSS("width", "14px");
-    await expect(page.getByLabel("自动发布兜底间隔")).toBeVisible();
-    await expect(page.getByLabel("自动发布兜底间隔")).toBeDisabled();
-    const publishOptions = page.locator(".publish-options label");
-    const firstOption = await publishOptions.nth(0).boundingBox();
-    const secondOption = await publishOptions.nth(1).boundingBox();
-    expect(firstOption?.y).toBe(secondOption?.y);
-    await page.getByLabel("自动发布", { exact: true }).check();
-    await expect(page.getByLabel("自动发布兜底间隔")).toBeVisible();
-    await expect(page.getByLabel("自动发布兜底间隔")).toBeEnabled();
+    const autoInterval = page.locator(".feed-config-inline .collector-interval");
+    await expect(autoInterval).toBeVisible();
+    await expect(autoInterval).toBeDisabled();
+    // 发布选项内联在同一块中（窄屏可换行，无横向溢出已由上方 scrollWidth 检查覆盖）
+    await page.locator(".feed-config-inline input[type=checkbox]").first().check();
+    await expect(autoInterval).toBeEnabled();
     await expect(page.locator(".repository-heading").getByRole("button", { name: "保存", exact: true })).toBeVisible();
     await expect(page.locator(".repository-heading").getByRole("button", { name: "测试连接", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "保存", exact: true })).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");

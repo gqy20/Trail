@@ -85,16 +85,9 @@ export function validateBrowserToolDefinition(value: unknown): BrowserToolDefini
         throw new Error("feed.entry_url 必须匹配工具的域名和 URL。");
       }
     }
-    if (source.since !== undefined) {
-      const sinceSource = asRecord(source.since, "feed.since");
-      const field = readString(sinceSource.field, "feed.since.field");
-      if (!COLLECTION_PATTERN.test(field)) throw new Error("feed.since.field 无效。");
-      const lookback = readOptionalNumber(sinceSource.lookback_days, "feed.since.lookback_days");
-      if (lookback !== undefined && (!Number.isInteger(lookback) || lookback < 1 || lookback > 90)) {
-        throw new Error("feed.since.lookback_days 必须是 1-90 的整数。");
-      }
-      since = { field, lookback_days: lookback };
-    }
+    // since 既可声明在根级别，也可挂在 feed 下（向后兼容），两者只能取其一。
+    if (source.since !== undefined && root.since !== undefined) throw new Error("since 不能同时声明在根级别和 feed 下。");
+    since = source.since === undefined && root.since === undefined ? undefined : validateSince(source.since ?? root.since);
     feed = { collection, platform, entry_url: entryUrl };
   }
   const downloads = root.downloads === undefined ? undefined : validateDownloads(root.downloads);
@@ -399,11 +392,14 @@ function validateBatch(value: unknown): BrowserToolDefinition["batch"] {
   if (typeof delay === "number" && (delay < 0 || delay > BROWSER_TOOL_LIMITS.maxBatchDelayMs)) {
     throw new Error("batch.delay_between_keywords_ms 超出范围。");
   }
+  const batchJitter = readOptionalNumber(batch.jitter_ms, "batch.jitter_ms");
+  if (batchJitter !== undefined && (batchJitter < 0 || batchJitter > 60_000)) throw new Error("batch.jitter_ms 超出范围。");
 
   return {
     navigation: validatedNavigation,
     max_keywords: maxKeywords,
-    delay_between_keywords_ms: delay
+    delay_between_keywords_ms: delay,
+    jitter_ms: batchJitter
   };
 }
 
@@ -511,6 +507,8 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
       case "scroll": {
         const delta = readOptionalNumber(step.delta_y, `${path}.delta_y`);
         const position = step.position === undefined ? undefined : readString(step.position, `${path}.position`);
+        const jitterY = readOptionalNumber(step.jitter_y, `${path}.jitter_y`);
+        if (jitterY !== undefined && (jitterY < 0 || jitterY > 2_000)) throw new Error(`${path}.jitter_y 超出范围。`);
         if ((delta === undefined) === (position === undefined)) throw new Error(`${path} 必须且只能声明 delta_y 或 position。`);
         if (delta !== undefined && (!Number.isInteger(delta) || Math.abs(delta) > 5_000)) throw new Error(`${path}.delta_y 超出范围。`);
         if (position !== undefined && position !== "top" && position !== "bottom") throw new Error(`${path}.position 无效。`);
@@ -518,6 +516,7 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
           action,
           selector: step.selector === undefined ? undefined : validatedSelector(step.selector, `${path}.selector`),
           delta_y: delta,
+          jitter_y: jitterY,
           position: position as "top" | "bottom" | undefined
         };
       }
@@ -644,6 +643,8 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
         if (pageDelay !== undefined && (pageDelay < 0 || pageDelay > BROWSER_TOOL_LIMITS.maxWaitMs)) {
           throw new Error(`${path}.page_delay_ms 超出范围。`);
         }
+        const pageJitter = readOptionalNumber(step.page_jitter_ms, `${path}.page_jitter_ms`);
+        if (pageJitter !== undefined && (pageJitter < 0 || pageJitter > 30_000)) throw new Error(`${path}.page_jitter_ms 超出范围。`);
         const variables = step.variables === undefined ? undefined : validateGraphqlValueMap(step.variables, `${path}.variables`);
         const features = step.features === undefined ? undefined : validateGraphqlFlagMap(step.features, `${path}.features`);
         const fieldToggles = step.field_toggles === undefined ? undefined : validateGraphqlFlagMap(step.field_toggles, `${path}.field_toggles`);
@@ -704,6 +705,7 @@ function validateSteps(values: unknown[], depth: number, countStep: () => void):
           cursor,
           max_pages: maxPages,
           page_delay_ms: pageDelay,
+          page_jitter_ms: pageJitter,
           query_id: queryId,
           optional: readOptionalBoolean(step.optional, `${path}.optional`)
         };
@@ -848,6 +850,18 @@ function validateTransforms(value: unknown, path: string): BrowserToolTransformS
 }
 
 /** 详情页补全段：字段语法与 extract 一致，另声明 URL 字段、节奏与阻断器。 */
+/** 校验 since 声明（根级别或 feed 下同构）。required 时详情补全后仍无日期的记录会被丢弃。 */
+function validateSince(value: unknown): NonNullable<BrowserToolDefinition["since"]> {
+  const source = asRecord(value, "since");
+  const field = readString(source.field, "since.field");
+  if (!COLLECTION_PATTERN.test(field)) throw new Error("since.field 无效。");
+  const lookback = readOptionalNumber(source.lookback_days, "since.lookback_days");
+  if (lookback !== undefined && (!Number.isInteger(lookback) || lookback < 1 || lookback > 90)) {
+    throw new Error("since.lookback_days 必须是 1-90 的整数。");
+  }
+  return { field, lookback_days: lookback, required: readOptionalBoolean(source.required, "since.required") };
+}
+
 function validateDetailExtract(value: unknown): NonNullable<BrowserToolDefinition["detail_extract"]> {
   const source = asRecord(value, "detail_extract");
   const collection = readString(source.collection, "detail_extract.collection");
@@ -886,16 +900,38 @@ function validateDetailExtract(value: unknown): NonNullable<BrowserToolDefinitio
   if (maxItems !== undefined && (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 50)) throw new Error("detail_extract.max_items 必须是 1-50 的整数。");
   const delay = readOptionalNumber(source.delay_ms, "detail_extract.delay_ms");
   if (delay !== undefined && (delay < 0 || delay > 60_000)) throw new Error("detail_extract.delay_ms 超出范围。");
+  const detailJitter = readOptionalNumber(source.jitter_ms, "detail_extract.jitter_ms");
+  if (detailJitter !== undefined && (detailJitter < 0 || detailJitter > 30_000)) throw new Error("detail_extract.jitter_ms 超出范围。");
+  // 从详情页 __INITIAL_STATE__ 按点路径补字段（如小红书笔记时间），{{ id }} 会替换为记录 id。
+  const stateFields: NonNullable<NonNullable<BrowserToolDefinition["detail_extract"]>["state_fields"]> = {};
+  if (source.state_fields !== undefined) {
+    const stateFieldsSource = asRecord(source.state_fields, "detail_extract.state_fields");
+    for (const [fieldName, rawField] of Object.entries(stateFieldsSource)) {
+      if (!COLLECTION_PATTERN.test(fieldName)) throw new Error(`detail_extract.state_fields.${fieldName} 名称无效。`);
+      const field = asRecord(rawField, `detail_extract.state_fields.${fieldName}`);
+      const path = readString(field.path, `detail_extract.state_fields.${fieldName}.path`);
+      const segments = path.split(".");
+      const pathOk = segments.length >= 2 && segments.every((segment) => /^[A-Za-z0-9_-]+$/.test(segment) || /^\{\{\s*id\s*\}\}$/.test(segment));
+      if (!pathOk) throw new Error(`detail_extract.state_fields.${fieldName}.path 必须是至少两段的点路径，段内可含 {{ id }} 模板。`);
+      stateFields[fieldName] = {
+        path,
+        transforms: field.transforms === undefined ? undefined : validateTransforms(field.transforms, `detail_extract.state_fields.${fieldName}.transforms`)
+      };
+    }
+    if (Object.keys(stateFields).length === 0) throw new Error("detail_extract.state_fields 不能为空。");
+  }
   return {
     collection,
     url_field: urlField,
     id_field: source.id_field === undefined ? undefined : readString(source.id_field, "detail_extract.id_field"),
     back_selector: source.back_selector === undefined ? undefined : validatedSelector(source.back_selector, "detail_extract.back_selector"),
     fields,
+    state_fields: Object.keys(stateFields).length > 0 ? stateFields : undefined,
     wait_for: source.wait_for === undefined ? undefined : validatedSelector(source.wait_for, "detail_extract.wait_for"),
     timeout_ms: validatedTimeout(source.timeout_ms, "detail_extract.timeout_ms"),
     max_items: maxItems,
     delay_ms: delay,
+    jitter_ms: detailJitter,
     blockers
   };
 }

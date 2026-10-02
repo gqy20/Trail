@@ -91,26 +91,34 @@ test("pickRotation 循环切片与回绕", () => {
   expect(pickRotation([], 3, 2)).toEqual([]);
 });
 
-test("filterSinceRecords 首次回填窗口与增量水位线", () => {
+test("filterSinceRecords 首次回填窗口、增量水位线与无日期记录", () => {
   const now = Date.parse("2026-09-29T12:00:00.000Z");
   const day = 24 * 60 * 60_000;
   const records = [
     { id: "1", created_at: new Date(now - 1 * 3_600_000).toISOString() },  // 1 小时前
     { id: "2", created_at: new Date(now - 3 * day).toISOString() },        // 3 天前
     { id: "3", created_at: new Date(now - 9 * day).toISOString() },        // 9 天前（超回填窗口）
-    { id: "4" }                                                            // 无时间，保留由去重兜底
+    { id: "4" }                                                            // 无时间，宽松模式保留由去重兜底
   ];
   // 首次（无水位线）：7 天回填窗口
   const first = filterSinceRecords(records, "created_at", undefined, 7, now);
   expect(first.kept.map((r) => r.id)).toEqual(["1", "2", "4"]);
   expect(first.newestIso).toBe(records[0].created_at);
-  // 增量：水位线 = 3 天前那条 → 只有更新的保留
+  // 增量：水位线 = 3 天前那条 → 1 小时安全缓冲内的（含等于水位线的）保留
   const second = filterSinceRecords(records, "created_at", records[1].created_at, 7, now);
-  expect(second.kept.map((r) => r.id)).toEqual(["1", "4"]);
-  // 全部旧于水位线
+  expect(second.kept.map((r) => r.id)).toEqual(["1", "2", "4"]);
+  // 全部旧于水位线 − 缓冲
   const none = filterSinceRecords([records[2]], "created_at", records[1].created_at, 7, now);
   expect(none.kept).toHaveLength(0);
   expect(none.newestIso).toBeUndefined();
+  // 严格模式（required，详情补全后仍无日期）：无日期与日期不可解析的记录都丢弃
+  const strictRecords = [
+    records[0],
+    { id: "5", created_at: "不是日期" },
+    { id: "6" }
+  ];
+  const strict = filterSinceRecords(strictRecords, "created_at", records[1].created_at, 7, now, false);
+  expect(strict.kept.map((r) => r.id)).toEqual(["1"]);
 });
 
 test("sinceThreshold 翻页深度界线：水位线优先，首次用回填窗口", () => {
@@ -128,11 +136,22 @@ test("sinceThreshold 翻页深度界线：水位线优先，首次用回填窗�
   expect(sinceThreshold(undefined, 0, now)).toBe(now - 24 * hour);
 });
 
-test("xhs/twitter YAML 声明增量采集", () => {
+test("xhs/twitter YAML 声明增量采集（根级 since 可解析）", () => {
   const xhs = parseBrowserToolYaml(readFileSync("browser-tools/xhs/notes.yml", "utf8"));
-  expect(xhs.since).toMatchObject({ field: "created_at", lookback_days: 7 });
+  expect(xhs.since).toMatchObject({ field: "created_at", lookback_days: 7, required: true });
+  expect(xhs.detail_extract?.max_items).toBe(10);
+  expect(xhs.detail_extract?.state_fields?.created_at).toMatchObject({ path: "note.noteDetailMap.{{ id }}.note.time" });
   const twitter = parseBrowserToolYaml(readFileSync("browser-tools/twitter/timeline.yml", "utf8"));
   expect(twitter.since).toMatchObject({ field: "created_at" });
+});
+
+test("since 声明位置：feed 下等价解析，根级+feed 双声明报错", () => {
+  const base = readFileSync("browser-tools/twitter/timeline.yml", "utf8");
+  const rootBlock = "since:\n  field: created_at\n  lookback_days: 7\n";
+  if (!base.includes(rootBlock)) throw new Error("测试前提：twitter yml 应有根级 since 块");
+  const nested = base.replace(rootBlock, "").replace("feed:\n", "feed:\n  since:\n    field: created_at\n    lookback_days: 7\n");
+  expect(parseBrowserToolYaml(nested).since).toMatchObject({ field: "created_at", lookback_days: 7 });
+  expect(() => parseBrowserToolYaml(base.replace("feed:\n", `feed:\n  since:\n    field: created_at\n`))).toThrow("不能同时声明");
 });
 
 test("resolveParameterDefaults 填充默认值不校验必填", () => {

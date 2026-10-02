@@ -13,6 +13,7 @@ import { parseBrowserToolYaml } from "../browser-tools/loader";
 import { matchesBrowserTool } from "../browser-tools/matcher";
 import { resolveParameterDefaults, resolveTemplate } from "../browser-tools/template";
 import { jitterDelay } from "../browser-tools/jitter";
+import { applyBrowserToolTransforms } from "../browser-tools/transforms";
 import { logDebug, logInfo, logWarn } from "../logging/logger";
 import { stageAndMaybePublish } from "./feed";
 import { getFollows, updateFollowProfile } from "../collector/follows";
@@ -345,7 +346,7 @@ async function continueBatchRun(
         const control = peekControlRequest(definition.id);
         const result = control.pause || control.stop
           ? await applySinceFilter(definition, keyword, raw)
-          : await applySinceFilter(definition, keyword, await enrichWithDetails(definition, tabId, await applySinceFilter(definition, keyword, raw)));
+          : await applySinceFilter(definition, keyword, await enrichWithDetails(definition, tabId, await applySinceFilter(definition, keyword, raw)), "post-enrich");
 
         if (result.status === "paused") {
           if (result.pauseReason === "budget") {
@@ -852,6 +853,17 @@ async function enrichWithDetails(
       continue;
     }
     Object.assign(record, detail.record || {});
+    // 列表缺字段时从详情页全局状态补（如小红书 noteCard.time 缺失时读 note.noteDetailMap.<id>.note.time）。
+    if (spec.state_fields) {
+      const recordIdForState = String(record.id || "");
+      for (const [fieldName, fieldSpec] of Object.entries(spec.state_fields)) {
+        if (record[fieldName] !== undefined) continue;
+        const raw = await readStateFieldOnTab(tabId, fieldSpec.path, recordIdForState);
+        if (raw === undefined || raw === null) continue;
+        const transformed = fieldSpec.transforms ? applyBrowserToolTransforms(raw, fieldSpec.transforms) : raw;
+        if (transformed !== undefined && transformed !== null) record[fieldName] = transformed;
+      }
+    }
     enriched += 1;
     if (recordId) newlyEnrichedIds.push(recordId);
     const peeked = peekControlRequest(definition.id);
@@ -870,6 +882,30 @@ async function enrichWithDetails(
   }
   logInfo("detail", "detail.enrich", "详情页补全完成", { platform: definition.feed?.platform, toolId: definition.id, enriched });
   return result;
+}
+
+/** 从详情页 __INITIAL_STATE__ 按点路径读取一个值；{{ id }} 段替换为记录 id，读不到返回 undefined。 */
+async function readStateFieldOnTab(tabId: number, path: string, recordId: string): Promise<unknown> {
+  const dotPath = path.split(".")
+    .map((segment) => (/^\{\{\s*id\s*\}\}$/.test(segment) && recordId ? recordId : segment))
+    .join(".");
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    func: (target: string) => {
+      let current: unknown = (globalThis as { __INITIAL_STATE__?: unknown }).__INITIAL_STATE__;
+      for (const key of target.split(".")) {
+        if (current === null || current === undefined) return undefined;
+        if (typeof current !== "object") return undefined;
+        current = (current as Record<string, unknown>)[key];
+      }
+      if (current === undefined || current === null) return undefined;
+      if (typeof current === "object") return undefined; // 只取标量，避免克隆整个子树
+      return current;
+    },
+    args: [dotPath]
+  }).catch(() => undefined);
+  return results?.[0]?.result;
 }
 
 /** 详情页字段提取 + 阻断检测；命中阻断时返回暂停结果，提取异常返回 warning。 */
@@ -921,10 +957,16 @@ function sleepInterruptible(totalMs: number, toolId: string, sliceMs = 5_000): P
 }
 
 /** 增量过滤：按 平台+账号 水位线裁剪 feed 集合（首次用回填窗口），详情补全与暂存都只处理新记录。 */
+/**
+ * 按水位线过滤记录。
+ * - pre-enrich（补详情前）：宽松模式，无日期的记录保留，等待详情页补出真实日期再判。
+ * - post-enrich（补详情后）：required 声明时严格模式，仍无日期的记录丢弃（不可信，防旧内容漏采）。
+ */
 async function applySinceFilter(
   definition: ReturnType<typeof parseBrowserToolYaml>,
   keyword: string,
-  result: BrowserToolRunResult
+  result: BrowserToolRunResult,
+  phase: "pre-enrich" | "post-enrich" = "pre-enrich"
 ): Promise<BrowserToolRunResult> {
   const since = definition.since;
   const feed = definition.feed;
@@ -932,11 +974,12 @@ async function applySinceFilter(
   const records = result.data[feed.collection];
   if (!records || records.length === 0) return result;
   const watermark = await getWatermark(feed.platform, keyword);
-  const { kept, oldestIso } = filterSinceRecords(records, since.field, watermark, since.lookback_days || 7);
+  const keepUndated = phase === "pre-enrich" ? true : !since.required;
+  const { kept, oldestIso } = filterSinceRecords(records, since.field, watermark, since.lookback_days || 7, undefined, keepUndated);
   if (kept.length < records.length) {
     logInfo("collector", "since.filtered", "按水位线跳过已采集记录", {
       toolId: definition.id, keyword, total: records.length, kept: kept.length,
-      mode: watermark ? "incremental" : "backfill"
+      mode: watermark ? "incremental" : "backfill", phase
     });
     result.data[feed.collection] = kept;
   }

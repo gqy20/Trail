@@ -42,11 +42,12 @@ test("扩展预算：平台配置、额度暂停、普通检索不扣费、详�
     });
     const denied = await page.evaluate((tabId) => chrome.runtime.sendMessage({ type: "RUN_BROWSER_TOOL_BATCH", toolId: "twitter-timeline", tabId, keywords: ["someone"], parameters: {}, userInitiated: true }), tabId);
     expect(denied.status).toBe("paused");
-    expect(denied.error).toContain("120/120");
+    expect(denied.error).toContain("今日访问额度已满");
+    expect(denied.error).toContain("主页 60");
     expect(denied.error).toContain("点继续");
     const singleDenied = await page.evaluate((tabId) => chrome.runtime.sendMessage({ type: "RUN_STORED_BROWSER_TOOL", toolId: "twitter-timeline", tabId, parameters: { username: "someone" }, userInitiated: true }), tabId);
     expect(singleDenied.status).toBe("paused");
-    expect(singleDenied.error).toContain("重新运行");
+    expect(singleDenied.error).toContain("今日访问额度已满");
     const plainYaml = `schema_version: 1
 id: budget-search
 name: 预算测试检索
@@ -81,7 +82,7 @@ detail_extract:
     await worker.evaluate(async () => chrome.storage.local.set({ "trail.activityBudget.v2": { twitter: Array.from({ length: 59 }, () => ({ kind: "profile", at: Date.now() - 60_000 })) } }));
     const detail = await page.evaluate((tabId) => chrome.runtime.sendMessage({ type: "RUN_BROWSER_TOOL_BATCH", toolId: "budget-detail", tabId, keywords: ["test"], parameters: {}, userInitiated: true }), tabId);
     expect(detail.status).toBe("paused");
-    expect(detail.error).toContain("访问预算不足");
+    expect(detail.error).toContain("今日访问额度已满");
     expect(detail.warnings.join(" ")).not.toContain("15 分钟");
     const progress = await page.evaluate(() => chrome.runtime.sendMessage({ type: "GET_BATCH_RUN_STATE" }));
     expect(progress.nextIndex).toBe(0);

@@ -13,7 +13,7 @@ test("仓库反馈：测试结果持久化，配置变更与失败取消绿点",
     await worker.evaluate(() => { globalThis.fetch = async () => new Response(JSON.stringify({ private: false, default_branch: "main" }), { status: 200 }); });
     const page = await context.newPage();
     await page.goto(`chrome-extension://${new URL(worker.url()).host}/entries/tools.html`);
-    await page.getByRole("button", { name: "发布", exact: true }).click();
+    await page.getByRole("button", { name: "账号采集", exact: true }).click();
     await page.getByLabel("所有者", { exact: true }).fill("trail-test");
     await page.getByLabel("Token", { exact: false }).fill("local-test-token");
     await page.getByRole("button", { name: "测试连接", exact: true }).click();
@@ -23,7 +23,7 @@ test("仓库反馈：测试结果持久化，配置变更与失败取消绿点",
     await expect(status).toHaveAttribute("title", /公共仓库 · 默认分支 main/);
     await expect(page.locator(".feed-view")).not.toContainText("配置已保存。连接成功");
     await page.reload();
-    await page.getByRole("button", { name: "发布", exact: true }).click();
+    await page.getByRole("button", { name: "账号采集", exact: true }).click();
     await expect(status).toHaveText("已连接");
     await page.getByRole("button", { name: "保存", exact: true }).click();
     await expect(page.locator(".repository-save-notice")).toHaveText("已保存");

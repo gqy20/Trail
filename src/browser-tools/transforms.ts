@@ -25,7 +25,9 @@ function applyTransform(value: unknown, transform: BrowserToolTransformSpec): un
     }
     case "parse_date": {
       if (typeof value !== "string" && typeof value !== "number") return value;
-      const time = typeof value === "number" ? value : Date.parse(value.trim());
+      // 数字时间戳：毫秒（≥1e12）原样，更小按秒换算（部分平台返回秒级时间戳）。
+      const numeric = typeof value === "number" ? (value > 0 && value < 1e12 ? value * 1000 : value) : undefined;
+      const time = numeric !== undefined ? numeric : Date.parse(String(value).trim());
       return Number.isFinite(time) ? new Date(time).toISOString() : value;
     }
     case "split_authors":

@@ -312,12 +312,14 @@ export type BrowserToolDefinition = {
   /** 声明后，成功运行中该集合的记录会自动进入订阅源暂存。 */
   feed?: { collection: string; platform: string; entry_url?: string };
   /** 增量采集：记录中发布时间字段与首次回填窗口（天）；声明后按 平台+账号 水位线过滤。 */
-  since?: { field: string; lookback_days?: number };
+  since?: { field: string; lookback_days?: number; /** 详情补全后仍无日期的记录会被丢弃，防旧内容漏采。 */ required?: boolean };
   /** 主工作流提取卡片后，由后台串行进入详情页补全字段（不经工作流导航）。 */
   detail_extract?: {
     collection: string;
     url_field: string;
     fields: Record<string, BrowserToolFieldDefinition>;
+    /** 从详情页 __INITIAL_STATE__ 按点路径补字段；path 中的 {{ id }} 会替换为记录 id。 */
+    state_fields?: Record<string, { path: string; transforms?: NonNullable<BrowserToolFieldDefinition["transforms"]> }>;
     wait_for?: string;
     timeout_ms?: number;
     max_items?: number;

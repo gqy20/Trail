@@ -57,12 +57,22 @@ export function sinceThreshold(watermarkIso: string | undefined, lookbackDays: n
     : now - Math.max(1, lookbackDays) * 24 * 60 * 60_000;
 }
 
+/**
+ * 纯函数：按水位线过滤记录。
+ * - 有水位线：保留 created_at >= 水位线 - 安全缓冲 的记录
+ *   （缓冲 1 小时，防时钟偏差/处理延迟；多采的由 ID 去重兜底）
+ * - 无水位线（首次）：保留 created_at >= now - lookbackDays 的记录
+ * - 无日期记录默认保留（由 ID 去重兜底）；keepUndated=false 时丢弃
+ *   （required 模式：详情补全后仍无日期视为不可信，宁可少采不漏旧内容）
+ * 返回保留记录与其中最新/最旧时间（推进水位线用）。
+ */
 export function filterSinceRecords(
   records: Array<Record<string, unknown>>,
   field: string,
   watermarkIso: string | undefined,
   lookbackDays: number,
-  now = Date.now()
+  now = Date.now(),
+  keepUndated = true
 ): { kept: Array<Record<string, unknown>>; newestIso?: string; oldestIso?: string } {
   const threshold = sinceThreshold(watermarkIso, lookbackDays, now);
   const kept: Array<Record<string, unknown>> = [];
@@ -71,11 +81,15 @@ export function filterSinceRecords(
   for (const record of records) {
     const raw = record[field];
     if (typeof raw !== "string") {
-      kept.push(record);
+      if (keepUndated) kept.push(record);
       continue;
     }
     const time = Date.parse(raw);
-    if (!Number.isFinite(time) || time < threshold) continue;
+    if (!Number.isFinite(time)) {
+      if (keepUndated) kept.push(record);
+      continue;
+    }
+    if (time < threshold) continue;
     kept.push(record);
     if (newest === undefined || time > newest) newest = time;
     if (oldest === undefined || time < oldest) oldest = time;

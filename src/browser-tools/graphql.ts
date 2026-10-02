@@ -28,17 +28,23 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 /** 深度优先遍历所有对象节点；visitor 返回 true 时不再深入该节点的子树。 */
 export function walkJson(root: unknown, visit: (node: Record<string, unknown>) => boolean | void): void {
+  // 压栈时倒序放入，出栈即得到文档顺序（列表里新记录在前，详情补全优先拿到最新内容）。
   const stack: unknown[] = [root];
   while (stack.length > 0) {
     const current = stack.pop();
     if (Array.isArray(current)) {
-      for (const item of current) if (item !== null && typeof item === "object") stack.push(item);
+      for (let index = current.length - 1; index >= 0; index -= 1) {
+        const item = current[index];
+        if (item !== null && typeof item === "object") stack.push(item);
+      }
       continue;
     }
     if (!isPlainObject(current)) continue;
     const skipChildren = visit(current);
     if (skipChildren) continue;
-    for (const child of Object.values(current)) {
+    const children = Object.values(current);
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const child = children[index];
       if (child !== null && typeof child === "object") stack.push(child);
     }
   }
