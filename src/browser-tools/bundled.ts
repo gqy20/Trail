@@ -25,6 +25,8 @@ export type BundledBrowserToolImportResult = {
   updated: number;
   preserved: number;
   disabled: number;
+  /** 本次被安装/更新的工具 id（自动重新审批定时采集用）。 */
+  changedIds: string[];
 };
 
 export async function importBundledBrowserTools(): Promise<BundledBrowserToolImportResult> {
@@ -33,7 +35,7 @@ export async function importBundledBrowserTools(): Promise<BundledBrowserToolImp
   const currentById = new Map(currentTools.map((tool) => [tool.id, tool]));
   const nextBundled: StoredBrowserTool[] = [];
   const bundledIds = new Set<string>();
-  const result: BundledBrowserToolImportResult = { installed: 0, updated: 0, preserved: 0, disabled: 0, unchanged: 0, customPreserved: 0 };
+  const result: BundledBrowserToolImportResult = { installed: 0, updated: 0, preserved: 0, disabled: 0, unchanged: 0, customPreserved: 0, changedIds: [] };
   const now = Date.now();
 
   for (const entry of catalog.tools) {
@@ -81,6 +83,7 @@ export async function importBundledBrowserTools(): Promise<BundledBrowserToolImp
       source: { type: "bundled", catalogVersion: catalog.version }
     });
     current ? result.updated += 1 : result.installed += 1;
+    result.changedIds.push(definition.id);
   }
 
   // 无变化时不写存储：SW 每次唤醒都会跑自动同步，避免无谓的存储写放大。

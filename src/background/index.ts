@@ -39,6 +39,7 @@ import {
   getCollectorState,
   openCollectorPage,
   registerCollectors,
+  reapproveCollectorJobs,
   runCollector,
   syncCollectorJobFromResult
 } from "./collectors";
@@ -62,9 +63,12 @@ registerCollectors();
 // 不会自动跟上（曾导致 profile 提取、since 等新声明长期不生效）。
 // 自定义工具由 importBundledBrowserTools 保留，无变化时不写存储。
 void importBundledBrowserTools()
-  .then((result) => {
+  .then(async (result) => {
     if (result.installed + result.updated > 0) {
       logInfo("tools", "bundled.sync", `内置工具已更新（新装 ${result.installed}，更新 ${result.updated}）`, { ...result });
+      // 内置规则的定时采集自动重新核准——规则更新是扩展发版的预期部分，
+      // 不触发"规则已更新请重新开启"的人工暂停（那只针对用户自己改的规则）。
+      await reapproveCollectorJobs(result.changedIds).catch(() => undefined);
     }
   })
   .catch((error: unknown) => logWarn("tools", "bundled.syncFailed", "内置工具同步失败", { detail: error instanceof Error ? error.message : "未知错误" }));

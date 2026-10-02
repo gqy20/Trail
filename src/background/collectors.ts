@@ -260,6 +260,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  * 回填指定账号：重置水位线到 N 天前，触发一轮采集。
  * 水位线推进到本轮最旧一条（而非最新），后续轮次继续往前补。
  */
+/**
+ * 内置工具随扩展更新后，重新核准这些工具的定时采集（仅限内置来源的规则）：
+ * 规则变化是扩展发版的一部分，不需要用户重新手动开启。
+ */
+export async function reapproveCollectorJobs(toolIds: string[]): Promise<number> {
+  if (toolIds.length === 0) return 0;
+  let reapproved = 0;
+  for (const toolId of toolIds) {
+    const job = (await readJobs())[toolId];
+    if (!job?.enabled) continue;
+    try {
+      const tool = await toolFor(toolId);
+      await patchJob(toolId, { approvedHash: await hash(tool.yaml) });
+      reapproved += 1;
+    } catch { /* 工具暂不可用（停用等），下次开启时再核准 */ }
+  }
+  if (reapproved > 0) {
+    logInfo("collector", "collector.reapproved", "内置规则更新后自动恢复定时采集核准", { count: reapproved, toolIds });
+  }
+  return reapproved;
+}
+
 export async function backfillAccount(platform: string, handle: string, days: number): Promise<{ started: boolean; message?: string }> {
   await initialization;
   if (!Number.isInteger(days) || days < 1 || days > 3650) throw new Error("回填天数需为 1-3650。");
