@@ -825,6 +825,7 @@ async function enrichWithDetails(
   let enriched = 0;
   let attempted = 0;
   let noResponse = 0;
+  const failureReasons = new Map<string, number>();
 
   // 本地已采集 ID 索引：跳过已补全过详情的记录，不浪费预算。
   const platform = definition.feed?.platform;
@@ -864,6 +865,7 @@ async function enrichWithDetails(
     if (detail.paused) return detail.paused;
     if (detail.warning) {
       result.warnings.push("[详情] " + detail.warning);
+      failureReasons.set(detail.warning, (failureReasons.get(detail.warning) || 0) + 1);
       // 排队到下轮补全：记录 ID 存入 localStorage，下次该账号采集时优先重试
       const retryId = String(record.id || "");
       if (retryId && definition.feed) {
@@ -903,16 +905,15 @@ async function enrichWithDetails(
     await recordCollectedIds(platform, newlyEnrichedIds).catch(() => undefined);
   }
   if (enriched === 0 && records.length > 0 && !peekControlRequest(definition.id).pause && !peekControlRequest(definition.id).stop) {
-    // 内容脚本全部无响应：多半是扩展刚更新/注入失败，属于本地问题——
-    // 快速转人工并给出明确处置（重新加载扩展），不进 15 分钟冷却。
-    if (noResponse > 0 && noResponse >= attempted) {
-      const reason = "详情页无响应，扩展可能刚更新过；请在 chrome://extensions 重新加载 Trail 后点“继续”。";
-      logWarn("detail", "detail.noResponse", "详情页内容脚本无响应，转人工处理", { platform: definition.feed?.platform, toolId: definition.id, records: records.length, attempted });
-      return { ...result, status: "paused", pauseReason: "local", error: reason, warnings: [...result.warnings, reason] };
-    }
-    const reason = "详情补全全部失败（页面可能要求登录或验证），已暂停；完成验证后点继续将从该账号重试。";
-    logWarn("detail", "detail.allFailed", "详情补全全部失败，运行转暂停", { platform: definition.feed?.platform, toolId: definition.id, records: records.length, attempted, noResponse });
-    return { ...result, status: "paused", error: reason, warnings: [...result.warnings, reason] };
+    // 能走到这里说明每篇都返回了“警告”而非拦截：真正的登录墙/风控/页面缺失都会以
+    // 拦截形式立即暂停——所以全部失败只会是本地问题（扩展注入、提取异常），
+    // 一律快速转人工并如实汇报失败原因，绝不进 15 分钟冷却。
+    const tally = [...failureReasons.entries()].map(([reason, count]) => `${reason}×${count}`).join("，");
+    const reason = noResponse > 0
+      ? `详情补全 0/${attempted} 篇成功，已暂停（不自动重试）。失败原因：${tally}。扩展可能刚更新过，请在 chrome://extensions 重新加载 Trail 后点“继续”。`
+      : `详情补全 0/${attempted} 篇成功，已暂停（不自动重试）。失败原因：${tally || "未知"}；可点“继续”重试本账号，若持续失败请把日志中 detail.result 条目反馈给开发者。`;
+    logWarn("detail", "detail.allFailed", "详情补全全部失败，转人工处理（不冷却）", { platform: definition.feed?.platform, toolId: definition.id, records: records.length, attempted, noResponse, failures: Object.fromEntries(failureReasons) });
+    return { ...result, status: "paused", pauseReason: "local", error: reason, warnings: [...result.warnings, reason] };
   }
   logInfo("detail", "detail.enrich", "详情页补全完成", { platform: definition.feed?.platform, toolId: definition.id, enriched });
   return result;
