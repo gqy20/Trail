@@ -240,6 +240,7 @@ export type RuntimeMessage =
       field_toggles?: Record<string, boolean>;
     }
   | { type: "BROWSER_TOOL_STATE_READ"; source?: string }
+  | { type: "BROWSER_TOOL_SINCE_CHECK"; toolId: string; oldestIso?: string }
   | { type: "GET_BATCH_RUN_STATE"; toolId?: string }
   | { type: "PAUSE_BATCH_RUN"; toolId?: string }
   | { type: "RESUME_BATCH_RUN"; toolId?: string; tabId?: number; userInitiated?: boolean; asCollector?: boolean }

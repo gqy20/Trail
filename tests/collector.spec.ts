@@ -6,7 +6,7 @@ import { clampIntervalHours, isCollectorDue } from "../src/collector/schedule";
 import { pruneAndCheck } from "../src/collector/budget";
 import { pickRotation } from "../src/collector/rotation";
 import { resolveParameterDefaults } from "../src/browser-tools/template";
-import { filterSinceRecords } from "../src/collector/watermarks";
+import { filterSinceRecords, sinceThreshold } from "../src/collector/watermarks";
 import type { CollectorJob, FollowEntry } from "../src/collector/types";
 
 function job(overrides: Partial<CollectorJob> = {}): CollectorJob {
@@ -111,6 +111,21 @@ test("filterSinceRecords 首次回填窗口与增量水位线", () => {
   const none = filterSinceRecords([records[2]], "created_at", records[1].created_at, 7, now);
   expect(none.kept).toHaveLength(0);
   expect(none.newestIso).toBeUndefined();
+});
+
+test("sinceThreshold 翻页深度界线：水位线优先，首次用回填窗口", () => {
+  const now = Date.parse("2026-10-02T08:00:00.000Z");
+  const hour = 60 * 60_000;
+  // 首次（无水位线）：lookback 7 天
+  expect(sinceThreshold(undefined, 7, now)).toBe(now - 7 * 24 * hour);
+  // 增量：水位线 − 1 小时安全缓冲（比 lookback 更靠近现在，翻页更早停）
+  const watermark = new Date(now - 6 * hour).toISOString();
+  expect(sinceThreshold(watermark, 7, now)).toBe(now - 7 * hour);
+  // 翻到界线之前的旧内容即应停止（含等于界线的时刻）
+  expect(Date.parse("2026-10-02T01:00:00.000Z") <= sinceThreshold(watermark, 7, now)).toBe(true);
+  expect(Date.parse("2026-10-02T07:00:00.000Z") <= sinceThreshold(watermark, 7, now)).toBe(false);
+  // lookback 下限 1 天，防 0/负值
+  expect(sinceThreshold(undefined, 0, now)).toBe(now - 24 * hour);
 });
 
 test("xhs/twitter YAML 声明增量采集", () => {

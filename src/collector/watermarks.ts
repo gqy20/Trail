@@ -46,6 +46,17 @@ export async function resetWatermark(platform: string, handle: string, iso: stri
  */
 export const SAFETY_BUFFER_MS = 60 * 60_000;
 
+/**
+ * 增量采集的有效时间下界：有水位线取“水位线 − 安全缓冲”，
+ * 无水位线（首次/回填重置后）取“now − lookback 天”。
+ * 翻页深度控制与记录过滤共用同一条界线。
+ */
+export function sinceThreshold(watermarkIso: string | undefined, lookbackDays: number, now = Date.now()): number {
+  return watermarkIso
+    ? Date.parse(watermarkIso) - SAFETY_BUFFER_MS
+    : now - Math.max(1, lookbackDays) * 24 * 60 * 60_000;
+}
+
 export function filterSinceRecords(
   records: Array<Record<string, unknown>>,
   field: string,
@@ -53,9 +64,7 @@ export function filterSinceRecords(
   lookbackDays: number,
   now = Date.now()
 ): { kept: Array<Record<string, unknown>>; newestIso?: string; oldestIso?: string } {
-  const threshold = watermarkIso
-    ? Date.parse(watermarkIso) - SAFETY_BUFFER_MS
-    : now - Math.max(1, lookbackDays) * 24 * 60 * 60_000;
+  const threshold = sinceThreshold(watermarkIso, lookbackDays, now);
   const kept: Array<Record<string, unknown>> = [];
   let newest: number | undefined;
   let oldest: number | undefined;

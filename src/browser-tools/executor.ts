@@ -18,6 +18,34 @@ import { jitterDelay, jitterOffset } from "./jitter";
 
 type ExecutionSignal = "continue" | "stop_repeat" | "pause" | "finish";
 
+/**
+ * 采集工具的深度边界检查：向后台询问“还要不要继续往前翻”。
+ * - stop：已翻到水位线/回填窗口之前的旧内容，及时收手；
+ * - aborted：用户点了暂停/停止，工作流在秒级内收尾，而不是等账号边界。
+ * 非采集工具（无 feed/since 声明）直接放行。
+ */
+async function checkRunBoundary(context: ExecutionContext): Promise<{ stop: boolean; aborted: boolean }> {
+  const feed = context.definition.feed;
+  const since = context.definition.since;
+  if (!feed || !since) return { stop: false, aborted: false };
+  let oldest: number | undefined;
+  for (const record of context.data[feed.collection] || []) {
+    const raw = record[since.field];
+    if (typeof raw !== "string") continue;
+    const time = Date.parse(raw);
+    if (Number.isFinite(time) && (oldest === undefined || time < oldest)) oldest = time;
+  }
+  try {
+    return await sendMessage({
+      type: "BROWSER_TOOL_SINCE_CHECK",
+      toolId: context.definition.id,
+      oldestIso: oldest !== undefined ? new Date(oldest).toISOString() : undefined
+    });
+  } catch {
+    return { stop: false, aborted: false };
+  }
+}
+
 type ExecutionContext = {
   outcome?: "success" | "already_done";
   message?: string;
@@ -231,6 +259,9 @@ async function executeStep(step: BrowserToolStep, context: ExecutionContext, ins
           if (unchangedIterations >= step.stop_after_unchanged) break;
         }
         if (step.stop_after_records && totalRecordCount(context.data) - repeatStartRecordCount >= step.stop_after_records) break;
+        // 日期到界（增量采够了）或用户请求暂停/停止：不再继续往前滚动。
+        const boundary = await checkRunBoundary(context);
+        if (boundary.stop || boundary.aborted) break;
         if (index < max - 1 && step.between?.length) {
           const betweenSignal = await executeSteps(step.between, context, true);
           if (betweenSignal === "pause" || betweenSignal === "finish") return betweenSignal;
@@ -438,6 +469,9 @@ async function executeGraphqlFetchStep(step: BrowserToolGraphqlFetchStep, contex
     }
 
     if (step.extract) collectGraphqlRecords(step, payload.json, context);
+    // 日期到界（已翻到水位线之前的旧推文）或用户请求暂停/停止：停止翻页。
+    const boundary = await checkRunBoundary(context);
+    if (boundary.stop || boundary.aborted) break;
     const nextCursor = step.cursor ? extractGraphqlCursor(payload.json, step.cursor) : null;
     if (!nextCursor || nextCursor === cursor) break;
     cursor = nextCursor;

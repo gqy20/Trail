@@ -19,6 +19,7 @@ import type { BrowserToolExecutionProgress, BrowserToolExecutionProgressEvent } 
 import {
   getBrowserToolManagerState,
   getBrowserToolBatchRunState,
+  checkSinceBoundary,
   importBundledBrowserTools,
   importBrowserTool,
   pauseBrowserToolBatch,
@@ -131,6 +132,7 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
     case "BROWSER_TOOL_GRAPHQL_RESOLVE": return resolveGraphqlQueryIdForTab(message, sender);
     case "BROWSER_TOOL_GRAPHQL_FETCH": return fetchGraphqlPageForTab(message, sender);
     case "BROWSER_TOOL_STATE_READ": return readPageStateForTab(message, sender);
+    case "BROWSER_TOOL_SINCE_CHECK": return checkSinceBoundary(message.toolId, message.oldestIso);
     case "GET_BATCH_RUN_STATE": return getBrowserToolBatchRunState(message.toolId);
     case "PAUSE_BATCH_RUN": return pauseBrowserToolBatch(message.toolId);
     case "RESUME_BATCH_RUN": return resumeCollectorAwareBatch(message);

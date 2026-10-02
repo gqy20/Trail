@@ -157,7 +157,7 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
 
     {runState && runActive ? <div className="collector-progress" data-status={runState.status}>
       <div className="collector-progress-meta">
-        <strong className="collector-progress-label">{runState.status === "running" ? "正在采集" : "已暂停"}</strong>
+        <strong className="collector-progress-label">{progressLabel(runState)}</strong>
         <span className="muted text-small">
           {runState.status === "running"
             ? `第 ${Math.min(runDone + 1, runTotal)}/${runTotal} 个${currentName ? `：${currentName}` : ""} · 已采 ${runRecords} 条`
@@ -169,9 +169,9 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
       </div>
       <div className="collector-progress-actions">
         {runState.status === "running"
-          ? <button className="button secondary compact-button" onClick={() => controlRun("pause")}><Pause size={13} />暂停</button>
+          ? <button className="button secondary compact-button" disabled={Boolean(runState.pendingControl)} onClick={() => controlRun("pause")}><Pause size={13} />暂停</button>
           : <button className="button secondary compact-button" onClick={() => controlRun("resume")}><Play size={13} />继续</button>}
-        <button className="button secondary compact-button account-delete" onClick={() => controlRun("stop")}><Square size={12} />停止</button>
+        <button className="button secondary compact-button account-delete" disabled={Boolean(runState.pendingControl)} onClick={() => controlRun("stop")}><Square size={12} />停止</button>
       </div>
     </div> : null}
 
@@ -248,6 +248,13 @@ function formatRunTime(at: number): string {
   return date.toDateString() === new Date().toDateString()
     ? date.toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" })
     : date.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/** 暂停/停止请求已受理但还没到边界时，如实显示“正在收尾”。 */
+function progressLabel(runState: BatchRunState): string {
+  if (runState.pendingControl === "stop") return "正在停止…";
+  if (runState.pendingControl === "pause") return "正在暂停…";
+  return runState.status === "running" ? "正在采集" : "已暂停";
 }
 
 function errorText(error: unknown): string { return error instanceof Error ? error.message : "操作失败，请重试。"; }

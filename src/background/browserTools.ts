@@ -18,7 +18,7 @@ import { stageAndMaybePublish } from "./feed";
 import { getFollows, updateFollowProfile } from "../collector/follows";
 import { filterUncollected, recordCollectedIds } from "../collector/collectedIndex";
 import { getBudgetUsage, budgetPauseReason, recordActivity, releaseActivity } from "../collector/budget";
-import { filterSinceRecords, getWatermark, setWatermark } from "../collector/watermarks";
+import { filterSinceRecords, getWatermark, setWatermark, sinceThreshold } from "../collector/watermarks";
 import {
   deleteStoredBrowserTool,
   getBrowserToolRuns,
@@ -233,6 +233,29 @@ export async function stopBrowserToolBatch(toolId?: string): Promise<{ requested
 }
 
 /**
+ * 采集深度边界检查（executor 在翻页/滚动间隙调用）：
+ * - aborted：用户已请求暂停/停止，工作流应立即收尾，不必等账号边界。
+ * - stop：已翻到水位线（或首次回填窗口）之前的旧内容，继续往前只是浪费时间与预算。
+ */
+export async function checkSinceBoundary(toolId: string, oldestIso?: string): Promise<{ stop: boolean; aborted: boolean }> {
+  const control = peekControlRequest(toolId);
+  if (control.pause || control.stop) return { stop: false, aborted: true };
+  if (!oldestIso) return { stop: false, aborted: false };
+  const state = await getBatchRunState(toolId);
+  const keyword = state?.keywords[state.nextIndex];
+  if (!state || !keyword) return { stop: false, aborted: false };
+  const tool = await getStoredBrowserTool(toolId);
+  if (!tool) return { stop: false, aborted: false };
+  const definition = parseBrowserToolYaml(tool.yaml);
+  const since = definition.since;
+  const feed = definition.feed;
+  if (!since || !feed) return { stop: false, aborted: false };
+  const watermark = await getWatermark(feed.platform, keyword);
+  const threshold = sinceThreshold(watermark, since.lookback_days || 7);
+  return { stop: Date.parse(oldestIso) <= threshold, aborted: false };
+}
+
+/**
  * 批量主循环。每个输入完成前先消费暂停/停止请求；
  * 进度写入 session 存储以支撑暂停恢复与中断检测。
  */
@@ -317,7 +340,12 @@ async function continueBatchRun(
         await navigateTab(tabId, nextUrl);
         const readyTab = await chrome.tabs.get(tabId);
         const raw = await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId);
-        const result = await enrichWithDetails(definition, tabId, await applySinceFilter(definition, keyword, raw));
+        // 先按水位线过滤再补详情（不给旧内容花预算），详情补全出真实日期后再过滤一次兜底。
+        // 用户已请求暂停/停止时跳过详情补全：工作流被中止的账号不值得再花详情预算。
+        const control = peekControlRequest(definition.id);
+        const result = control.pause || control.stop
+          ? await applySinceFilter(definition, keyword, raw)
+          : await applySinceFilter(definition, keyword, await enrichWithDetails(definition, tabId, await applySinceFilter(definition, keyword, raw)));
 
         if (result.status === "paused") {
           if (result.pauseReason === "budget") {
@@ -408,7 +436,8 @@ async function continueBatchRun(
         const delay = typeof rawDelay === "string"
           ? Number(resolveTemplate(rawDelay, definition, state.parameters))
           : rawDelay || 0;
-        if (Number.isFinite(delay) && delay > 0) await sleep(jitterDelay(delay, batch.jitter_ms));
+        // 账号间隔可被暂停/停止打断（2 秒粒度），避免点了停止还要干等十几秒。
+        if (Number.isFinite(delay) && delay > 0 && await sleepInterruptible(jitterDelay(delay, batch.jitter_ms), definition.id, 2_000) !== "done") break;
       }
     }
   } finally {
@@ -827,7 +856,8 @@ async function enrichWithDetails(
     if (recordId) newlyEnrichedIds.push(recordId);
     const peeked = peekControlRequest(definition.id);
     if (peeked.pause || peeked.stop) break;
-    if (delay > 0 && enriched < maxItems) await sleep(jitterDelay(delay, definition.detail_extract?.jitter_ms));
+    // 详情间隔可被暂停/停止打断，停止请求在数秒内生效。
+    if (delay > 0 && enriched < maxItems && await sleepInterruptible(jitterDelay(delay, definition.detail_extract?.jitter_ms), definition.id, 2_000) !== "done") break;
   }
   // 成功补全的 ID 写入本地索引（跨发布持久，下次直接跳过）。
   if (platform && newlyEnrichedIds.length > 0) {
@@ -910,8 +940,7 @@ async function applySinceFilter(
     });
     result.data[feed.collection] = kept;
   }
-  // 存储本轮最旧时间到运行状态，供回填判断是否继续翻页。
-  if (oldestIso) result.data["_backfill_oldest"] = [{ value: oldestIso }];
+  if (oldestIso) logDebug("collector", "since.oldest", "本轮最旧记录", { toolId: definition.id, keyword, oldestIso });
   return result;
 }
 
