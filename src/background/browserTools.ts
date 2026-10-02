@@ -1109,8 +1109,8 @@ export async function takeDetailRetryQueue(platform: string, handle: string): Pr
 
 /**
  * 采集成功后从运行数据中提取用户资料（显示名 + 头像）并回写 follows 存储。
- * Twitter: graphql_fetch 的 store 已提取 profile_name / profile_avatar 到 values。
- * XHS: state_read 的 _profile 集合包含 nickname / avatar。
+ * Twitter: UserByScreenName 的 extract 产出 profile 集合（nickname/avatar）。
+ * XHS: state_read 的 profile 集合包含 nickname / avatar。
  */
 async function refreshFollowProfile(
   definition: ReturnType<typeof parseBrowserToolYaml>,
@@ -1121,12 +1121,19 @@ async function refreshFollowProfile(
   if (!feed) return;
   const profile: { displayName?: string; avatar?: string } = {};
 
-  // Twitter: values 中的 profile_name / profile_avatar
   const profileRecords = data["profile"];
   if (Array.isArray(profileRecords) && profileRecords.length > 0) {
     const record = profileRecords[0];
     if (typeof record.nickname === "string" && record.nickname.trim()) profile.displayName = record.nickname;
-    if (typeof record.avatar === "string" && record.avatar.trim()) profile.avatar = record.avatar;
+    if (typeof record.avatar === "string" && record.avatar.trim()) {
+      // X 默认返回 _normal 尺寸（48px），换成大图让 feed 头像清晰。
+      const raw = record.avatar.trim();
+      profile.avatar = /_normal(\.\w+)$/.test(raw) ? raw.replace(/_normal(\.\w+)$/, "_400x400$1") : raw;
+    }
+  } else {
+    // 工具规则缺 profile 提取（旧版 YAML）或平台响应变化时，这里会长期静默——
+    // 显式打点让头像/名称断供可以在日志里被发现。
+    logWarn("collector", "profile.missing", "运行数据中没有用户资料，头像与显示名不会更新", { platform: feed.platform, handle: keyword, toolId: definition.id, collections: Object.keys(data) });
   }
 
   if (Object.keys(profile).length > 0) {

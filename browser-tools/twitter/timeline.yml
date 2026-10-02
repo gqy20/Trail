@@ -89,8 +89,14 @@ workflow:
       collection: profile
       walk: { has: legacy }
       fields:
-        nickname: { path: legacy.name, optional: true }
-        avatar: { path: legacy.profile_image_url_https, optional: true }
+        nickname:
+          path: legacy.name
+          optional: true
+          fallback_paths: [core.name]
+        avatar:
+          path: legacy.profile_image_url_https
+          optional: true
+          fallback_paths: [core.profile_image_url_https]
   - action: graphql_fetch
     operation: UserTweets
     query_id: "lrMzG9qPQHpqJdP3AbM-bQ"

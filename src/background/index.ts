@@ -46,7 +46,7 @@ import { getBatchRunState } from "./runControl";
 import { addFollow, getFollows, importFollows, removeFollow, removeFollows } from "../collector/follows";
 import { getFeedState, probeFeedConnection, publishStagedFeed, registerFeedPublisher, saveFeedPublisherConfig, stagePosts, clearStagedFeed } from "./feed";
 import { fetchGraphqlPageForTab, readPageStateForTab, resolveGraphqlQueryIdForTab } from "./graphqlBridge";
-import { clearLogEntries, getLogEntries } from "../logging/logger";
+import { clearLogEntries, getLogEntries, logInfo, logWarn } from "../logging/logger";
 import { restoreBundledBrowserTool } from "../browser-tools/bundled";
 import { getStoredBrowserTool, saveStoredBrowserTool } from "../browser-tools/storage";
 import { getStoredBrowserTools } from "../browser-tools/storage";
@@ -58,6 +58,16 @@ void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((
 
 registerCheckins();
 registerCollectors();
+// 启动时把内置工具同步到最新版本：规则随扩展一起发版，存储里的旧 YAML
+// 不会自动跟上（曾导致 profile 提取、since 等新声明长期不生效）。
+// 自定义工具由 importBundledBrowserTools 保留，无变化时不写存储。
+void importBundledBrowserTools()
+  .then((result) => {
+    if (result.installed + result.updated > 0) {
+      logInfo("tools", "bundled.sync", `内置工具已更新（新装 ${result.installed}，更新 ${result.updated}）`, { ...result });
+    }
+  })
+  .catch((error: unknown) => logWarn("tools", "bundled.syncFailed", "内置工具同步失败", { detail: error instanceof Error ? error.message : "未知错误" }));
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage | BrowserToolExecutionProgress | BrowserToolExecutionProgressEvent, sender, sendResponse) => {
   if (message.type === "BROWSER_TOOL_EXECUTION_PROGRESS") {

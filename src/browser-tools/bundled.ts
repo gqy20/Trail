@@ -83,7 +83,10 @@ export async function importBundledBrowserTools(): Promise<BundledBrowserToolImp
     current ? result.updated += 1 : result.installed += 1;
   }
 
-  await replaceStoredBrowserTools([...nextBundled, ...currentById.values()]);
+  // 无变化时不写存储：SW 每次唤醒都会跑自动同步，避免无谓的存储写放大。
+  if (result.installed + result.updated > 0) {
+    await replaceStoredBrowserTools([...nextBundled, ...currentById.values()]);
+  }
   return result;
 }
 
