@@ -818,26 +818,39 @@ async function enrichWithDetails(
 ): Promise<BrowserToolRunResult> {
   const spec = definition.detail_extract;
   if (!spec) return result;
-  const records = result.data[spec.collection];
+  let records = result.data[spec.collection];
   if (!records || records.length === 0) return result;
-  const maxItems = Math.min(spec.max_items || records.length, records.length);
+  const maxItems = spec.max_items || records.length;
   const delay = spec.delay_ms ?? 0;
   let enriched = 0;
   let attempted = 0;
   let noResponse = 0;
+  let skippedNoUrl = 0;
   const failureReasons = new Map<string, number>();
 
-  // 本地已采集 ID 索引：跳过已补全过详情的记录，不浪费预算。
+  // 本地已采集 ID 索引：已补全过详情的记录直接从本轮结果剔除——
+  // 它们已以完整形态发布，重新暂存只会用列表级字段覆盖完整版本。
   const platform = definition.feed?.platform;
   const allIds = records.map((r) => String(r.id || "")).filter(Boolean);
   const uncollected = platform ? new Set(await filterUncollected(platform, allIds)) : null;
+  if (uncollected) {
+    const pending = records.filter((r) => { const id = String(r.id || ""); return !id || uncollected.has(id); });
+    if (pending.length !== records.length) {
+      logDebug("detail", "detail.skippedCollected", "剔除已补全过详情的记录", { platform, toolId: definition.id, total: records.length, pending: pending.length });
+      records = pending;
+      result.data[spec.collection] = pending;
+      if (pending.length === 0) {
+        logInfo("detail", "detail.enrich", "详情页补全完成", { platform, toolId: definition.id, enriched: 0, skippedCollected: true });
+        return result;
+      }
+    }
+  }
   const newlyEnrichedIds: string[] = [];
 
   for (const record of records.slice(0, maxItems)) {
     const url = record[spec.url_field];
-    if (typeof url !== "string" || !/^https?:\/\//.test(url)) continue;
+    if (typeof url !== "string" || !/^https?:\/\//.test(url)) { skippedNoUrl += 1; continue; }
     const recordId = String(record.id || "");
-    if (uncollected && recordId && !uncollected.has(recordId)) continue;
     if (definition.feed) {
       const detailBudget = await recordActivity(definition.feed.platform, "detail");
       if (!detailBudget.allowed) {
@@ -904,7 +917,7 @@ async function enrichWithDetails(
   if (platform && newlyEnrichedIds.length > 0) {
     await recordCollectedIds(platform, newlyEnrichedIds).catch(() => undefined);
   }
-  if (enriched === 0 && records.length > 0 && !peekControlRequest(definition.id).pause && !peekControlRequest(definition.id).stop) {
+  if (enriched === 0 && attempted > 0 && records.length > 0 && !peekControlRequest(definition.id).pause && !peekControlRequest(definition.id).stop) {
     // 能走到这里说明每篇都返回了“警告”而非拦截：真正的登录墙/风控/页面缺失都会以
     // 拦截形式立即暂停——所以全部失败只会是本地问题（扩展注入、提取异常），
     // 一律快速转人工并如实汇报失败原因，绝不进 15 分钟冷却。
@@ -914,6 +927,10 @@ async function enrichWithDetails(
       : `详情补全 0/${attempted} 篇成功，已暂停（不自动重试）。失败原因：${tally || "未知"}；可点“继续”重试本账号，若持续失败请把日志中 detail.result 条目反馈给开发者。`;
     logWarn("detail", "detail.allFailed", "详情补全全部失败，转人工处理（不冷却）", { platform: definition.feed?.platform, toolId: definition.id, records: records.length, attempted, noResponse, failures: Object.fromEntries(failureReasons) });
     return { ...result, status: "paused", pauseReason: "local", error: reason, warnings: [...result.warnings, reason] };
+  }
+  if (skippedNoUrl > 0 && enriched === 0 && attempted === 0) {
+    // 没有可访问的详情 URL（多为列表缺 xsec_token）：不阻断运行，如实提示。
+    result.warnings.push(`[详情] ${skippedNoUrl} 篇记录没有可用的详情链接，仅按列表信息收录。`);
   }
   logInfo("detail", "detail.enrich", "详情页补全完成", { platform: definition.feed?.platform, toolId: definition.id, enriched });
   return result;
