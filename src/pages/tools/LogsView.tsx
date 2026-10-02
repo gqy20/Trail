@@ -16,6 +16,8 @@ export function LogsView() {
   const [format, setFormat] = useState("json");
   const [search, setSearch] = useState("");
   const [copiedKey, setCopiedKey] = useState<string>();
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let alive = true;
@@ -119,6 +121,51 @@ export function LogsView() {
     if (!await writeClipboard(formatLogEntriesText(chronological))) setError("复制失败，请改用导出。");
   }
 
+  const selectedEntries = useMemo(
+    () => filtered.filter((_, index) => selected.has(entryKeyOf(index))),
+    [filtered, selected]
+  );
+
+  function entryKeyOf(index: number): string {
+    return `${filtered[index]?.ts}-${filtered[index]?.event}-${index}`;
+  }
+
+  function toggleSelected(key: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function exitSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
+  }
+
+  /** 复制/导出已选日志（保持时间正序）。 */
+  async function copySelected() {
+    if (selectedEntries.length === 0) return;
+    if (!await writeClipboard(formatLogEntriesText(selectedEntries.slice().reverse()))) setError("复制失败，请改用导出。");
+  }
+
+  function exportSelected() {
+    const chronological = selectedEntries.slice().reverse();
+    if (chronological.length === 0) return;
+    const text = format === "json" ? JSON.stringify({ exportedAt: new Date().toISOString(), selected: chronological.length, entries: chronological }, null, 2) : formatLogEntriesText(chronological);
+    const blob = new Blob([text], { type: format === "json" ? "application/json;charset=utf-8" : "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `trail-logs-selected-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${format === "json" ? "json" : "txt"}`;
+    anchor.style.display = "none";
+    document.body.append(anchor);
+    anchor.click();
+    window.setTimeout(() => anchor.remove(), 1_000);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
   return <section className="logs-view stack">
     <div className="view-heading inline-view-heading"><h1>运行日志</h1><p className="muted text-small">保留最近 5000 条日志，敏感字段已脱敏。</p></div>
     {error ? <p role="alert" className="error-text">{error}</p> : null}
@@ -136,17 +183,27 @@ export function LogsView() {
       <select className="input" aria-label="日志平台" value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="all">全部平台</option>{platforms.map((item) => <option key={item} value={item}>{platformName(item)}</option>)}</select>
       <select className="input" aria-label="日志导出格式" value={format} onChange={(e) => setFormat(e.target.value)}><option value="json">JSON</option><option value="text">文本</option></select>
       <input className="input logs-search" aria-label="搜索日志" placeholder="搜索日志" value={search} onChange={(e) => setSearch(e.target.value)} />
-      <button className="button secondary" disabled={busy || filtered.length === 0} onClick={() => void copyFiltered()}><Copy size={15} />复制</button>
-      <button className="button secondary" disabled={busy || filtered.length === 0} onClick={exportLogs}><FileDown size={15} />导出</button>
+      {selecting ? <>
+        <label className="logs-select-all"><input type="checkbox" checked={selected.size > 0 && selected.size === filtered.length} onChange={(e) => setSelected(e.target.checked ? new Set(filtered.map((_, index) => entryKeyOf(index))) : new Set())} />全选</label>
+        <span className="muted text-small">已选 {selectedEntries.length} 条</span>
+        <button className="button secondary" disabled={selected.size === 0} onClick={() => void copySelected()}><Copy size={15} />复制已选</button>
+        <button className="button secondary" disabled={selected.size === 0} onClick={exportSelected}><FileDown size={15} />导出已选</button>
+        <button className="button secondary" onClick={exitSelecting}>取消</button>
+      </> : <>
+        <button className="button secondary" disabled={busy || filtered.length === 0} onClick={() => void copyFiltered()}><Copy size={15} />复制</button>
+        <button className="button secondary" disabled={busy || filtered.length === 0} onClick={exportLogs}><FileDown size={15} />导出</button>
+        <button className="button secondary" disabled={busy || filtered.length === 0} onClick={() => { setSelecting(true); setSelected(new Set()); }}>选择</button>
+      </>}
       <button className="button secondary" disabled={busy || !entries?.length} onClick={() => void clearLogs()}><Eraser size={15} />清空</button>
     </div>
     <p className="muted text-small">{filtered.length === entries?.length ? `${filtered.length} 条` : `匹配 ${filtered.length} / ${entries?.length ?? 0} 条`} · 最新在前</p>
     {observations.length ? <p className="muted text-small">当前筛选：访问结果 {observations.filter((entry) => entry.event !== "fetch.rateLimited" && entry.event !== "fetch.auth").length} 条 · 异常事件 {abnormal} 条（同一次访问可有多条） · 429 限流 {filtered.filter((entry) => entry.event === "fetch.rateLimited").length} 次。展开查看当时配置；验证或拦截不等于封号。</p> : null}
-    <div className="logs-list">
+    <div className="logs-list" data-selecting={selecting}>
       {filtered.map((entry, index) => {
         const entryKey = `${entry.ts}-${entry.event}-${index}`;
         return <details className={`log-entry log-${entry.level}`} key={entryKey}>
         <summary>
+          {selecting ? <input type="checkbox" aria-label="选择此日志" checked={selected.has(entryKey)} onClick={(e) => e.stopPropagation()} onChange={() => toggleSelected(entryKey)} /> : null}
           <time title={new Date(entry.ts).toLocaleString("zh-CN", { hour12: false })}>{new Date(entry.ts).toLocaleTimeString("zh-CN", { hour12: false })}</time>
           <span className={`log-level log-level-${entry.level}`}>{LEVEL_LABEL[entry.level]}</span>
           <span className="log-scope">{typeof entry.data?.platform === "string" ? platformName(entry.data.platform) : entry.scope}</span>
