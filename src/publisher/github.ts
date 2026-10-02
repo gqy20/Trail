@@ -28,7 +28,7 @@ function encodePath(path: string): string {
 }
 
 async function githubFetch(path: string, token: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${GITHUB_API}${path}`, {
+  return fetch(path.startsWith("https://") ? path : `${GITHUB_API}${path}`, {
     ...init,
     headers: {
       Accept: "application/vnd.github+json",
@@ -62,11 +62,26 @@ export async function fetchGitHubContent(target: RepoTarget, path: string): Prom
   );
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(await describeError(response));
-  const payload = (await response.json()) as { content?: string; sha?: string; encoding?: string };
-  if (typeof payload.content !== "string" || typeof payload.sha !== "string") {
+  const payload = (await response.json()) as { content?: string; sha?: string; encoding?: string; size?: number; git_url?: string };
+  if (typeof payload.sha !== "string") {
     throw new Error("GitHub 返回的文件内容格式不正确。");
   }
-  return { content: fromBase64Utf8(payload.content), sha: payload.sha };
+  // 超过 1MB 的文件，Contents API 只返回元数据（content 为空、encoding 为 none）；
+  // 此时改走 Git Blob API 取完整内容（base64，上限 100MB）。
+  if (payload.encoding === "base64" && typeof payload.content === "string" && payload.content.length > 0) {
+    return { content: fromBase64Utf8(payload.content), sha: payload.sha };
+  }
+  if ((payload.size ?? 0) === 0) return { content: "", sha: payload.sha };
+  if (typeof payload.git_url !== "string") {
+    throw new Error(`GitHub 未返回 ${path} 的内容（文件可能超过 1MB），无法读取远端数据。`);
+  }
+  const blobResponse = await githubFetch(payload.git_url, target.token);
+  if (!blobResponse.ok) throw new Error(await describeError(blobResponse));
+  const blob = (await blobResponse.json()) as { content?: string; encoding?: string };
+  if (blob.encoding !== "base64" || typeof blob.content !== "string") {
+    throw new Error(`GitHub Blob API 未返回 ${path} 的 base64 内容。`);
+  }
+  return { content: fromBase64Utf8(blob.content), sha: payload.sha };
 }
 
 /** 单提交发布：Git Data API 把全部文件打包为一次 commit，替代逐文件 PUT。 */
