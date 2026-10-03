@@ -1,7 +1,7 @@
 import { commitGitHubFiles, fetchGitHubContent, probeGitHubRepo } from "./github";
 import { buildFeedMetaFile, buildFeedPostsFile, mergeFeedPosts, normalizeFeedPost } from "./merge";
 import { planFeedFiles } from "./rss";
-import { clearStagedPosts, getStagedPosts, patchFeedState, requireFeedConfig, saveFeedConnection } from "./storage";
+import { getStagedPosts, patchFeedState, removeStagedPosts, requireFeedConfig, saveFeedConnection } from "./storage";
 import { getFollows } from "../collector/follows";
 import type { FeedFollowsFile, FeedPost, FeedPublishResult, FeedRepoProbe } from "./types";
 import { FEED_FOLLOWS_PATH, FEED_META_PATH, FEED_POSTS_PATH } from "./types";
@@ -22,6 +22,8 @@ export async function publishFeed(): Promise<FeedPublishResult> {
   const config = await requireFeedConfig();
   const staged = await getStagedPosts();
   if (staged.length === 0) throw new Error("没有待发布的新记录，先运行采集或导入数据。");
+  // 记下本次提交覆盖的暂存 id：提交成功后只清理这些，发布期间新落下的暂存留给下一轮。
+  const committedIds = new Set(staged.map((post) => post.id));
 
   const currentFile = await fetchGitHubContent(config, FEED_POSTS_PATH);
   const existing = currentFile ? parseRemotePosts(currentFile.content) : [];
@@ -49,7 +51,7 @@ export async function publishFeed(): Promise<FeedPublishResult> {
   ];
   await commitGitHubFiles(config, files, `trail: 发布 ${newCount} 条新记录，共 ${posts.length} 条`);
 
-  await clearStagedPosts();
+  await removeStagedPosts([...committedIds]);
   await patchFeedState({
     lastPublishAt: publishedAt,
     totalPosts: posts.length,

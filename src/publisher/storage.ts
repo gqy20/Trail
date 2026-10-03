@@ -87,6 +87,18 @@ export async function getStagedPosts(): Promise<FeedPost[]> {
   return (await readStore()).staged || [];
 }
 
+/** 只移除指定 id 的暂存记录：发布按本次提交内容精确清理，并发暂存不受影响。 */
+export async function removeStagedPosts(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const remove = new Set(ids);
+  const store = await readStore();
+  const staged = store.staged || [];
+  const kept = staged.filter((post) => !remove.has(post.id));
+  if (kept.length === staged.length) return 0;
+  await writeStore({ ...store, staged: kept });
+  return staged.length - kept.length;
+}
+
 export async function clearStagedPosts(): Promise<void> {
   const store = await readStore();
   await writeStore({ ...store, staged: [] });
