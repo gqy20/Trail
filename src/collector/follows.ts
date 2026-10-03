@@ -118,6 +118,37 @@ export function parseFollowsText(platform: string, text: string): FollowEntry[] 
   return entries;
 }
 
+/**
+ * 解析粘贴到输入框的账号文本：支持多行/逗号分隔、@前缀、x.com 主页链接；
+ * 小红书支持 24 位用户 ID 与 /user/profile/<id> 主页链接（可含查询参数）。
+ * 无法识别的条目（如小红书昵称）单独返回，由界面提示补充 ID。
+ */
+export function parsePastedAccounts(platform: string, text: string): { handles: string[]; unresolvable: string[] } {
+  const handles: string[] = [];
+  const unresolvable: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of text.split(/[\n,，;；\s]+/)) {
+    const token = raw.trim();
+    if (!token) continue;
+    let handle: string | undefined;
+    if (platform === "xhs") {
+      const profile = token.match(/user\/profile\/([0-9a-fA-F]{24})/);
+      if (profile) handle = profile[1].toLowerCase();
+      else if (/^[0-9a-fA-F]{24}$/.test(token)) handle = token.toLowerCase();
+    } else {
+      const fromUrl = token.match(/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]{1,15})(?:[/?]|$)/);
+      if (fromUrl) handle = fromUrl[1];
+      else if (/^@?[A-Za-z0-9_]{1,15}$/.test(token)) handle = token.replace(/^@/, "");
+    }
+    if (!handle) {
+      unresolvable.push(token.length > 40 ? `${token.slice(0, 40)}…` : token);
+      continue;
+    }
+    if (!seen.has(handle)) { seen.add(handle); handles.push(handle); }
+  }
+  return { handles, unresolvable };
+}
+
 export function normalizeFollow(entry: FollowEntry): FollowEntry | null {
   const handle = String(entry.handle || "").trim().replace(/^@/, "");
   const platform = String(entry.platform || "").trim().toLowerCase();

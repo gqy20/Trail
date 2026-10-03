@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { parseBrowserToolYaml } from "../src/browser-tools/loader";
-import { applyImport, normalizeFollow, parseFollowsText } from "../src/collector/follows";
+import { applyImport, normalizeFollow, parseFollowsText, parsePastedAccounts } from "../src/collector/follows";
 import { clampIntervalHours, isCollectorDue } from "../src/collector/schedule";
 import { pruneAndCheck } from "../src/collector/budget";
 import { pickRotation } from "../src/collector/rotation";
@@ -47,6 +47,24 @@ test("parseFollowsText 支持 txt 与带表头的 csv", () => {
 test("normalizeFollow 规范化 @ 前缀与空白", () => {
   expect(normalizeFollow({ platform: " Twitter ", handle: " @Jack " })).toEqual({ platform: "twitter", handle: "Jack" });
   expect(normalizeFollow({ platform: "twitter", handle: "a b" })).toBeNull();
+});
+
+test("parsePastedAccounts 粘贴批量解析：多行/链接/ID/去重/不可识别", () => {
+  // 推特：@前缀、裸 handle、主页链接混排，去重
+  const tw = parsePastedAccounts("twitter", "@karpathy\nrasbt, https://x.com/swyx @karpathy");
+  expect(tw.handles).toEqual(["karpathy", "rasbt", "swyx"]);
+  expect(tw.unresolvable).toHaveLength(0);
+  // 推特：带状态路径的链接取第一段
+  expect(parsePastedAccounts("twitter", "https://x.com/dotey/status/123456").handles).toEqual(["dotey"]);
+  // 小红书：24 位 ID、含查询参数的主页链接、去重
+  const id = "5d7ece920000000001018707";
+  const xhs = parsePastedAccounts("xhs", `${id}\nhttps://www.xiaohongshu.com/user/profile/${id}?xsec_token=AB&xsec_source=pc_user，${id.toUpperCase()}`);
+  expect(xhs.handles).toEqual([id]);
+  expect(xhs.unresolvable).toHaveLength(0);
+  // 小红书：昵称与短 ID 无法识别，单独返回
+  const bad = parsePastedAccounts("xhs", "歸藏 12345");
+  expect(bad.handles).toHaveLength(0);
+  expect(bad.unresolvable).toEqual(["歸藏", "12345"]);
 });
 
 test("isCollectorDue 间隔、运行中、待处理与重试上限", () => {

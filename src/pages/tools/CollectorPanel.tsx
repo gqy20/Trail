@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Clock, FileDown, FileUp, History, Pause, Play, Plus, Square, X } from "lucide-react";
-import { exportFollowsCsv } from "../../collector/follows";
+import { exportFollowsCsv, parsePastedAccounts } from "../../collector/follows";
 import { TaskStatus, useTransientNotice } from "./feedback";
 import { sendMessage } from "../../shared/runtime";
 import type { CollectorItem, FollowEntry } from "../../collector/types";
@@ -91,9 +91,20 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
     ? follows?.find((entry) => entry.handle === currentKeyword)?.displayName || (platform === "twitter" ? `@${currentKeyword}` : currentKeyword)
     : undefined;
 
+  /** 批量添加：粘贴的文本按行/逗号/链接解析后一次导入；返回提示消息。 */
+  function addPasted(handles: string[], unresolvable: string[]): Promise<string> {
+    const suffix = unresolvable.length > 0
+      ? `；${unresolvable.length} 个无法识别已跳过（${unresolvable.slice(0, 2).join("、")}${unresolvable.length > 2 ? "…" : ""}）`
+      : "";
+    return sendMessage({ type: "IMPORT_FOLLOWS", platform, text: handles.join("\n") }).then((result) =>
+      handles.length === 1
+        ? `已添加 1 个账号${suffix}。`
+        : `导入 ${handles.length} 个账号${suffix}。`
+    );
+  }
+
   /** 暂停/停止/继续不经过 act（不锁面板）：响应要么即时，要么由进度行与任务状态自行呈现。 */
-  function controlRun(action: "pause" | "stop" | "resume") {
-    setFeedbackArea("collect");
+  function controlRun(action: "pause" | "stop" | "resume") {    setFeedbackArea("collect");
     setError("");
     if (action === "pause") {
       void sendMessage({ type: "PAUSE_BATCH_RUN", toolId })
@@ -223,20 +234,37 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
     </div>
 
     <div className="collector-add">
-      <input className="input collector-add-input" aria-label={`${name}添加账号`} placeholder={`@${platform === "twitter" ? "handle" : "账号"}`} value={handle} disabled={busy} onChange={(e) => setHandle(e.target.value)}
+      <input className="input collector-add-input" aria-label={`${name}添加账号`} title="支持粘贴多行、逗号分隔、@handle 或主页链接，批量识别后导入" placeholder={platform === "twitter" ? "@handle / 主页链接" : "用户 ID / 主页链接"} value={handle} disabled={busy}
+        onChange={(e) => setHandle(e.target.value)}
+        onPaste={(event) => {
+          const text = event.clipboardData.getData("text");
+          if (!text) return;
+          const { handles, unresolvable } = parsePastedAccounts(platform, text);
+          // 单个普通 handle 走默认粘贴（填入框、回车确认）；多条或含链接时直接批量导入。
+          const looksComplex = handles.length > 1 || unresolvable.length > 0 || /[\n,，;；]|user\/profile|x\.com|twitter\.com/.test(text);
+          if (handles.length === 0 && unresolvable.length === 0) return;
+          if (!looksComplex) return;
+          event.preventDefault();
+          setHandle("");
+          void act(() => addPasted(handles, unresolvable), "accounts");
+        }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && handle.trim()) void act(async () => {
-            await sendMessage({ type: "ADD_FOLLOW", platform, handle: handle.trim() });
-            setHandle("");
-            return undefined;
-          });
+          if (e.key !== "Enter" || !handle.trim()) return;
+          const { handles, unresolvable } = parsePastedAccounts(platform, handle);
+          if (handles.length === 0) {
+            setFeedbackArea("accounts");
+            setError(unresolvable.length > 0 ? `${name}需要 ${platform === "xhs" ? "24 位用户 ID 或主页链接" : "handle 或主页链接"}：${unresolvable[0]}` : "没有识别到有效账号。");
+            return;
+          }
+          setHandle("");
+          void act(() => addPasted(handles, unresolvable), "accounts");
         }} />
-      <button className="icon-button" title="添加" disabled={busy || !handle.trim()} onClick={() => void act(async () => {
-        const value = handle.trim();
-        await sendMessage({ type: "ADD_FOLLOW", platform, handle: value });
+      <button className="icon-button" title="添加（支持批量）" disabled={busy || !handle.trim()} onClick={() => {
+        const { handles, unresolvable } = parsePastedAccounts(platform, handle);
+        if (handles.length === 0) return;
         setHandle("");
-        return undefined;
-      })}><Plus size={15} /></button>
+        void act(() => addPasted(handles, unresolvable), "accounts");
+      }}><Plus size={15} /></button>
     </div>
       </div>
     </div>
