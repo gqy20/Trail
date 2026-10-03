@@ -131,7 +131,7 @@ export function FeedPublisherView() {
         <div className="feed-config-wide token-field"><label title="只授予该仓库 Contents 读写权限">Token · 仅保存在本机<input ref={tokenRef} type={showToken ? "text" : "password"} autoComplete="off" spellCheck={false} value={draft.token} disabled={busy} onChange={(e) => setDraft({ ...draft, token: e.target.value })} placeholder="github_pat_…" /></label><button className="button secondary compact-button" type="button" aria-pressed={showToken} onClick={() => setShowToken(!showToken)}>{showToken ? "隐藏" : "显示"}</button></div>
         <label className="feed-config-wide" title="留空则默认 https://<owner>.github.io/<repo>/">Pages 地址<input ref={pagesRef} value={draft.pagesBaseUrl || ""} disabled={busy} onChange={(e) => setDraft({ ...draft, pagesBaseUrl: e.target.value })} placeholder="https://gqy20.github.io/feed/" /></label>
         <div className="feed-config-wide feed-config-inline">
-          <label>封顶<input type="number" min={100} max={20000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
+          <label title="站点最多保留的最新记录数，超出后最旧的被滚动淘汰">封顶<input type="number" min={100} max={50000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
           <label>每源<input type="number" min={10} max={5000} value={draft.itemsPerFeed} disabled={busy} onChange={(e) => setDraft({ ...draft, itemsPerFeed: Number(e.target.value) })} /></label>
           <label className="feed-config-toggle" title="渠道采集完成后立即自动发布"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 自动</label>
           <label className="feed-config-toggle" title="实时发布失败或浏览器未运行时，到期补推暂存记录"><input className="collector-interval" type="number" min={1} max={168} value={draft.autoPublishHours || 12} disabled={busy || !draft.autoPublish} onChange={(e) => setDraft({ ...draft, autoPublishHours: Number(e.target.value) })} /><span>小时</span></label>
@@ -171,7 +171,7 @@ export function FeedPublisherView() {
 }
 
 function defaultConfig(): FeedPublisherConfig {
-  return { owner: "", repo: "feed", branch: "main", token: "", maxPosts: 5000, itemsPerFeed: 2000, autoPublish: false, autoPublishHours: 12, excludeRetweets: false };
+  return { owner: "", repo: "feed", branch: "main", token: "", maxPosts: 20000, itemsPerFeed: 2000, autoPublish: false, autoPublishHours: 12, excludeRetweets: false };
 }
 
 function errorText(error: unknown): string { return error instanceof Error ? error.message : "操作失败，请重试。"; }

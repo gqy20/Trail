@@ -21,6 +21,11 @@ async function writeStore(store: FeedStore): Promise<void> {
 
 export async function getFeedPublisherSnapshot(): Promise<FeedPublisherSnapshot> {
   const store = await readStore();
+  // 一次性迁移：旧默认封顶 5000 上滚到新默认 20000（用户显式设过其他值则不动）。
+  if (store.config?.maxPosts === 5000) {
+    store.config = { ...store.config, maxPosts: 20000 };
+    await writeStore(store);
+  }
   return {
     config: store.config || null,
     stagedCount: store.staged?.length || 0,
@@ -47,7 +52,7 @@ export function normalizeFeedConfig(input: FeedPublisherConfig): FeedPublisherCo
     repo,
     branch,
     token,
-    maxPosts: clamp(input.maxPosts, 100, 20000, 5000),
+    maxPosts: clamp(input.maxPosts, 100, 50000, 20000),
     itemsPerFeed: clamp(input.itemsPerFeed, 10, 5000, 2000),
     pagesBaseUrl,
     autoPublish: input.autoPublish === true,
