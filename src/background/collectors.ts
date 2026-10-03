@@ -100,7 +100,7 @@ async function runOne(toolId: string, automatic: boolean): Promise<CollectorStat
   if (automatic) {
     if (!isCollectorDue(job, now)) return getCollectorState();
     if (job.approvedHash !== await hash(tool.yaml)) {
-      await patchJob(toolId, { enabled: false, status: "needs_user", message: "工具规则已更新，请检查后重新开启定时采集。" });
+      await patchJob(toolId, { enabled: false, status: "needs_user", message: "工具规则已随扩展更新，定时采集已暂停：手动采集一次即可重新核准，或直接重新打开自动采集开关。" });
       logWarn("collector", "collector.ruleChanged", "规则版本与开启时不一致，自动采集已暂停", { toolId });
       return getCollectorState();
     }
@@ -147,6 +147,9 @@ async function runOne(toolId: string, automatic: boolean): Promise<CollectorStat
       result,
       lastSuccessAt: ok ? Date.now() : job.lastSuccessAt,
       rotationCursor: ok ? ((job.rotationCursor || 0) + follows.length) % allFollows.length : job.rotationCursor,
+      // 手动成功即认可当前规则：规则更新后用户手动跑一次，定时核准自动跟上，
+      // 不再出现"重新打开开关仍提示规则不一致"的二次操作。
+      approvedHash: ok ? await hash(tool.yaml) : job.approvedHash,
       message: ok
         ? result.status === "partial"
           ? `${records} 条 · ${result.error || "部分账号失败"}`
