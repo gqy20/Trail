@@ -3,6 +3,7 @@ import { ChevronRight, Clock, FileDown, FileUp, History, Pause, Play, Plus, Squa
 import { exportFollowsCsv, parsePastedAccounts } from "../../collector/follows";
 import { TaskStatus, useTransientNotice } from "./feedback";
 import { sendMessage } from "../../shared/runtime";
+import { downloadFile } from "../../shared/download";
 import type { CollectorItem, FollowEntry } from "../../collector/types";
 import type { BatchRunState } from "../../background/runControl";
 
@@ -126,14 +127,8 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
   }
 
   function exportAccounts() {
-    const url = URL.createObjectURL(new Blob(["\uFEFF", exportFollowsCsv(follows || [])], { type: "text/csv;charset=utf-8" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${platform}-accounts.csv`;
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    const blob = new Blob(["\uFEFF", exportFollowsCsv(follows || [])], { type: "text/csv;charset=utf-8" });
+    downloadFile(`${platform}-accounts.csv`, blob);
   }
 
   return <div className="panel collector-panel stack">

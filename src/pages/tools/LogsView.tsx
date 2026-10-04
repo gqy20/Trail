@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Eraser, FileDown } from "lucide-react";
 import { sendMessage } from "../../shared/runtime";
+import { downloadFile } from "../../shared/download";
 import { formatLogEntriesText, LOG_STORE_KEY, type LogEntry, type LogLevel } from "../../logging/logger";
 
 const LEVEL_WEIGHT: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 const LEVEL_LABEL: Record<LogLevel, string> = { debug: "调试", info: "信息", warn: "警告", error: "错误" };
+/** 首屏渲染的最新条数；滚动到底部自动增量加载剩余条目，避免 5000 条一次性渲染卡住首屏。 */
+const INITIAL_VISIBLE = 300;
+const VISIBLE_STEP = 500;
 
 export function LogsView() {
   const [entries, setEntries] = useState<LogEntry[]>();
@@ -18,6 +22,8 @@ export function LogsView() {
   const [copiedKey, setCopiedKey] = useState<string>();
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -51,6 +57,18 @@ export function LogsView() {
   const observations = filtered.filter((entry) => ["activity.result", "activity.failed", "detail.result", "detail.blocked", "fetch.rateLimited", "fetch.auth"].includes(entry.event));
   const abnormal = observations.filter((entry) => entry.level === "warn" || entry.level === "error").length;
 
+  // 滚动到底部（哨兵进入视口）时增量加载更早日志，首屏只渲染最新一段。
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver((observerEntries) => {
+      if (!observerEntries.some((item) => item.isIntersecting)) return;
+      setVisibleCount((current) => (current >= filtered.length ? current : Math.min(current + VISIBLE_STEP, filtered.length)));
+    }, { rootMargin: "400px" });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [filtered.length]);
+
   async function clearLogs() {
     if (!window.confirm("清空全部运行日志？此操作不可撤销。")) return;
     setBusy(true);
@@ -68,15 +86,7 @@ export function LogsView() {
     const chronological = filtered.slice().reverse();
     const text = format === "json" ? JSON.stringify({ exportedAt: new Date().toISOString(), filters: { minLevel, scope, platform, search }, entries: chronological }, null, 2) : formatLogEntriesText(chronological);
     const blob = new Blob([text], { type: format === "json" ? "application/json;charset=utf-8" : "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `trail-logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${format === "json" ? "json" : "txt"}`;
-    anchor.style.display = "none";
-    document.body.append(anchor);
-    anchor.click();
-    window.setTimeout(() => anchor.remove(), 1_000);
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    downloadFile(`trail-logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${format === "json" ? "json" : "txt"}`, blob);
   }
 
   /** 单条日志文本：时间 级别 区域 事件 + 消息 + 数据 JSON，可直接贴给别人定位问题。 */
@@ -155,15 +165,7 @@ export function LogsView() {
     if (chronological.length === 0) return;
     const text = format === "json" ? JSON.stringify({ exportedAt: new Date().toISOString(), selected: chronological.length, entries: chronological }, null, 2) : formatLogEntriesText(chronological);
     const blob = new Blob([text], { type: format === "json" ? "application/json;charset=utf-8" : "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `trail-logs-selected-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${format === "json" ? "json" : "txt"}`;
-    anchor.style.display = "none";
-    document.body.append(anchor);
-    anchor.click();
-    window.setTimeout(() => anchor.remove(), 1_000);
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    downloadFile(`trail-logs-selected-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${format === "json" ? "json" : "txt"}`, blob);
   }
 
   return <section className="logs-view stack">
@@ -196,10 +198,10 @@ export function LogsView() {
       </>}
       <button className="button secondary" disabled={busy || !entries?.length} onClick={() => void clearLogs()}><Eraser size={15} />清空</button>
     </div>
-    <p className="muted text-small">{filtered.length === entries?.length ? `${filtered.length} 条` : `匹配 ${filtered.length} / ${entries?.length ?? 0} 条`} · 最新在前</p>
+    <p className="muted text-small">{filtered.length === entries?.length ? `${filtered.length} 条` : `匹配 ${filtered.length} / ${entries?.length ?? 0} 条`} · 最新在前{visibleCount < filtered.length ? ` · 已渲染 ${visibleCount} 条，滚动到底继续加载` : ""}</p>
     {observations.length ? <p className="muted text-small">当前筛选：访问结果 {observations.filter((entry) => entry.event !== "fetch.rateLimited" && entry.event !== "fetch.auth").length} 条 · 异常事件 {abnormal} 条（同一次访问可有多条） · 429 限流 {filtered.filter((entry) => entry.event === "fetch.rateLimited").length} 次。展开查看当时配置；验证或拦截不等于封号。</p> : null}
     <div className="logs-list" data-selecting={selecting}>
-      {filtered.map((entry, index) => {
+      {filtered.slice(0, visibleCount).map((entry, index) => {
         const entryKey = `${entry.ts}-${entry.event}-${index}`;
         return <details className={`log-entry log-${entry.level}`} key={entryKey}>
         <summary>
@@ -218,6 +220,8 @@ export function LogsView() {
         {entry.data ? <pre>{JSON.stringify(entry.data, null, 2)}</pre> : null}
       </details>;
       })}
+      <div ref={loadMoreRef} aria-hidden="true" />
+      {visibleCount < filtered.length ? <p className="muted text-small logs-empty">正在加载更早日志…</p> : null}
       {entries && filtered.length === 0 ? <p className="muted logs-empty">没有匹配的日志。</p> : null}
       {!entries ? <p className="muted">正在读取日志…</p> : null}
     </div>
