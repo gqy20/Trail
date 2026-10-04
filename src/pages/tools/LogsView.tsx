@@ -86,7 +86,7 @@ export function LogsView() {
     const chronological = filtered.slice().reverse();
     const text = format === "json" ? JSON.stringify({ exportedAt: new Date().toISOString(), filters: { minLevel, scope, platform, search }, entries: chronological }, null, 2) : formatLogEntriesText(chronological);
     const blob = new Blob([text], { type: format === "json" ? "application/json;charset=utf-8" : "text/plain;charset=utf-8" });
-    downloadFile(`trail-logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${format === "json" ? "json" : "txt"}`, blob);
+    void downloadFile(`trail-logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${format === "json" ? "json" : "txt"}`, blob);
   }
 
   /** 单条日志文本：时间 级别 区域 事件 + 消息 + 数据 JSON，可直接贴给别人定位问题。 */
@@ -165,7 +165,7 @@ export function LogsView() {
     if (chronological.length === 0) return;
     const text = format === "json" ? JSON.stringify({ exportedAt: new Date().toISOString(), selected: chronological.length, entries: chronological }, null, 2) : formatLogEntriesText(chronological);
     const blob = new Blob([text], { type: format === "json" ? "application/json;charset=utf-8" : "text/plain;charset=utf-8" });
-    downloadFile(`trail-logs-selected-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${format === "json" ? "json" : "txt"}`, blob);
+    void downloadFile(`trail-logs-selected-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${format === "json" ? "json" : "txt"}`, blob);
   }
 
   return <section className="logs-view stack">

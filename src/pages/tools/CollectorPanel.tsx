@@ -128,7 +128,7 @@ export function CollectorPanel({ toolId, platform, name }: { toolId: string; pla
 
   function exportAccounts() {
     const blob = new Blob(["\uFEFF", exportFollowsCsv(follows || [])], { type: "text/csv;charset=utf-8" });
-    downloadFile(`${platform}-accounts.csv`, blob);
+    void downloadFile(`${platform}-accounts.csv`, blob);
   }
 
   return <div className="panel collector-panel stack">
