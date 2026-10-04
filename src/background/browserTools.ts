@@ -1130,14 +1130,30 @@ async function refreshFollowProfile(
       const raw = record.avatar.trim();
       profile.avatar = /_normal(\.\w+)$/.test(raw) ? raw.replace(/_normal(\.\w+)$/, "_400x400$1") : raw;
     }
-  } else {
-    // 工具规则缺 profile 提取（旧版 YAML）或平台响应变化时，这里会长期静默——
-    // 显式打点让头像/名称断供可以在日志里被发现。
-    logWarn("collector", "profile.missing", "运行数据中没有用户资料，头像与显示名不会更新", { platform: feed.platform, handle: keyword, toolId: definition.id, collections: Object.keys(data) });
+  }
+  // 回退：列表记录自带的作者字段（小红书 noteCard.user.*——用户对象包在 Vue ref 里，
+  // 专用 profile 提取在站点改版后可能落空，而列表提取一直可靠）。
+  if (!profile.displayName || !profile.avatar) {
+    const feedRecords = data[feed.collection];
+    const withAuthor = Array.isArray(feedRecords)
+      ? feedRecords.find((r) => r.author_nickname !== undefined || r.author_avatar !== undefined)
+      : undefined;
+    if (withAuthor) {
+      if (!profile.displayName && typeof withAuthor.author_nickname === "string" && withAuthor.author_nickname.trim()) {
+        profile.displayName = withAuthor.author_nickname.trim();
+      }
+      if (!profile.avatar && typeof withAuthor.author_avatar === "string" && withAuthor.author_avatar.trim()) {
+        profile.avatar = withAuthor.author_avatar.trim();
+      }
+    }
   }
 
   if (Object.keys(profile).length > 0) {
     await updateFollowProfile(feed.platform, keyword, profile);
     logInfo("collector", "profile.refresh", "已刷新用户资料", { platform: feed.platform, handle: keyword, ...profile });
+  } else {
+    // 工具规则缺 profile 提取（旧版 YAML）或平台响应变化时，这里会长期静默——
+    // 显式打点让头像/名称断供可以在日志里被发现。
+    logWarn("collector", "profile.missing", "运行数据中没有用户资料，头像与显示名不会更新", { platform: feed.platform, handle: keyword, toolId: definition.id, collections: Object.keys(data) });
   }
 }

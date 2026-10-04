@@ -60,18 +60,8 @@ workflow:
       collection: profile
       walk: { has: userPageData }
       fields:
-        nickname: { path: userPageData.nickname, optional: true }
-        avatar: { path: userPageData.imageb, optional: true }
-  # 站点改版后 userPageData 键可能改名/换位：第二路直接认用户对象自身的字段。
-  - action: state_read
-    max_items: 1
-    optional: true
-    extract:
-      collection: profile
-      walk: { has: nickname }
-      fields:
-        nickname: { path: nickname, optional: true }
-        avatar: { path: imageb, optional: true }
+        nickname: { path: userPageData.basicInfo.nickname, optional: true }
+        avatar: { path: userPageData.basicInfo.imageb, optional: true }
   - action: state_read
     extract:
       collection: notes
@@ -87,6 +77,8 @@ workflow:
           template: "{{ __page_url }}/{{ id }}?xsec_token={{ xsec_token }}&xsec_source=pc_user"
           transforms:
             - trim
+        author_nickname: { path: noteCard.user.nickname, optional: true }
+        author_avatar: { path: noteCard.user.avatar, optional: true }
   # 回填模式：滚动加载更多笔记到 store，再读一次合并（去重由 dedupe_by 处理）。
   - action: repeat
     max: 15
@@ -107,6 +99,8 @@ workflow:
               template: "{{ __page_url }}/{{ id }}?xsec_token={{ xsec_token }}&xsec_source=pc_user"
               transforms:
                 - trim
+            author_nickname: { path: noteCard.user.nickname, optional: true }
+            author_avatar: { path: noteCard.user.avatar, optional: true }
     between:
       - action: scroll
         delta_y: 800
