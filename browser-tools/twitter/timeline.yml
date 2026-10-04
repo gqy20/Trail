@@ -87,7 +87,7 @@ workflow:
       user_id: data.user.result.rest_id
     extract:
       collection: profile
-      walk: { has: legacy }
+      walk: { has: rest_id }
       fields:
         nickname:
           path: legacy.name
