@@ -30,6 +30,9 @@ function encodePath(path: string): string {
 async function githubFetch(path: string, token: string, init?: RequestInit): Promise<Response> {
   return fetch(path.startsWith("https://") ? path : `${GITHUB_API}${path}`, {
     ...init,
+    // 网络半瘫（如代理黑洞）时连接会无限挂起，超过 MV3 SW 存活上限后被强杀，
+    // 发布链路无声消失——每个请求必须自带超时，把挂起变成可记录、可重试的失败。
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${token}`,

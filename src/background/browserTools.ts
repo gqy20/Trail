@@ -353,6 +353,9 @@ async function continueBatchRun(
         await navigateTab(tabId, nextUrl);
         const readyTab = await chrome.tabs.get(tabId);
         const raw = await executeBrowserToolOnTab(definition, runParameters, readyTab, progressId);
+        // 水位线过滤前的记录快照：全部记录都带作者字段，供资料回填使用
+        // （过滤后可能一条不剩，账号资料就无从更新了）。
+        const preFilterRecords = definition.feed ? (raw.data[definition.feed.collection] || []).slice() : [];
         // 先按水位线过滤再补详情（不给旧内容花预算），详情补全出真实日期后再过滤一次兜底。
         // 用户已请求暂停/停止时跳过详情补全：工作流被中止的账号不值得再花详情预算。
         const control = peekControlRequest(definition.id);
@@ -420,7 +423,7 @@ async function continueBatchRun(
           lastPageTitle: result.pageTitle
         };
         await advanceWatermark(definition, keyword, result.data);
-        await refreshFollowProfile(definition, keyword, result.data);
+        await refreshFollowProfile(definition, keyword, result.data, preFilterRecords);
         logDebug("batch", "keyword.done", "完成当前输入", {
           keyword,
           index: index + 1,
@@ -1115,7 +1118,8 @@ export async function takeDetailRetryQueue(platform: string, handle: string): Pr
 async function refreshFollowProfile(
   definition: ReturnType<typeof parseBrowserToolYaml>,
   keyword: string,
-  data: BrowserToolRunResult["data"]
+  data: BrowserToolRunResult["data"],
+  preFilterRecords: Array<Record<string, unknown>> = []
 ): Promise<void> {
   const feed = definition.feed;
   if (!feed) return;
@@ -1133,11 +1137,9 @@ async function refreshFollowProfile(
   }
   // 回退：列表记录自带的作者字段（小红书 noteCard.user.*——用户对象包在 Vue ref 里，
   // 专用 profile 提取在站点改版后可能落空，而列表提取一直可靠）。
+  // 用过滤前的快照：账号没有新记录时过滤结果为空，作者字段依然可读。
   if (!profile.displayName || !profile.avatar) {
-    const feedRecords = data[feed.collection];
-    const withAuthor = Array.isArray(feedRecords)
-      ? feedRecords.find((r) => r.author_nickname !== undefined || r.author_avatar !== undefined)
-      : undefined;
+    const withAuthor = preFilterRecords.find((r) => r.author_nickname !== undefined || r.author_avatar !== undefined);
     if (withAuthor) {
       if (!profile.displayName && typeof withAuthor.author_nickname === "string" && withAuthor.author_nickname.trim()) {
         profile.displayName = withAuthor.author_nickname.trim();

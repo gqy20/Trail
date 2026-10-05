@@ -84,6 +84,7 @@ test("isTransientBatchError 只把瞬时网络错误判为可重试", () => {
   expect(isTransientBatchError("TypeError: Failed to fetch")).toBe(true);
   expect(isTransientBatchError("net::ERR_CONNECTION_RESET")).toBe(true);
   expect(isTransientBatchError("等待元素超时：.checkin-btn")).toBe(true);
+  expect(isTransientBatchError("Could not establish connection. Receiving end does not exist.")).toBe(true);
   // 限流与登录态问题不能靠重试解决，必须立即停止
   expect(isTransientBatchError("x.com 返回 429 限流，请降低抓取频率并稍后重试。")).toBe(false);
   expect(isTransientBatchError("x.com 拒绝了请求（HTTP 401），登录态可能已过期。")).toBe(false);

@@ -49,6 +49,7 @@ const TRANSIENT_ERROR_PATTERNS: RegExp[] = [
   /err_connection/i,
   /err_timed_out/i,
   /请求超时/,
+  /receiving end does not exist/i,
   /等待元素超时/
 ];
 
