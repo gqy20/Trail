@@ -135,7 +135,7 @@ async function ensurePublishIntervalAlarm(): Promise<void> {
     return;
   }
   const existing = await chrome.alarms.get(PUBLISH_INTERVAL_ALARM);
-  if (!existing) {
+  if (!existing || existing.periodInMinutes !== hours * 60) {
     await chrome.alarms.create(PUBLISH_INTERVAL_ALARM, { periodInMinutes: hours * 60 });
     logInfo("feed", "publish.intervalSet", `定时发布已排定（每 ${hours} 小时）`, { hours });
   }

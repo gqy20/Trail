@@ -34,7 +34,7 @@ export type FeedPublisherConfig = {
   itemsPerFeed: number;
   /** 自定义 Pages 根地址；缺省使用 https://{owner}.github.io/{repo}/。 */
   pagesBaseUrl?: string;
-  /** 采集轮次成功暂存后自动发布（防抖合并）。 */
+  /** 采集轮次成功暂存后实时发布，多个发布请求串行执行。 */
   autoPublish?: boolean;
   /** 定时发布间隔（小时），到期若有暂存则推送。 */
   autoPublishHours?: number;

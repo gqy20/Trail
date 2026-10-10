@@ -56,6 +56,7 @@ export function normalizeFeedConfig(input: FeedPublisherConfig): FeedPublisherCo
     itemsPerFeed: clamp(input.itemsPerFeed, 10, 5000, 2000),
     pagesBaseUrl,
     autoPublish: input.autoPublish === true,
+    autoPublishHours: clamp(input.autoPublishHours ?? 12, 1, 168, 12),
     excludeRetweets: input.excludeRetweets === true
   };
 }

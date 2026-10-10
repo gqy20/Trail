@@ -134,7 +134,7 @@ export function FeedPublisherView() {
           <label title="站点最多保留的最新记录数，超出后最旧的被滚动淘汰">封顶<input type="number" min={100} max={50000} value={draft.maxPosts} disabled={busy} onChange={(e) => setDraft({ ...draft, maxPosts: Number(e.target.value) })} /></label>
           <label>每源<input type="number" min={10} max={5000} value={draft.itemsPerFeed} disabled={busy} onChange={(e) => setDraft({ ...draft, itemsPerFeed: Number(e.target.value) })} /></label>
           <label className="feed-config-toggle" title="渠道采集完成后立即自动发布"><input type="checkbox" checked={draft.autoPublish === true} disabled={busy} onChange={(e) => setDraft({ ...draft, autoPublish: e.target.checked })} /> 自动</label>
-          <label className="feed-config-toggle" title="实时发布失败或浏览器未运行时，到期补推暂存记录"><input className="collector-interval" type="number" min={1} max={168} value={draft.autoPublishHours || 12} disabled={busy || !draft.autoPublish} onChange={(e) => setDraft({ ...draft, autoPublishHours: Number(e.target.value) })} /><span>小时</span></label>
+          <label className="feed-config-toggle" title="实时发布失败或浏览器未运行时，到期补推暂存记录"><input className="collector-interval" aria-label="兜底发布间隔" type="number" min={1} max={168} value={draft.autoPublishHours || 12} disabled={busy || !draft.autoPublish} onChange={(e) => setDraft({ ...draft, autoPublishHours: Number(e.target.value) })} /><span>小时</span></label>
           <label className="feed-config-toggle"><input type="checkbox" checked={draft.excludeRetweets === true} disabled={busy} onChange={(e) => setDraft({ ...draft, excludeRetweets: e.target.checked })} /> 不收录转推</label>
         </div>
       </div>
