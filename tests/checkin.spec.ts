@@ -59,14 +59,39 @@ test("科研通：错误弹窗不算成功", async ({ page }) => {
 });
 
 for (const [name, definition] of [["One", glados], ["Rocks", rocks]] as const) {
-  for (const [message, outcome] of [["Checkin! Got 11 Points", "success"], ["Today's observation logged. Return tomorrow for more points.", "already_done"], ["Invalid session", undefined]] as const) {
-    test(`GLaDOS ${name}: ${message}`, async ({ page }) => {
-      await fixture(page, definition, `<div id="root"><div class="checkin-stats-grid"><div><div>Points</div><div>99</div></div><div><div>Streak</div><div>1</div></div><div><div>Days Left</div><div>22</div></div></div><button class="checkin-cute-btn is-done" disabled><span class="checkin-btn-label">${message}</span></button></div>`);
-      const result = await run(page, definition);
-      expect(result.outcome).toBe(outcome);
-      expect(result.status).toBe(outcome ? "completed" : "paused");
-    });
-  }
+  // 新版前端（button.ckb）：点击后按钮进入 is-done 态，结果文案随站点语言变化，
+  // 判定只看状态迁移——用内嵌脚本模拟点击后按钮翻转为已签。
+  test(`GLaDOS ${name}: 点击后进入 is-done 判成功`, async ({ page }) => {
+    const html = `<div id="root"><div class="checkin-stats-grid"><div><div>Points</div><div>99</div></div><div><div>Streak</div><div>1</div></div><div><div>Days Left</div><div>22</div></div><div><div>Plan</div><div>Pro</div></div></div><button class="ckb">Checkin</button></div><script>document.querySelector("button.ckb").addEventListener("click", function handle() { this.removeEventListener("click", handle); this.classList.add("is-done"); this.disabled = true; this.textContent = "Checkin! Got 11 Points"; });</script>`;
+    await fixture(page, definition, html);
+    const result = await run(page, definition);
+    expect(result.outcome).toBe("success");
+    expect(result.status).toBe("completed");
+    const record = result.data?.account?.[0] as Record<string, unknown> | undefined;
+    expect(record?.points).toBe(99);
+    expect(record?.days).toBe(1);
+    expect(record?.days_left).toBe(22);
+    expect(record?.plan).toBe("Pro");
+    expect(record?.result).toBe("Checkin! Got 11 Points");
+  });
+
+  test(`GLaDOS ${name}: 加载即已签态判 already_done（中文文案）`, async ({ page }) => {
+    await fixture(page, definition, `<div id="root"><div class="checkin-stats-grid"><div><div>Points</div><div>107</div></div><div><div>Streak</div><div>2</div></div><div><div>Days Left</div><div>27</div></div><div><div>Plan</div><div>Pro</div></div></div><button class="ckb is-done" disabled>今日已签到</button></div>`);
+    const result = await run(page, definition);
+    expect(result.outcome).toBe("already_done");
+    expect(result.status).toBe("completed");
+  });
+
+  test(`GLaDOS ${name}: 点击后未进入已签态转人工`, async ({ page }) => {
+    // 按钮存在但点击无反应（如需要验证），等待超时后应转 pause 而非误报成功。
+    const fast = structuredClone(definition);
+    function shorten(steps: any[]) { for (const step of steps) { if (step.action === "wait_for") step.timeout_ms = 50; if (step.then) shorten(step.then); if (step.else) shorten(step.else); } }
+    shorten(fast.workflow);
+    await fixture(page, fast, `<div id="root"><div class="checkin-stats-grid"><div><div>Points</div><div>99</div></div></div><button class="ckb">Checkin</button></div>`);
+    const result = await run(page, fast);
+    expect(result.outcome).toBeUndefined();
+    expect(result.status).toBe("paused");
+  });
 }
 
 test("显式 finish 穿透 repeat，后续动作不会执行", async ({ page }) => {

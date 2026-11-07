@@ -15,7 +15,7 @@ test("隔离扩展：侧边栏、独立账户、并发去重、定时授权及�
     opened.push(req.url || "");
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     if (req.url === "/ablesci") res.end('<div class="fly-signin"><cite id="user-point-now">82</cite><cite id="sign-count">1</cite></div>');
-    else res.end('<div id="root"><div class="checkin-stats-grid"><div><div>Points</div><div>99</div></div><div><div>Streak</div><div>1</div></div><div><div>Days left</div><div>22</div></div></div><button class="checkin-cute-btn is-done" disabled><span class="checkin-btn-label">Today\'s observation logged. Return tomorrow for more points.</span></button></div>');
+    else res.end('<div id="root"><div class="checkin-stats-grid"><div><div>Points</div><div>99</div></div><div><div>Streak</div><div>1</div></div><div><div>Days Left</div><div>22</div></div><div><div>Plan</div><div>Pro</div></div></div><button class="ckb is-done" disabled>今日已签到</button></div>');
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `https://127.0.0.1:${(server.address() as AddressInfo).port}`;
